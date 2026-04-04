@@ -6,7 +6,7 @@ Thank you for considering contributing to Pruvon!
 
 ### Prerequisites
 
-- Go 1.22 or later
+- Go 1.26 or later
 - Linux server (amd64/arm64) for deployment
 - Dokku (optional, for server management features)
 
@@ -32,10 +32,20 @@ Thank you for considering contributing to Pruvon!
    make build-linux
    ```
 
+5. Run the standard local checks:
+   ```bash
+   make fmt
+   make vet
+   make test
+   make lint
+   ```
+
+   `make lint` expects a recent `golangci-lint` binary compatible with the active Go toolchain.
+
 ### Running Tests
 
 ```bash
-go test ./...
+make test
 ```
 
 For a specific package:
@@ -46,7 +56,7 @@ go test ./internal/backup
 For race detection:
 
 ```bash
-go test -race ./...
+make test-race
 ```
 
 ## How Can I Contribute?
@@ -81,10 +91,10 @@ Use the feature request template when opening an issue.
    ```
 
 2. Make your changes following Go best practices:
-   - Run `gofmt` on your code
+   - Run `make fmt` on your code
    - Follow [Effective Go](https://go.dev/doc/effective_go) guidelines
    - Add tests for new functionality
-   - Ensure `go test ./...` passes
+   - Ensure `make test` and `make vet` pass
 
 3. Commit your changes with clear messages:
    ```bash
@@ -102,7 +112,7 @@ Use the feature request template when opening an issue.
 
 ### Go Code
 
-- Use `gofmt` for formatting
+- Use `make fmt` or `gofmt` for formatting
 - Follow the [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments) guide
 - Write clear, descriptive variable and function names
 - Add comments for complex logic

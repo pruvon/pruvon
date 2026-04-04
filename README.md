@@ -21,7 +21,7 @@ Pruvon is a self-hosted server management platform for Dokku-based applications.
 
 ## Requirements
 
-- Go 1.22+
+- Go 1.26+
 - Dokku (for server management features)
 - Linux server (amd64/arm64)
 
@@ -42,6 +42,17 @@ For Linux `amd64` and `arm64` artifacts in `builds/`, run:
 ```bash
 make build-linux
 ```
+
+Common local verification commands:
+
+```bash
+make fmt
+make vet
+make test
+make lint
+```
+
+`make lint` expects a recent `golangci-lint` installation compatible with the Go toolchain in use.
 
 ### Run in Server Mode
 
@@ -68,6 +79,8 @@ cp config.yaml.example config.yaml
 ```
 
 The default production config path is `/etc/pruvon.yml`.
+
+`config.yaml.example` mirrors the app's generated default config shape. Replace the example admin password hash and GitHub settings before real use.
 
 ## Documentation
 

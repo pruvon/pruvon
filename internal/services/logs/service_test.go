@@ -56,7 +56,8 @@ func TestSearchLogs(t *testing.T) {
 	for _, log := range testLogs {
 		logJSON, err := json.Marshal(log)
 		require.NoError(t, err)
-		file.Write(append(logJSON, '\n'))
+		_, err = file.Write(append(logJSON, '\n'))
+		require.NoError(t, err)
 	}
 
 	// Note: SearchLogs uses hardcoded path, so we skip this test for now
@@ -89,7 +90,8 @@ func TestGetLogTail(t *testing.T) {
 	defer file.Close()
 
 	for _, line := range testLines {
-		file.WriteString(line + "\n")
+		_, err = file.WriteString(line + "\n")
+		require.NoError(t, err)
 	}
 
 	// Test getting last 3 lines
