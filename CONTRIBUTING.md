@@ -27,6 +27,11 @@ Thank you for considering contributing to Pruvon!
    make build
    ```
 
+   For Linux `amd64` and `arm64` build artifacts in `builds/`:
+   ```bash
+   make build-linux
+   ```
+
 ### Running Tests
 
 ```bash

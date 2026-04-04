@@ -35,7 +35,13 @@ cd pruvon
 make build
 ```
 
-The build artifacts are written to `builds/` for Linux `amd64` and `arm64`.
+This creates a local `./pruvon` binary.
+
+For Linux `amd64` and `arm64` artifacts in `builds/`, run:
+
+```bash
+make build-linux
+```
 
 ### Run in Server Mode
 
@@ -65,7 +71,7 @@ The default production config path is `/etc/pruvon.yml`.
 
 ## Documentation
 
-- [Makefile](Makefile) - Build and deployment commands
+- [Makefile](Makefile) - Common build and verification commands
 - [CHANGELOG.md](CHANGELOG.md) - Release notes
 
 ## Contributing
