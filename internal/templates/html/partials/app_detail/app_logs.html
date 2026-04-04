@@ -1,0 +1,68 @@
+{{define "app_logs"}}
+<div class="w-full min-w-0 max-w-full space-y-4">
+    <div class="w-full max-w-full overflow-hidden rounded-md border border-border bg-[#1A2B3C]">
+        <div class="flex items-center justify-between gap-2 border-b border-[#3A322C] bg-[#2A241F] px-3 py-2">
+            <div class="text-xs font-medium text-[#a8d5c2]">Application Logs</div>
+            <div class="flex items-center gap-2">
+                <button
+                    @click="startLogging()"
+                    x-show="!showLogs"
+                    class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Show Logs
+                </button>
+                <button
+                    @click="stopLogging()"
+                    x-show="showLogs"
+                    class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-[#2A241F] px-3 text-sm font-medium text-[#a8d5c2] transition-colors duration-150 hover:bg-[#342D27] hover:text-white">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                    </svg>
+                    Stop
+                </button>
+            </div>
+        </div>
+        <div class="relative w-full max-w-full overflow-hidden">
+            <div
+                id="logContainer"
+                x-show="showLogs"
+                x-transition:enter="transition ease-out duration-300"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="transition ease-in duration-200"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                class="w-full max-w-full overflow-x-hidden p-2 font-mono text-xs text-[#a8d5c2]"
+                style="height: calc(100vh - 270px); min-height: 380px; overflow-y: auto;">
+
+                <template x-if="!showLogs || logsData.length === 0">
+                    <div class="flex h-full items-center justify-center text-xs text-[#7A96B0]">
+                        Click "Show Logs" to start streaming application logs
+                    </div>
+                </template>
+
+                <template x-for="(log, index) in logsData" :key="index">
+                    <div class="border-b border-[#3A322C] px-2 py-1 transition-colors duration-150 hover:bg-[#2A241F]">
+                        <pre class="whitespace-pre-wrap text-xs text-[#a8d5c2] [overflow-wrap:anywhere]" x-text="log"></pre>
+                    </div>
+                </template>
+            </div>
+
+            <div
+                x-show="!showLogs"
+                class="flex h-56 items-center justify-center text-[#7A96B0]">
+                <div class="text-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto mb-2 h-10 w-10 text-[#3D5166]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                    </svg>
+                    <p class="text-xs">Click "Show Logs" to start streaming application logs</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

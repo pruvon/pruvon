@@ -1,0 +1,325 @@
+{{define "app_env_vars"}}
+<div class="space-y-5">
+    <div class="flex items-start justify-between gap-3">
+        <div>
+            <h3 class="text-sm font-semibold text-text-primary">Environment Variables</h3>
+            <p class="mt-0.5 text-xs text-text-secondary">Add, upload, copy, or remove application configuration values.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button @click="configData = ''; fetchData('config')"
+                    class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+            </button>
+            <button @click="showEnvFileModal = true"
+                    class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                Upload File
+            </button>
+            <button @click="showEnvModal = true"
+                    class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                Add Variable
+            </button>
+        </div>
+    </div>
+
+    <div x-show="envVars && envVars.length > 0" class="rounded-md border border-border bg-card overflow-hidden">
+        <div class="w-full overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-border">
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-1/3">Variable</th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-1/2">Value</th>
+                        <th class="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-text-secondary w-20">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-border-subtle">
+                    <template x-for="env in envVars" :key="env.key">
+                        <tr class="group transition-colors duration-100 hover:bg-surface">
+                            <td class="px-4 py-2.5 font-mono text-[13px] text-text-primary truncate" x-text="env.key"></td>
+                            <td class="px-4 py-2.5 max-w-xs truncate font-mono text-[13px] text-text-secondary" x-text="env.value"></td>
+                            <td class="px-4 py-2.5 text-right">
+                                <div class="flex justify-end items-center gap-1 opacity-0 transition-opacity duration-100 group-hover:opacity-100">
+                                    <button @click="(() => {
+                                        const textArea = document.createElement('textarea');
+                                        textArea.value = env.value;
+                                        textArea.style.position = 'fixed';
+                                        textArea.style.left = '-999999px';
+                                        textArea.style.top = '-999999px';
+                                        document.body.appendChild(textArea);
+                                        textArea.focus();
+                                        textArea.select();
+                                        try {
+                                            document.execCommand('copy');
+                                            $el.querySelector('svg').classList.add('text-status-success');
+                                            setTimeout(() => {
+                                                $el.querySelector('svg').classList.remove('text-status-success');
+                                            }, 1000);
+                                        } catch (err) {
+                                            console.error('Copy failed', err);
+                                        }
+                                        document.body.removeChild(textArea);
+                                    })()"
+                                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary"
+                                            title="Copy value">
+                                        <svg class="h-4 w-4 transition-colors duration-150" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+                                        </svg>
+                                    </button>
+                                    <button @click="deleteEnvVar = env.key; showDeleteEnvModal = true"
+                                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-status-danger"
+                                            title="Delete variable">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div x-show="!envVars || envVars.length === 0" class="rounded-md border border-dashed border-border bg-surface px-6 py-10 text-center text-sm text-text-secondary">
+        No environment variables found.
+    </div>
+
+    <div x-show="showEnvModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">New Environment Variable</h3>
+                    <button @click="showEnvModal = false; errors = {}; newEnvName = ''; newEnvValue = '';"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-4 px-5 py-4">
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Variable Name</label>
+                        <input type="text"
+                               x-model.trim="newEnvName"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                               :class="{'border-status-danger text-status-danger focus:border-status-danger focus:ring-status-danger': errors.newEnvName}"
+                               placeholder="Enter variable name">
+                        <p x-show="errors.newEnvName" class="text-xs text-status-danger" x-text="errors.newEnvName"></p>
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Value</label>
+                        <input type="text"
+                               x-model.trim="newEnvValue"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                               :class="{'border-status-danger text-status-danger focus:border-status-danger focus:ring-status-danger': errors.newEnvValue}"
+                               placeholder="Enter value">
+                        <p x-show="errors.newEnvValue" class="text-xs text-status-danger" x-text="errors.newEnvValue"></p>
+                    </div>
+
+                    <label class="flex items-start gap-3 rounded-md border border-border bg-surface px-3 py-3">
+                        <input type="checkbox"
+                               x-model="restartApp"
+                               class="mt-0.5 h-4 w-4 rounded border-border text-brand-primary focus:ring-brand-primary">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">Restart Application</span>
+                            <span class="block text-xs text-text-secondary">Redeploy after saving this value.</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showEnvModal = false; errors = {}; newEnvName = ''; newEnvValue = '';"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="async function() {
+                        if (!newEnvName) {
+                            errors.newEnvName = 'Variable name is required';
+                            return;
+                        }
+                        if (!newEnvValue) {
+                            errors.newEnvValue = 'Variable value is required';
+                            return;
+                        }
+
+                        try {
+                            const response = await fetch(`/api/apps/{{.Name}}/config`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    key: newEnvName,
+                                    value: newEnvValue,
+                                    restart: restartApp
+                                })
+                            });
+
+                            if (!response.ok) {
+                                const error = await response.json();
+                                console.error('Error:', error);
+                                errors = { api: error.error || 'An error occurred' };
+                                return;
+                            }
+
+                            showEnvModal = false;
+                            errors = {};
+                            newEnvName = '';
+                            newEnvValue = '';
+                            restartApp = false;
+
+                            const configResponse = await fetch(`/api/apps/{{.Name}}/config`);
+                            const configData = await configResponse.json();
+                            envVars = configData.vars;
+                        } catch (err) {
+                            console.error('Error:', err);
+                            errors = { api: 'Network error occurred' };
+                        }
+                    }"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                        Add
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showEnvFileModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-2xl rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Upload Environment Variables File</h3>
+                    <button @click="showEnvFileModal = false; envFileError = ''; fileContent = ''; parsedEnvVars = []; document.getElementById('env-file-upload').value = '';"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-4 px-5 py-4">
+                    <div x-show="!parsedEnvVars.length" class="space-y-3">
+                        <div class="rounded-md border border-dashed border-border bg-surface p-6 text-center">
+                            <div class="space-y-2">
+                                <svg class="mx-auto h-10 w-10 text-text-tertiary" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4h-8m-12 4h-8m-4-4h4m16 0h4m-4-4h8m-12 4h-8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <div class="text-sm text-text-secondary">
+                                    <label for="env-file-upload" class="cursor-pointer font-medium text-link hover:underline">
+                                        <span>Upload a file</span>
+                                        <input id="env-file-upload" type="file" class="sr-only" @change="handleFileUpload($event)">
+                                    </label>
+                                    <p class="mt-1 text-xs">Use `key=value` pairs, one per line.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <p x-show="envFileError" class="text-xs text-status-danger" x-text="envFileError"></p>
+                    </div>
+
+                    <div x-show="parsedEnvVars.length > 0" class="space-y-3">
+                        <p class="text-sm text-text-primary">The following environment variables will be added:</p>
+                        <div class="max-h-60 overflow-y-auto rounded-md border border-border bg-card">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-border">
+                                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-1/3">Variable</th>
+                                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-2/3">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border-subtle">
+                                    <template x-for="(env, index) in parsedEnvVars" :key="index">
+                                        <tr>
+                                            <td class="px-4 py-2.5">
+                                                <input type="text"
+                                                       x-model.trim="env.key"
+                                                       class="h-8 w-full rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                                            </td>
+                                            <td class="px-4 py-2.5">
+                                                <input type="text"
+                                                       x-model.trim="env.value"
+                                                       class="h-8 w-full rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <label class="flex items-start gap-3 rounded-md border border-border bg-surface px-3 py-3">
+                            <input type="checkbox"
+                                   x-model="restartAppFromFile"
+                                   class="mt-0.5 h-4 w-4 rounded border-border text-brand-primary focus:ring-brand-primary">
+                            <span>
+                                <span class="block text-sm font-medium text-text-primary">Restart Application</span>
+                                <span class="block text-xs text-text-secondary">Redeploy after applying file contents.</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showEnvFileModal = false; envFileError = ''; fileContent = ''; parsedEnvVars = []; document.getElementById('env-file-upload').value = '';"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button x-show="parsedEnvVars.length > 0"
+                            @click="applyEnvVarsFromFile"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                        Apply Variables
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showDeleteEnvModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Delete Environment Variable</h3>
+                    <button @click="showDeleteEnvModal = false"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-4 px-5 py-4">
+                    <p class="text-sm text-text-primary">
+                        Are you sure you want to delete <span class="font-mono text-[13px]" x-text="deleteEnvVar"></span>?
+                    </p>
+
+                    <label class="flex items-start gap-3 rounded-md border border-border bg-surface px-3 py-3">
+                        <input type="checkbox"
+                               x-model="restartOnDelete"
+                               class="mt-0.5 h-4 w-4 rounded border-border text-brand-primary focus:ring-brand-primary">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">Restart Application</span>
+                            <span class="block text-xs text-text-secondary">Redeploy after deleting this variable.</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showDeleteEnvModal = false"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="deleteEnvVarConfirm()"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

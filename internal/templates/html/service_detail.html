@@ -1,0 +1,1906 @@
+{{define "content"}}
+<div x-data="serviceDetail()" x-init="$data.showDeleteModal = false; $data.confirmationName = ''; $data.isDeleting = false; $data.showUnlinkModal = false; $data.unlinkApp = null; $data.isUnlinking = false; $data.showImportModal = false; $data.showAddLinkModal = false; $data.selectedApp = ''; $data.availableApps = []; $data.isLinking = false;">
+    <div class="mb-6 flex items-start justify-between gap-4">
+        <div>
+            <h1 class="text-lg font-semibold text-text-primary">{{.Name}}</h1>
+            <p class="mt-0.5 text-xs text-text-secondary">{{.Type}} service detail, data operations, and linked applications.</p>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div x-show="isLoading && !hasBasicInfo" class="mb-4 flex items-center justify-center rounded-md border border-border bg-card p-6">
+        <div class="flex items-center space-x-3">
+            <svg class="h-5 w-5 animate-spin text-text-secondary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-sm text-text-secondary">Loading basic service information...</span>
+        </div>
+    </div>
+
+    <!-- Key Info Card - Only shown once basic info is loaded -->
+    <!-- This block will be removed -->
+
+    <div class="mb-4 lg:flex lg:flex-row lg:items-start lg:gap-x-8 xl:gap-x-10">
+        <!-- Left Sidebar for Tab Navigation -->
+        <aside class="mt-4 lg:w-[9.5rem] lg:flex-shrink-0 lg:mt-0">
+            <div class="sticky top-5">
+                <nav class="flex flex-col">
+                    <!-- General Info -->
+                    <button @click="activeTab = 'info'"
+                            :class="activeTab === 'info' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                            class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>General Info</span>
+                    </button>
+
+                    <!-- Resource Limits -->
+                    <button @click="activeTab = 'resource'; if (!hasResourceData) fetchResourceInfo()"
+                            :class="activeTab === 'resource' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                            class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Resource Limits</span>
+                        <span x-show="isResourceLoading" class="ml-auto">
+                            <svg class="h-3.5 w-3.5 animate-spin text-text-tertiary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <!-- Config tab for PostgreSQL only -->
+                    <template x-if="'{{.Type}}' === 'postgres'">
+                        <button @click="activeTab = 'config'; if (!hasConfigData) fetchCustomConfig()"
+                                :class="activeTab === 'config' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                                class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                            <span>Config</span>
+                            <span x-show="isConfigLoading" class="ml-auto">
+                                <svg class="h-3.5 w-3.5 animate-spin text-text-tertiary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </span>
+                        </button>
+                    </template>
+
+                    <!-- Console -->
+                    <button @click="activeTab = 'console'"
+                            :class="activeTab === 'console' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                            class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Console</span>
+                    </button>
+
+                    <!-- Export tab only for database services -->
+                    <template x-if="isExportableService()">
+                        <button @click="activeTab = 'export'"
+                                :class="activeTab === 'export' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                                class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                            <span>Export</span>
+                        </button>
+                    </template>
+
+                    <!-- Import tab only for database services -->
+                    <template x-if="isExportableService()">
+                        <button @click="activeTab = 'import'"
+                                :class="activeTab === 'import' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                                class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                            <span>Import</span>
+                        </button>
+                    </template>
+
+                    <!-- Links -->
+                    <button @click="activeTab = 'links'; if (!hasLinksData) fetchLinksInfo()"
+                            :class="activeTab === 'links' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                            class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Links</span>
+                        <span x-show="isLinksLoading" class="ml-auto">
+                            <svg class="h-3.5 w-3.5 animate-spin text-text-tertiary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <!-- Danger Zone -->
+                    <button @click="activeTab = 'danger'"
+                            :class="activeTab === 'danger' ? 'border-l-2 border-status-danger bg-status-danger-bg text-status-danger font-medium' : 'border-l-2 border-transparent text-status-danger/70 hover:text-status-danger'"
+                            class="mt-3 flex w-full items-center px-2 py-1 text-left text-[13px] transition-colors duration-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="mr-1.5 h-[13px] w-[13px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>Danger Zone</span>
+                    </button>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main Content Area (Right Column on LG screens) -->
+        <main class="min-w-0 lg:flex-1">
+            <div class="bg-transparent">
+                <template x-if="activeTab === 'info'">
+                    <div class="space-y-4">
+                        <!-- Key Info Card - MOVED HERE -->
+                        <div x-show="hasBasicInfo" class="mb-4 flex items-center gap-4 border-b border-border-subtle pb-4">
+                            <div class="flex items-center gap-2">
+                                <div class="h-2.5 w-2.5 rounded-full"
+                                     :class="info.status === 'running' ? 'bg-status-success' : 'bg-status-danger'">
+                                </div>
+                                <span class="text-sm font-medium text-text-primary" x-text="info.status || 'N/A'"></span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-text-secondary">Version:</span>
+                                <span class="font-mono text-[13px] text-text-primary" x-text="info.version || 'N/A'"></span>
+                            </div>
+                            <div class="flex items-center gap-2 ml-auto">
+                                <span class="text-xs text-text-secondary">IP:</span>
+                                <code class="font-mono text-[13px] text-text-primary" x-text="info.details?.['Internal IP'] || 'N/A'"></code>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-sm font-semibold text-text-primary">Service Information</h3>
+                            <button @click="fetchInfo()"
+                                    class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="overflow-hidden border border-border-subtle rounded">
+                        <table class="min-w-full text-sm">
+                            <thead>
+                                <tr class="bg-surface">
+                                    <th class="px-4 py-2 border-b border-border-subtle text-left text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">Attribute</th>
+                                    <th class="px-4 py-2 border-b border-border-subtle text-left text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-border-subtle bg-card text-xs">
+                                <tr>
+                                    <td class="px-4 py-2.5 whitespace-nowrap font-medium text-text-primary">Name</td>
+                                    <td class="px-4 py-2.5 whitespace-pre-wrap font-mono text-[13px] text-text-secondary" x-text="info.name || '-'"></td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-2.5 whitespace-nowrap font-medium text-text-primary">Service</td>
+                                    <td class="px-4 py-2.5 whitespace-pre-wrap font-mono text-[13px] text-text-secondary" x-text="info.service || '-'"></td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-2.5 whitespace-nowrap font-medium text-text-primary">Type</td>
+                                    <td class="px-4 py-2.5 whitespace-pre-wrap font-mono text-[13px] text-text-secondary" x-text="info.type || '-'"></td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-2.5 whitespace-nowrap font-medium text-text-primary">Version</td>
+                                    <td class="px-4 py-2.5 whitespace-pre-wrap font-mono text-[13px] text-text-secondary" x-text="info.version || '-'"></td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-2.5 whitespace-nowrap font-medium text-text-primary">Status</td>
+                                    <td class="px-4 py-2.5 whitespace-pre-wrap font-mono text-[13px] text-text-secondary" x-text="info.status || '-'"></td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-2.5 whitespace-nowrap font-medium text-text-primary">URL</td>
+                                    <td class="px-4 py-2.5 whitespace-pre-wrap font-mono text-[13px] text-text-secondary" x-text="info.url || '-'"></td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-2.5 whitespace-nowrap font-medium text-text-primary">Container ID</td>
+                                    <td class="px-4 py-2.5 whitespace-pre-wrap font-mono text-[13px] text-text-secondary" x-text="info.container_id || '-'"></td>
+                                </tr>
+                                <template x-for="(value, key) in info.details || {}" :key="key">
+                                    <template x-if="!['Status', 'Version', 'Internal IP', 'Links'].includes(key) && !['name', 'service', 'type', 'version', 'status', 'url'].includes(key.toLowerCase())">
+                                        <tr>
+                                            <td class="px-4 py-2.5 whitespace-nowrap font-medium text-text-primary" x-text="key"></td>
+                                            <td class="px-4 py-2.5 whitespace-pre-wrap font-mono text-[13px] text-text-secondary" x-text="value"></td>
+                                        </tr>
+                                    </template>
+                                </template>
+                            </tbody>
+                        </table>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="activeTab === 'resource'">
+                    <div class="space-y-4" x-data="{
+                        formData: {
+                            cpu: '',
+                            memory: ''
+                        },
+                        validation: {
+                            cpu: '',
+                            memory: ''
+                        },
+                        flashMessage: null,
+                        showFlash: false,
+                        isLoading: false,
+
+                        init() {
+                            // Extract current resource limits from parent info data
+                            this.extractResourceLimits();
+                        },
+
+                        extractResourceLimits() {
+                            if ($data.info && $data.info.resource_limits) {
+                                // Set CPU from NanoCpus (converted from nano to normal)
+                                if ($data.info.resource_limits.cpu) {
+                                    this.formData.cpu = $data.info.resource_limits.cpu;
+                                }
+
+                                // Set Memory (already formatted in MB/GB)
+                                if ($data.info.resource_limits.memory) {
+                                    this.formData.memory = $data.info.resource_limits.memory;
+                                }
+                            }
+                        },
+
+                        validateCPU() {
+                            this.validation.cpu = '';
+
+                            if (!this.formData.cpu) {
+                                return true;
+                            }
+
+                            const value = parseFloat(this.formData.cpu);
+                            if (isNaN(value) || value <= 0) {
+                                this.validation.cpu = 'CPU limit must be a positive number';
+                                return false;
+                            }
+
+                            // Check if it exceeds system CPU count from parent component
+                            if ($data.systemInfo.cpuCount > 0 && value > $data.systemInfo.cpuCount) {
+                                this.validation.cpu = 'CPU value cannot exceed system total ' + $data.systemInfo.cpuCount;
+                                return false;
+                            }
+
+                            return true;
+                        },
+
+                        validateMemory() {
+                            this.validation.memory = '';
+
+                            if (!this.formData.memory) {
+                                return true;
+                            }
+
+                            // Check format
+                            const regex = /^(\d+)([MG])$/i;
+                            const match = this.formData.memory.match(regex);
+                            if (!match) {
+                                this.validation.memory = 'Memory must be in format like 300M or 1G';
+                                return false;
+                            }
+
+                            // Additional validation: numeric value check
+                            const numValue = parseFloat(match[1]);
+                            if (isNaN(numValue) || numValue <= 0) {
+                                this.validation.memory = 'Memory value must be a positive number';
+                                return false;
+                            }
+
+
+                            const normalizedSystemMemory = $data.systemInfo.totalMemory
+                                .toLowerCase()
+                                .replace(/\s+/g, '')   // remove whitespace
+                                .replace(/gb/g, 'g')   // convert GB or gb to g
+                                .replace(/mb/g, 'm');  // convert MB or mb to m
+
+                            const systemMemory = normalizedSystemMemory.match(/^(\d+\.?\d*)(m|g)$/);
+                            if (systemMemory) {
+                                const inputValue = parseFloat(match[1]);
+                                const inputUnit = match[2].toLowerCase();
+                                const systemValue = parseFloat(systemMemory[1]);
+                                const systemUnit = systemMemory[2].toLowerCase();
+
+                                // Convert both values to gigabytes
+                                const inputGB = inputUnit === 'g' ? inputValue : inputValue / 1024;
+                                const systemGB = systemUnit === 'g' ? systemValue : systemValue / 1024;
+
+                                if (inputGB > systemGB) {
+                                    this.validation.memory = 'Memory limit cannot exceed ' + $data.systemInfo.totalMemory;
+                                    return false;
+                                }
+                            }
+
+                            return true;
+                        },
+
+                        validateForm() {
+                            const cpuValid = this.validateCPU();
+                            const memoryValid = this.validateMemory();
+
+                            // At least one of CPU or Memory must be provided
+                            if (!this.formData.cpu && !this.formData.memory) {
+                                this.showFlashMessage({
+                                    text: 'Please set at least one resource limit',
+                                    type: 'error'
+                                });
+                                return false;
+                            }
+
+                            return cpuValid && memoryValid;
+                        },
+
+                        showFlashMessage(message, type = 'success') {
+                            // Handle both object and string parameters
+                            if (typeof message === 'object' && message !== null) {
+                                this.flashMessage = message;
+                            } else {
+                                this.flashMessage = { text: message, type: type };
+                            }
+                            this.showFlash = true;
+                            setTimeout(() => this.showFlash = false, 10000);
+                        },
+
+                        async submitForm() {
+                            if (!this.validateForm()) return;
+
+                            this.isLoading = true;
+
+                            try {
+                                // Check if we have the container ID from parent info
+                                if (!$data.info.container_id) {
+                                    throw new Error('Container ID not found, please refresh the page and try again');
+                                }
+
+                                // Use the API to update resource limits using Docker update
+                                const response = await fetch(`/api/services/{{.Type}}/{{.Name}}/resource`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify(this.formData)
+                                });
+
+                                const data = await response.json();
+
+                                if (!response.ok) {
+                                    throw new Error(data.message || 'An error occurred');
+                                }
+
+                                // Use the message and flash_type from the API response
+                                this.showFlashMessage(data.message || 'Resource limits updated successfully', data.flash_type || 'success');
+
+                                // Update the main info data with new resource limits after successful update
+                                if ($data.fetchInfo) {
+                                    setTimeout(() => {
+                                        $data.fetchInfo();
+                                    }, 1000); // Delay to allow changes to take effect
+                                }
+                            } catch (error) {
+                                this.showFlashMessage(error.message || 'Failed to update resource limits', 'error');
+                            } finally {
+                                this.isLoading = false;
+                            }
+                        }
+                    }"
+                    x-init="init()">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-sm font-semibold text-text-primary">Resource Limits</h3>
+                        </div>
+
+                        <!-- Flash Message -->
+                        <div x-show="showFlash"
+                             x-transition:enter="transition ease-out duration-300"
+                             x-transition:enter-start="opacity-0 transform -translate-y-2"
+                             x-transition:enter-end="opacity-100 transform translate-y-0"
+                             x-transition:leave="transition ease-in duration-100"
+                             x-transition:leave-start="opacity-100 transform translate-y-0"
+                             x-transition:leave-end="opacity-0 transform -translate-y-2"
+                             class="mb-4"
+                             @click="showFlash = false">
+                            <div :class="{
+                                'border-status-success/30 bg-status-success-bg text-status-success': flashMessage?.type === 'success',
+                                'border-status-danger/30 bg-status-danger-bg text-status-danger': flashMessage?.type === 'error'
+                            }" class="rounded-md border px-4 py-3">
+                                <div class="flex">
+                                    <div class="flex-shrink-0" x-show="flashMessage?.type === 'success'">
+                                        <svg class="h-5 w-5 text-status-success" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                        </svg>
+                                    </div>
+                                    <div class="flex-shrink-0" x-show="flashMessage?.type === 'error'">
+                                        <svg class="h-5 w-5 text-status-danger" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                        </svg>
+                                    </div>
+                                    <div class="ml-3">
+                                        <p class="text-sm" x-text="flashMessage?.text"></p>
+                                    </div>
+                                    <div class="ml-auto pl-3">
+                                        <div class="-mx-1.5 -my-1.5">
+                                            <button @click="showFlash = false"
+                                                    :class="{
+                                                        'text-status-success hover:text-status-success': flashMessage?.type === 'success',
+                                                        'text-status-danger hover:text-status-danger': flashMessage?.type === 'error'
+                                                    }"
+                                                    class="inline-flex rounded-md p-1.5 focus:outline-none">
+                                                <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="rounded-md border border-border bg-card p-4">
+                                <h4 class="mb-3 text-sm font-medium text-text-primary">Set Resource Limits</h4>
+                                <div class="space-y-4">
+                                    <!-- CPU Limit Field -->
+                                    <div>
+                                        <label for="cpu_limit" class="block text-xs font-medium text-text-secondary mb-1">
+                                            CPU Limit <span class="text-text-tertiary">(optional)</span>
+                                        </label>
+                                        <div class="mt-1 relative">
+                                            <input type="text"
+                                                   id="cpu_limit"
+                                                   x-model="formData.cpu"
+                                                   @blur="validateCPU()"
+                                                   class="block h-8 w-full rounded border border-border bg-card px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                                   placeholder="e.g. 1.5">
+                                        </div>
+                                        <p x-show="validation.cpu" x-text="validation.cpu" class="mt-1 text-xs text-status-danger"></p>
+                                        <p class="mt-1 text-xs text-text-tertiary">
+                                            Specify the CPU limit for this service (e.g., 0.5 for half a CPU core, or 2 for 2 CPU cores).
+                                        </p>
+                                    </div>
+
+                                    <!-- Memory Limit Field -->
+                                    <div>
+                                        <label for="memory_limit" class="block text-xs font-medium text-text-secondary mb-1">
+                                            Memory Limit <span class="text-text-tertiary">(optional)</span>
+                                        </label>
+                                        <div class="mt-1 relative">
+                                            <input type="text"
+                                                   id="memory_limit"
+                                                   x-model="formData.memory"
+                                                   @blur="validateMemory()"
+                                                   class="block h-8 w-full rounded border border-border bg-card px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                                   placeholder="e.g. 512M or 1G">
+                                        </div>
+                                        <p x-show="validation.memory" x-text="validation.memory" class="mt-1 text-xs text-status-danger"></p>
+                                        <p class="mt-1 text-xs text-text-tertiary">
+                                            Specify the memory limit for this service (e.g., 512M for 512 megabytes, or 1G for 1 gigabyte).
+                                        </p>
+                                    </div>
+
+                                    <!-- System Info -->
+                                    <div class="mt-3 border-t border-border-subtle pt-3">
+                                        <div class="flex justify-between items-center text-xs text-text-secondary">
+                                            <span>System CPU Cores: <span x-text="$data.systemInfo.cpuCount || 'Loading...'"></span></span>
+                                            <span>System Memory: <span x-text="$data.systemInfo.totalMemory || 'Loading...'"></span></span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Submit Button -->
+                                    <div class="flex justify-end mt-4">
+                                        <button @click="submitForm()"
+                                                :disabled="isLoading"
+                                                class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:opacity-50">
+                                            <div x-show="isLoading" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                                            <span x-text="isLoading ? 'Updating...' : 'Update Resource Limits'"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="rounded-md border border-status-warning/30 bg-status-warning-bg p-3">
+                                <div class="flex">
+                                    <div class="flex-shrink-0">
+                                        <svg class="h-5 w-5 text-status-warning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                        </svg>
+                                    </div>
+                                    <div class="ml-3">
+                                        <p class="text-xs text-status-warning">
+                                            <strong>Note:</strong> Setting resource limits too low may cause your service to crash or perform poorly. Leave fields empty to use default/unlimited resources.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="activeTab === 'export'">
+                    <div class="space-y-4">
+                        <div class="mb-2 flex items-center justify-between">
+                            <h3 class="text-sm font-semibold text-text-primary">Service Export</h3>
+                        </div>
+
+                        <div class="rounded-md border border-border bg-card p-4">
+                            <p class="mb-4 text-xs text-text-secondary">
+                                Export your service data to a file. This process may take a few minutes depending on the size of your data.
+                                <template x-if="'{{.Type}}' === 'postgres' || '{{.Type}}' === 'mariadb'">
+                                    <span> The export will be in SQL format compressed as gz.</span>
+                                </template>
+                                <template x-if="'{{.Type}}' === 'redis'">
+                                    <span> The export will be in RDB format compressed as gz.</span>
+                                </template>
+                                <template x-if="'{{.Type}}' === 'mongo'">
+                                    <span> The export will be in Archive format compressed as gz.</span>
+                                </template>
+                                <span> All exports are automatically compressed into gz format for easier download.</span>
+                            </p>
+
+                            <template x-if="hasExportError">
+                                <div class="mb-4 rounded-md border border-status-danger/30 bg-status-danger-bg px-4 py-3">
+                                    <div class="flex">
+                                        <div class="flex-shrink-0">
+                                            <svg class="h-4 w-4 text-status-danger" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <div class="ml-3">
+                                            <h3 class="text-xs font-medium text-status-danger">Export failed</h3>
+                                            <div class="mt-2 text-xs text-status-danger">
+                                                <p x-text="exportError"></p>
+                                            </div>
+                                            <div class="mt-3">
+                                                <button @click="triggerExport()"
+                                                        :disabled="exporting"
+                                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:opacity-50">
+                                                    <svg x-show="exporting" class="animate-spin -ml-1 mr-2 h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                    <span x-text="exporting ? 'Exporting...' : 'Export Service Data'"></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <div class="flex">
+                                <button @click="triggerExport()"
+                                        :disabled="exporting"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:opacity-50">
+                                    <svg x-show="exporting" class="animate-spin -ml-1 mr-2 h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span x-text="exporting ? 'Exporting...' : 'Export Service Data'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="activeTab === 'import' && isExportableService()">
+                    <div class="space-y-4">
+                        <div class="mb-2 flex items-center justify-between">
+                            <h3 class="text-sm font-semibold text-text-primary">Service Import</h3>
+                        </div>
+
+                        <div class="rounded-md border border-border bg-card p-4">
+                            <p class="mb-3 text-xs text-text-secondary">
+                                Import a backup file into your {{.Type}} service. This process will overwrite existing data. Make sure to back up your data before proceeding.
+                            </p>
+
+                            <div x-show="!isImporting" class="mb-4">
+                                <label class="mb-1 block text-xs font-medium text-text-secondary">Select Backup File</label>
+                                <div class="flex items-start space-x-3">
+                                    <label class="flex flex-grow cursor-pointer flex-col items-center rounded-md border border-border bg-surface px-4 py-4 tracking-wide text-text-secondary transition-colors duration-150 hover:bg-card">
+                                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <span class="mt-2 text-xs leading-normal" x-text="importFileName ? importFileName : 'Select backup file...'"></span>
+                                        <input type="file" class="hidden" accept=".sql,.dump,.bak,.gz,.tar.gz,.rdb,.archive"
+                                              @change="handleFileSelect($event)" />
+                                    </label>
+                                    <button @click="startImport()"
+                                            :disabled="!importFile"
+                                            :class="{'opacity-50 cursor-not-allowed': !importFile}"
+                                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                                        <svg class="h-3.5 w-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12" />
+                                        </svg>
+                                        <span>Upload & Import</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div x-show="isImporting" class="w-full">
+                                <div class="mb-3">
+                                    <div class="mb-1 flex items-center justify-between text-xs text-text-secondary">
+                                        <span>Importing...</span>
+                                        <span x-text="importProgress + '%'"></span>
+                                    </div>
+                                    <div class="h-1.5 w-full rounded-full bg-surface">
+                                        <div class="h-1.5 rounded-full bg-brand-primary" :style="{ width: importProgress + '%' }"></div>
+                                    </div>
+                                </div>
+
+                                <div class="w-full overflow-hidden rounded-md border border-border bg-[#1A2B3C]">
+                                    <div class="flex items-center justify-between gap-2 border-b border-[#3A322C] bg-[#2A241F] px-3 py-2">
+                                        <div class="text-xs font-medium text-[#a8d5c2]">Import Progress</div>
+                                    </div>
+                                    <div class="overflow-auto bg-[#1A2B3C] p-2 font-mono text-xs text-[#a8d5c2]" style="max-height: 300px">
+                                        <template x-for="(line, index) in importOutput" :key="index">
+                                            <div>
+                                                <!-- Safely handle messages that might contain HTML by using conditional rendering -->
+                                                <template x-if="line.type === 'error'">
+                                                    <div class="text-status-danger" x-text="line.text"></div>
+                                                </template>
+                                                <template x-if="line.type === 'command'">
+                                                    <div class="text-status-warning" x-text="line.text"></div>
+                                                </template>
+                                                <template x-if="line.type === 'normal'">
+                                                    <div x-text="line.text"></div>
+                                                </template>
+                                                <template x-if="!line.type && typeof line === 'string'">
+                                                    <div x-text="line"></div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <div class="rounded-md border border-status-warning/30 bg-status-warning-bg p-3">
+                                    <div class="flex">
+                                        <div class="flex-shrink-0">
+                                            <svg class="h-4 w-4 text-status-warning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <div class="ml-3 flex-1">
+                                            <p class="text-xs text-status-warning">
+                                                <strong>Warning:</strong> Importing data will overwrite the current content of your service. This action cannot be undone.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="activeTab === 'links'">
+                    <div class="space-y-4">
+                        <div class="mb-2 flex items-center justify-between">
+                            <h3 class="text-sm font-semibold text-text-primary">Linked Applications</h3>
+                            <button @click="showAddLinkModal = true; fetchAvailableApps()"
+                                    class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                Add Link
+                            </button>
+                        </div>
+
+                        <div class="overflow-hidden rounded-md border border-border bg-card">
+                            <!-- For when there are linked apps -->
+                            <template x-if="(info.linkInfo?.linkedApps?.length || info.link_info?.linked_apps?.length)">
+                                <div>
+                                    <div class="border-b border-border px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-text-secondary">Application Links</div>
+                                    <div class="divide-y divide-border-subtle">
+                                        <template x-for="app in (info.linkInfo?.linkedApps || info.link_info?.linked_apps || [])" :key="app">
+                                            <div class="group flex items-center justify-between px-4 py-2.5 transition-colors duration-100 hover:bg-surface">
+                                                <a :href="'/apps/' + app"
+                                                   class="text-sm font-medium text-link transition-colors duration-150 hover:text-brand-hover"
+                                                   x-text="app">
+                                                </a>
+                                                <button @click="unlinkApp = app; showUnlinkModal = true"
+                                                        class="ml-2 inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-status-danger">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- For when there are no linked apps -->
+                            <template x-if="!(info.linkInfo?.linkedApps?.length || info.link_info?.linked_apps?.length)">
+                                <div class="flex flex-col items-center justify-center px-4 py-6 text-center">
+                                    <svg class="mb-2 h-8 w-8 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                    </svg>
+                                    <p class="text-sm text-text-secondary">No linked applications</p>
+                                    <p class="mt-1 text-xs text-text-tertiary">Click "Add Link" to connect an application to this service</p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="activeTab === 'danger'">
+                    <section class="mt-4 space-y-4 py-4">
+                        <div class="border border-status-danger/30 rounded-md bg-status-danger-bg/30 p-4">
+                            <div class="mb-3">
+                                <h3 class="text-sm font-semibold text-status-danger">Danger Zone</h3>
+                                <p class="mt-1 text-xs text-text-secondary">These actions cannot be undone.</p>
+                            </div>
+                            <div>
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-xs font-semibold text-text-primary">Delete this service</h4>
+                                        <p class="mt-1 text-xs text-text-secondary">Once deleted, there is no going back. Please be certain.</p>
+
+                                        <!-- Warning if there are linked apps -->
+                                        <template x-if="(info.linkInfo?.linkedApps?.length || info.link_info?.linked_apps?.length) > 0">
+                                            <div class="mt-2 text-xs text-status-danger">
+                                                <span>Please unlink all applications first:</span>
+                                                <ul class="list-disc list-inside mt-1 ml-1">
+                                                    <template x-for="app in (info.linkInfo?.linkedApps || info.link_info?.linked_apps || [])" :key="app">
+                                                        <li x-text="app"></li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <button @click="showDeleteModal = true"
+                                            :disabled="(info.linkInfo?.linkedApps?.length || info.link_info?.linked_apps?.length) > 0"
+                                            :class="{'opacity-50 cursor-not-allowed': (info.linkInfo?.linkedApps?.length || info.link_info?.linked_apps?.length) > 0}"
+                                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                                        <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete Service
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </template>
+
+                <template x-if="activeTab === 'console'">
+                    <div class="w-full space-y-4">
+                        <div class="w-full overflow-hidden rounded-md border border-border bg-[#1A2B3C]">
+                            <div class="flex items-center justify-between gap-2 border-b border-[#3A322C] bg-[#2A241F] px-3 py-2">
+                                <div class="text-xs font-medium text-[#a8d5c2]">{{.Type}} Service Console</div>
+                                <div class="flex items-center gap-2">
+                                    <div class="mr-1 text-xs text-[#7A96B0]" x-show="terminalConnected">
+                                        <span class="inline-flex items-center">
+                                            <span class="mr-1.5 h-2 w-2 rounded-full bg-status-success"></span>
+                                            Connected to {{.Type}} service
+                                        </span>
+                                    </div>
+                                    <button x-show="!terminalConnected"
+                                            @click.prevent="connectTerminalWebsocket()"
+                                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                        </svg>
+                                        Connect
+                                    </button>
+                                    <button x-show="terminalConnected"
+                                            @click.prevent="disconnectTerminalWebsocket()"
+                                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-[#2A241F] px-3 text-sm font-medium text-[#a8d5c2] transition-colors duration-150 hover:bg-[#342D27] hover:text-white">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                        </svg>
+                                        Disconnect
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="w-full relative">
+                                <div id="terminal" class="w-full font-mono text-xs p-2" style="height: calc(100vh - 270px); min-height: 380px;"></div>
+                            </div>
+
+                            <div class="rounded-md border border-border bg-surface p-3">
+                                <div class="flex">
+                                    <div class="flex-shrink-0">
+                                        <svg class="h-5 w-5 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                        </svg>
+                                    </div>
+                                    <div class="ml-3">
+                                        <h3 class="text-sm font-medium text-text-primary">Console Information</h3>
+                                        <div class="mt-2 text-xs text-text-secondary">
+                                            <p>This console connects directly to your {{.Type}} service.</p>
+                                            <ul class="list-disc ml-4 mt-1">
+                                                <li>Type <span class="rounded border border-border bg-card px-1 py-0.5 font-mono text-[11px] text-text-primary">exit</span> to end the session</li>
+                                                <li>The connection will time out after prolonged inactivity</li>
+                                                <li>Some advanced functions may not be available through this web console</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Adding the PostgreSQL config tab -->
+                <template x-if="activeTab === 'config' && '{{.Type}}' === 'postgres'">
+                    <div class="space-y-4">
+                        <div class="mb-2 flex items-center justify-between">
+                            <h3 class="text-sm font-semibold text-text-primary">PostgreSQL Configuration</h3>
+                            <button @click="fetchCustomConfig()"
+                                    :disabled="isConfigLoading"
+                                    class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary disabled:opacity-50">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div class="rounded-md border border-border bg-card p-4">
+                            <p class="mb-3 text-xs text-text-secondary">
+                                Add custom PostgreSQL configuration parameters. These will be saved to <code class="rounded border border-border bg-surface px-1 py-0.5 font-mono text-[11px] text-text-primary">/var/lib/dokku/services/postgres/{{.Name}}/data/custom.conf</code> and automatically included in your PostgreSQL configuration.
+                            </p>
+
+                            <!-- Status Messages -->
+                            <template x-if="pgConfig && pgConfig.error">
+                                <div class="mb-3 rounded-md border border-status-danger/30 bg-status-danger-bg p-3">
+                                    <div class="flex">
+                                        <div class="flex-shrink-0">
+                                            <svg class="h-4 w-4 text-status-danger" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <div class="ml-3">
+                                            <p class="text-xs text-status-danger" x-text="pgConfig.error"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <template x-if="configSuccess">
+                                <div class="mb-3 rounded-md border border-status-success/30 bg-status-success-bg p-3">
+                                    <div class="flex">
+                                        <div class="flex-shrink-0">
+                                            <svg class="h-4 w-4 text-status-success" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586l-2.293-2.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <div class="ml-3">
+                                            <p class="text-xs text-status-success" x-text="configSuccess"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <div class="mb-4">
+                                <label class="mb-1 block text-xs font-medium text-text-secondary">Custom PostgreSQL Configuration</label>
+                                <textarea x-model="configContent"
+                                          class="block w-full rounded border border-border bg-card px-3 py-2 font-mono text-[13px] text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                          rows="10"
+                                          placeholder="# Example PostgreSQL configuration
+# max_connections = 100
+# shared_buffers = 128MB
+# effective_cache_size = 1GB"></textarea>
+                                <p class="mt-1 text-xs text-text-tertiary">Add one parameter per line in the format: parameter_name = value</p>
+                            </div>
+
+                            <div class="flex justify-end gap-2">
+                                <button @click="fetchCustomConfig()"
+                                        :disabled="isConfigLoading"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:opacity-50">
+                                    <svg x-show="isConfigLoading" class="animate-spin -ml-1 mr-1.5 h-3.5 w-3.5 text-text-secondary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span x-text="isConfigLoading ? 'Loading...' : 'Reset'"></span>
+                                </button>
+                                <button @click="saveCustomConfig()"
+                                        :disabled="isSavingConfig"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:opacity-50">
+                                    <svg x-show="isSavingConfig" class="animate-spin -ml-1 mr-1.5 h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span x-text="isSavingConfig ? 'Saving...' : 'Save Configuration'"></span>
+                                </button>
+                            </div>
+
+                            <div class="mt-4">
+                                <div class="rounded-md border border-border bg-surface p-3">
+                                    <div class="flex">
+                                        <div class="flex-shrink-0">
+                                            <svg class="h-4 w-4 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <div class="ml-3 flex-1">
+                                            <p class="text-xs text-text-secondary">
+                                                After saving, the PostgreSQL database will be restarted automatically to apply the changes. This might cause a brief interruption of service.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </main>
+    </div>
+
+    <!-- Unlink Confirmation Modal -->
+    <div x-show="showUnlinkModal"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2B3C]/30 backdrop-blur-sm"
+         x-cloak>
+        <div class="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-modal">
+            <div class="mb-3 flex items-center justify-between border-b border-border-subtle pb-2">
+                <h3 class="text-sm font-medium text-text-primary">Confirm Unlink</h3>
+                <button @click="showUnlinkModal = false"
+                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <p class="mb-4 text-xs text-text-secondary">
+                Are you sure you want to unlink <span class="font-semibold" x-text="unlinkApp"></span>? This will remove the service connection from the application.
+            </p>
+
+            <div class="flex justify-end gap-2">
+                <button @click="showUnlinkModal = false"
+                        :disabled="isUnlinking"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:opacity-50">
+                    Cancel
+                </button>
+                <button @click="doUnlink(unlinkApp)"
+                        :disabled="isUnlinking"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530] disabled:opacity-50">
+                    <svg x-show="isUnlinking" class="animate-spin -ml-1 mr-1.5 h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span x-text="isUnlinking ? 'Unlinking...' : 'Unlink'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Link Modal -->
+    <div x-show="showAddLinkModal"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2B3C]/30 backdrop-blur-sm"
+         x-cloak>
+        <div class="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-modal">
+            <div class="mb-3 flex items-center justify-between border-b border-border-subtle pb-2">
+                <h3 class="text-sm font-medium text-text-primary">Add Application Link</h3>
+                <button @click="showAddLinkModal = false"
+                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="mb-4">
+                <label class="mb-1 block text-xs font-medium text-text-secondary">Select Application</label>
+                <div class="relative" x-data="{ open: false }">
+                    <button type="button"
+                            @click="open = !open"
+                            class="relative w-full rounded border border-border bg-card px-3 py-1.5 text-left text-sm text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                        <span class="block truncate" x-text="selectedApp || 'Select an application'"></span>
+                        <span class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                            <svg class="h-3.5 w-3.5 text-text-tertiary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L10 5.414 7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3zm-3.707 9.293a1 1 0 011.414 0L10 14.586l2.293-2.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </span>
+                    </button>
+
+                    <div x-show="open"
+                         @click.away="open = false"
+                         class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-card py-1 text-sm shadow-dropdown focus:outline-none"
+                         x-cloak>
+                        <template x-for="app in availableApps" :key="app">
+                            <div @click="selectedApp = app; open = false"
+                                  :class="['cursor-pointer select-none relative py-1.5 pl-3 pr-9',
+                                          selectedApp === app ? 'bg-brand-subtle text-brand-primary font-medium' : 'text-text-primary hover:bg-surface']">
+                                <span x-text="app"
+                                      :class="['block truncate', selectedApp === app ? 'font-medium' : 'font-normal']">
+                                </span>
+                                <span x-show="selectedApp === app"
+                                      class="absolute inset-y-0 right-0 flex items-center pr-3 text-brand-primary">
+                                    <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                    </svg>
+                                </span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <button @click="showAddLinkModal = false"
+                        :disabled="isLinking"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:opacity-50">
+                    Cancel
+                </button>
+                <button @click="addLink()"
+                        :disabled="!selectedApp || isLinking"
+                        :class="{'opacity-50 cursor-not-allowed': !selectedApp || isLinking}"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                    <svg x-show="isLinking" class="animate-spin -ml-1 mr-1.5 h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span x-text="isLinking ? 'Linking...' : 'Link'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div x-show="showDeleteModal"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2B3C]/30 backdrop-blur-sm"
+         x-cloak>
+        <div class="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-modal">
+            <div class="mb-3 flex items-center justify-between border-b border-border-subtle pb-2">
+                <h3 class="text-sm font-medium text-text-primary">Delete Service</h3>
+                <button @click="showDeleteModal = false"
+                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="mb-4 rounded-md border border-status-danger/30 bg-status-danger-bg p-3">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-4 w-4 text-status-danger" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-xs text-status-danger">
+                            This action cannot be undone. Please type <span class="font-semibold text-status-danger" x-text="'{{.Name}}'"></span> to confirm.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="mb-1 block text-xs font-medium text-text-secondary">Confirmation</label>
+                <input type="text"
+                       x-model="confirmationName"
+                       placeholder="Type the service name to confirm"
+                       class="block h-8 w-full rounded border border-border bg-card px-3 text-sm text-text-primary focus:outline-none focus:ring-1"
+                       :class="{'border-status-danger bg-status-danger-bg focus:border-status-danger focus:ring-status-danger': confirmationName && confirmationName !== '{{.Name}}',
+                               'border-status-success bg-status-success-bg focus:border-status-success focus:ring-status-success': confirmationName === '{{.Name}}',
+                               'focus:border-brand-primary focus:ring-brand-primary': !confirmationName}">
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <button @click="showDeleteModal = false"
+                        :disabled="isDeleting"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:opacity-50">
+                    Cancel
+                </button>
+                <button @click="deleteService()"
+                        :disabled="confirmationName !== '{{.Name}}' || isDeleting"
+                        :class="{'opacity-50 cursor-not-allowed': confirmationName !== '{{.Name}}' || isDeleting}"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530] disabled:opacity-50">
+                    <svg x-show="isDeleting" class="animate-spin -ml-1 mr-1.5 h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span x-text="isDeleting ? 'Deleting...' : 'Delete'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Confirmation Modal -->
+    <div x-show="showImportModal"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2B3C]/30 backdrop-blur-sm"
+         x-cloak>
+        <div class="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-modal">
+            <div class="mb-3 flex items-center justify-between border-b border-border-subtle pb-2">
+                <h3 class="text-sm font-medium text-text-primary">Confirm Service Import</h3>
+                <button @click="showImportModal = false"
+                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="mb-4 rounded-md border border-status-warning/30 bg-status-warning-bg p-3">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-4 w-4 text-status-warning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-xs text-status-warning">
+                            <strong>Warning:</strong> You are about to import <span class="font-semibold" x-text="importFileName"></span> into the service <span class="font-semibold">{{.Name}}</span>. This will overwrite all existing data. This action cannot be undone.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <p class="mb-4 text-xs text-text-secondary">
+                Are you sure you want to proceed with the import? This will replace all existing data in the service.
+            </p>
+
+            <div class="flex justify-end gap-2">
+                <button @click="showImportModal = false"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                    Cancel
+                </button>
+                <button @click="startImport()"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                    <span>Proceed with Import</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alpine.js Component Definition -->
+<script>
+    // Add Alpine JS function for handling import
+    const init_comp = () => ({
+            // Tab and general state
+            activeTab: 'info',
+            info: {
+                details: {},
+                linkInfo: { linkedApps: [] },
+                link_info: { linked_apps: [] }
+            },
+            showFlash: false,
+            flashMessage: null,
+
+            // Loading state flags
+            isLoading: true,
+            hasBasicInfo: false,
+            hasResourceData: false,
+            hasLinksData: false,
+            hasConfigData: false,
+            isResourceLoading: false,
+            isLinksLoading: false,
+            isConfigLoading: false,
+
+            // PostgreSQL config specific properties
+            pgConfig: null,
+            configContent: '',
+            configSuccess: null,
+            isSavingConfig: false,
+
+            // System info for resource limits
+            systemInfo: {
+                cpuCount: 0,
+                totalMemory: ''
+            },
+
+            // Export variables
+            exportLogs: [],
+            wsExport: null,
+            exporting: false,
+            hasExportError: false,
+            exportError: '',
+            exportUrl: '',
+
+            // Import variables
+            importFile: null,
+            importFileName: '',
+            importProgress: 0,
+            isImporting: false,
+            importOutput: [],
+            showImportModal: false,
+            importWs: null,
+            fileSizeError: null,
+            MAX_FILE_SIZE: 5 * 1024 * 1024 * 1024, // 5GB in bytes
+
+            // Terminal variables
+            terminal: null,
+            terminalConnected: false,
+            terminalWs: null,
+            fitAddon: null,
+
+            // Link variables
+            showUnlinkModal: false,
+            showAddLinkModal: false,
+            selectedApp: '',
+            unlinkApp: null,
+            availableApps: [],
+            isUnlinking: false,
+            isLinking: false,
+
+            // Delete variables
+            isDeleting: false,
+            confirmationName: '',
+            showDeleteModal: false,
+
+            // Lifecycle
+            init() {
+                // First fetch only essential info to display the page quickly
+                this.fetchBasicInfo();
+
+                // If the console tab is active, initialize the terminal after a short delay
+                if (this.activeTab === 'console') {
+                    setTimeout(() => {
+                        this.initTerminal();
+                    }, 300);
+                }
+
+                // Get system info once at component initialization - defer to background
+                setTimeout(() => {
+                    this.getSystemInfo();
+                }, 100);
+
+                // Watch for tab changes to initialize terminal when console tab is selected
+                this.$watch('activeTab', (newTab) => {
+                    if (newTab === 'console') {
+                        setTimeout(() => {
+                            this.initTerminal();
+                        }, 300);
+                    }
+                });
+            },
+
+            // Get system info once for the entire component
+            getSystemInfo() {
+                fetch('/api/server/info')
+                    .then(response => response.json())
+                    .then(data => {
+                        this.systemInfo.cpuCount = parseInt(data.cpu_cores);
+                        this.systemInfo.totalMemory = data.memory_total;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching system info:', error);
+                    });
+            },
+
+            // Fetch essential data first for quick page loading
+            async fetchBasicInfo() {
+                this.isLoading = true;
+                try {
+                    const response = await fetch(`/api/services/{{.Type}}/{{.Name}}/basic-info`);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch basic service info');
+                    }
+                    const data = await response.json();
+                    this.info = data;
+                    this.hasBasicInfo = true;
+                    console.log('Basic service info loaded', this.info);
+
+                    // Load additional details in the background after basic info is shown
+                    setTimeout(() => {
+                        this.fetchAdditionalInfo();
+                    }, 100);
+                } catch (error) {
+                    console.error('Error fetching basic service info:', error);
+                    // Fallback to the full info endpoint if basic info endpoint isn't available
+                    this.fetchInfo();
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+
+            // Fetch additional non-critical data in the background
+            async fetchAdditionalInfo() {
+                // Also fetch the full service info to populate URL, Internal IP, Container ID, etc.
+                // This won't block the UI since the loading indicator only shows when !hasBasicInfo
+                this.fetchInfo();
+
+                // These calls can happen in parallel
+                this.fetchResourceInfo();
+                this.fetchLinksInfo();
+
+                // For PostgreSQL services, also fetch config data
+                if ('{{.Type}}' === 'postgres') {
+                    this.fetchCustomConfig();
+                }
+            },
+
+            // Fetch complete info
+            async fetchInfo() {
+                this.isLoading = true;
+                try {
+                    const response = await fetch(`/api/services/{{.Type}}/{{.Name}}/info`);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch service info');
+                    }
+                    const data = await response.json();
+                    this.info = data;
+                    this.hasBasicInfo = true;
+                    console.log('Service info loaded', this.info);
+
+                    // Set flags based on what data was returned
+                    if (this.info.resourceLimits) {
+                        this.hasResourceData = true;
+                    }
+
+                    if (this.info.linkInfo) {
+                        this.hasLinksData = true;
+                    }
+                } catch (error) {
+                    console.error('Error fetching service info:', error);
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+
+            // Fetch resource limits data separately
+            async fetchResourceInfo() {
+                if (this.hasResourceData || this.isResourceLoading) return;
+                this.isResourceLoading = true;
+
+                try {
+                    const response = await fetch(`/api/services/{{.Type}}/{{.Name}}/resources`);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch resource info');
+                    }
+                    const data = await response.json();
+
+                    // Update the info object with resource data
+                    if (!this.info.resourceLimits) {
+                        this.info.resourceLimits = {};
+                    }
+                    this.info.resourceLimits = data.resourceLimits;
+                    this.hasResourceData = true;
+                } catch (error) {
+                    console.error('Error fetching resource info:', error);
+                } finally {
+                    this.isResourceLoading = false;
+                }
+            },
+
+            // Fetch linked apps data separately
+            async fetchLinksInfo() {
+                if (this.hasLinksData || this.isLinksLoading) return;
+                this.isLinksLoading = true;
+
+                try {
+                    const response = await fetch(`/api/services/{{.Type}}/{{.Name}}/links`);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch links info');
+                    }
+                    const data = await response.json();
+
+                    // Update the info object with links data
+                    if (!this.info.linkInfo) {
+                        this.info.linkInfo = { linkedApps: [] };
+                    }
+                    this.info.linkInfo.linkedApps = data.linkedApps;
+                    this.hasLinksData = true;
+                } catch (error) {
+                    console.error('Error fetching links info:', error);
+                } finally {
+                    this.isLinksLoading = false;
+                }
+            },
+
+            // Fetch PostgreSQL config separately
+            async fetchCustomConfig() {
+                if (this.isConfigLoading || '{{.Type}}' !== 'postgres') return;
+                this.isConfigLoading = true;
+                this.hasConfigData = false;
+
+                try {
+                    const response = await fetch(`/api/services/{{.Type}}/{{.Name}}/config`);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch config info');
+                    }
+                    const data = await response.json();
+
+                    // Store the config content
+                    this.configContent = data.config || '';
+                    this.pgConfig = data;
+                    this.hasConfigData = true;
+                } catch (error) {
+                    console.error('Error fetching config info:', error);
+                    this.pgConfig = { error: error.message || 'Failed to fetch configuration' };
+                } finally {
+                    this.isConfigLoading = false;
+                }
+            },
+
+            // Helper for checking if service is exportable
+            isExportableService() {
+                const exportableTypes = ['postgres', 'mysql', 'mariadb', 'mongo', 'redis'];
+                return exportableTypes.includes('{{.Type}}');
+            },
+
+            // Export method
+            async triggerExport() {
+                if (this.exporting) return;
+                this.exporting = true;
+                this.hasExportError = false;
+                this.exportError = '';
+                this.exportUrl = '';
+
+                try {
+                    const response = await fetch(`/api/services/{{.Type}}/{{.Name}}/export`, {
+                        method: 'POST'
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Export failed');
+                    }
+
+                    this.exportUrl = data.export_url;
+
+                    // Otomatik indirme için
+                    if (this.exportUrl) {
+                        // Kısa bir gecikme ile indirmeyi başlat
+                        setTimeout(() => {
+                            const link = document.createElement('a');
+                            link.href = this.exportUrl;
+
+                            // Tarih formatını oluştur: YYYY-MM-DD-HHMM
+                            const now = new Date();
+                            const year = now.getFullYear();
+                            const month = String(now.getMonth() + 1).padStart(2, '0');
+                            const day = String(now.getDate()).padStart(2, '0');
+                            const hours = String(now.getHours()).padStart(2, '0');
+                            const minutes = String(now.getMinutes()).padStart(2, '0');
+
+                            // Dosya adını oluştur: servis-adı-tarih.dump.gz
+                            const filename = `{{.Name}}-${year}-${month}-${day}-${hours}${minutes}.dump.gz`;
+
+                            link.download = filename;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        }, 500);
+                    }
+                } catch (error) {
+                    console.error('Export error:', error);
+                    this.hasExportError = true;
+                    this.exportError = error.message || 'An unknown error occurred';
+                } finally {
+                    this.exporting = false;
+                }
+            },
+
+            // Terminal methods
+            initTerminal() {
+                if (this.terminalConnected) return;
+
+                // Check if terminal element exists
+                const terminalElement = document.getElementById('terminal');
+                if (!terminalElement) {
+                    console.error('Terminal element not found');
+                    return;
+                }
+
+                // Create and configure terminal
+                this.terminal = new Terminal({
+                    cursorBlink: true,
+                    convertEol: true,
+                    fontFamily: 'DM Mono, monospace',
+                    fontSize: 12,
+                    lineHeight: 1.2,
+                    theme: {
+                        background: '#1A2B3C',
+                        foreground: '#a8d5c2',
+                        cursor: '#a8d5c2',
+                        selection: '#3A322C',
+                        black: '#3D5166',
+                        red: '#9C3F33',
+                        green: '#2D9B6F',
+                        yellow: '#B06A2B',
+                        blue: '#B8A898',
+                        magenta: '#3DBF8A',
+                        cyan: '#D8CCB7',
+                        white: '#a8d5c2',
+                        brightBlack: '#7A96B0',
+                        brightRed: '#C25749',
+                        brightGreen: '#3C9460',
+                        brightYellow: '#C9853B',
+                        brightBlue: '#D8CCB7',
+                        brightMagenta: '#C4833D',
+                        brightCyan: '#a8d5c2',
+                        brightWhite: '#FFFDF8'
+                    },
+                    scrollback: 5000,
+                    allowProposedApi: true
+                });
+
+                // Add resize fit addon
+                this.fitAddon = new FitAddon.FitAddon();
+                this.terminal.loadAddon(this.fitAddon);
+
+                // Open and fit terminal
+                this.terminal.open(terminalElement);
+                this.fitAddon.fit();
+
+                // Başlangıç mesajını göster
+                this.terminal.writeln('\x1b[90m# {{.Type}} service console for {{.Name}}\x1b[0m');
+                this.terminal.writeln('\x1b[90m# Click the Connect button to start a terminal session\x1b[0m');
+                this.terminal.writeln('\x1b[90m# Type exit to close the console session\x1b[0m');
+                this.terminal.writeln('\x1b[90m# -----------------------------------------------------------\x1b[0m');
+
+                // Handle resize
+                window.addEventListener('resize', () => {
+                    if (this.terminal && this.fitAddon) {
+                        this.fitAddon.fit();
+                    }
+                });
+            },
+
+            connectTerminalWebsocket() {
+                if (this.terminalConnected) return;
+
+                if (!this.terminal) {
+                    this.initTerminal();
+                }
+
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws/services/{{.Type}}/{{.Name}}/console`;
+
+                // Clear terminal and show connection message
+                this.terminal.clear();
+                this.terminal.writeln('\x1b[32mConnecting to {{.Type}} service: {{.Name}}...\x1b[0m');
+                this.terminal.writeln('\x1b[90m-----------------------------------------------------\x1b[0m\n');
+
+                // Create websocket with binary type
+                this.terminalWs = new WebSocket(wsUrl);
+                this.terminalWs.binaryType = 'arraybuffer';
+
+                this.terminalWs.onopen = () => {
+                    this.terminalConnected = true;
+                    this.terminal.focus();
+
+                    // Simple data handling - no JSON, just raw data
+                    this.terminal.onData(data => {
+                        if (this.terminalWs && this.terminalWs.readyState === WebSocket.OPEN) {
+                            this.terminalWs.send(data);
+                        }
+                    });
+                };
+
+                this.terminalWs.onmessage = (event) => {
+                    // For binary data (which is what we expect from the server)
+                    if (event.data instanceof ArrayBuffer) {
+                        const data = new Uint8Array(event.data);
+                        this.terminal.write(data);
+                    } else {
+                        // For text, just write directly (should be rare)
+                        this.terminal.write(event.data);
+                    }
+                };
+
+                this.terminalWs.onclose = () => {
+                    this.terminalConnected = false;
+                    if (this.terminal) {
+                        this.terminal.writeln('\r\n\x1b[93mConnection closed\x1b[0m');
+                    }
+                };
+
+                this.terminalWs.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    if (this.terminal) {
+                        this.terminal.writeln('\r\n\x1b[91mConnection error\x1b[0m');
+                    }
+                    this.terminalConnected = false;
+                };
+            },
+
+            disconnectTerminalWebsocket() {
+                const terminalWs = this.terminalWs;
+                this.terminalWs = null;
+
+                if (terminalWs) {
+                    terminalWs.onclose = null;
+                    terminalWs.onerror = null;
+                    if (terminalWs.readyState === WebSocket.OPEN || terminalWs.readyState === WebSocket.CONNECTING) {
+                        terminalWs.close();
+                    }
+                }
+
+                if (this.terminal) {
+                    try {
+                        this.terminal.dispose();
+                    } catch (e) {
+                        console.log('Terminal disposal failed:', e);
+                    }
+                    this.terminal = null;
+                }
+
+                this.fitAddon = null;
+
+                this.terminalConnected = false;
+            },
+
+            // Link methods
+            async fetchAvailableApps() {
+                try {
+                    const response = await fetch('/api/apps/list');
+                    const data = await response.json();
+                    this.availableApps = data.apps.filter(app =>
+                        !this.info.link_info?.linked_apps?.includes(app)
+                    );
+                } catch (error) {
+                    console.error('Error:', error);
+                }
+            },
+
+            async doUnlink(app) {
+                if (this.isUnlinking) return;
+                this.isUnlinking = true;
+
+                try {
+                    const response = await fetch('/api/services/link', {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: '{{.Type}}',
+                            service: '{{.Name}}',
+                            app: app
+                        })
+                    });
+                    if (response.ok) {
+                        this.showUnlinkModal = false;
+                        this.unlinkApp = null;
+                        await this.fetchInfo();
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                } finally {
+                    this.isUnlinking = false;
+                }
+            },
+
+            async addLink() {
+                if (!this.selectedApp || this.isLinking) return;
+                this.isLinking = true;
+
+                try {
+                    const response = await fetch('/api/services/link', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: '{{.Type}}',
+                            service: '{{.Name}}',
+                            app: this.selectedApp
+                        })
+                    });
+                    if (response.ok) {
+                        this.showAddLinkModal = false;
+                        this.selectedApp = '';
+                        await this.fetchInfo();
+                        await this.fetchAvailableApps();
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                } finally {
+                    this.isLinking = false;
+                }
+            },
+
+            // Delete method
+            async deleteService() {
+                if (this.isDeleting || this.confirmationName !== '{{.Name}}') return;
+                this.isDeleting = true;
+
+                try {
+                    const response = await fetch(`/api/services/{{.Type}}/{{.Name}}`, {
+                        method: 'DELETE'
+                    });
+                    if (response.ok) {
+                        window.location.href = '/services';
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                } finally {
+                    this.isDeleting = false;
+                }
+            },
+
+            showFlashMessage(message, type = 'success') {
+                if (typeof message === 'object' && message !== null) {
+                    this.flashMessage = message;
+                } else {
+                    this.flashMessage = { text: message, type: type };
+                }
+                this.showFlash = true;
+                setTimeout(() => this.showFlash = false, 10000);
+            },
+
+            // Import methods
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                this.importFile = file;
+                this.importFileName = file.name;
+
+                // Check file size
+                if (file.size > this.MAX_FILE_SIZE) {
+                    this.fileSizeError = `File is too large. Maximum allowed size is 5GB. Your file size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                    this.importFile = null;
+                    return;
+                }
+
+                this.fileSizeError = null;
+                this.showImportModal = true;
+            },
+
+            startImport() {
+                if (!this.importFile || this.isImporting) return;
+                this.showImportModal = false;
+                this.isImporting = true;
+                this.importProgress = 10;
+                this.importOutput = ['Starting import process...'];
+
+                try {
+                    // Create a form data object
+                    const formData = new FormData();
+                    formData.append("backupFile", this.importFile);
+
+                    // First upload the file and get a task ID
+                    fetch(`/api/services/{{.Type}}/{{.Name}}/import`, {
+                        method: 'POST',
+                        body: formData,
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 413) {
+                                throw new Error("Request Entity Too Large - File exceeds server upload limit. Please use command line instead.");
+                            }
+                            return response.json().then(data => {
+                                throw new Error(data.error || 'Import failed');
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        const taskId = data.taskId;
+                        this.importProgress = 30;
+                        this.importOutput.push('File uploaded successfully. Starting import...');
+
+                        // Connect to WebSocket for live output using the task ID
+                        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                        const wsUrl = `${protocol}//${window.location.host}/ws/services/import/${taskId}`;
+                        this.importWs = new WebSocket(wsUrl);
+
+                        this.importWs.onopen = () => {
+                            this.importProgress = 40;
+                            this.importOutput.push('Connected to import process...');
+                        };
+
+                        this.importWs.onmessage = (event) => {
+                            try {
+                                const message = JSON.parse(event.data);
+
+                                if (message.error) {
+                                    this.importOutput.push({
+                                        type: 'error',
+                                        text: message.error
+                                    });
+                                    this.importProgress = 100;
+                                    this.isImporting = false;
+                                } else if (message.output) {
+                                    // Replace tabs with spaces but avoid HTML tags
+                                    const formattedOutput = message.output
+                                        .replace(/\t/g, '    ');
+
+                                    this.importOutput.push({
+                                        type: 'normal',
+                                        text: formattedOutput
+                                    });
+
+                                    // Auto-scroll to bottom
+                                    setTimeout(() => {
+                                        const outputContainer = document.querySelector('.overflow-auto');
+                                        if (outputContainer) {
+                                            outputContainer.scrollTop = outputContainer.scrollHeight;
+                                        }
+                                    }, 10);
+
+                                    // Update progress
+                                    if (this.importProgress < 90) {
+                                        this.importProgress += 1;
+                                    }
+
+                                    // Check for completion message
+                                    if (message.output.includes('Import process finished')) {
+                                        this.importProgress = 100;
+                                        this.importOutput.push({
+                                            type: 'normal',
+                                            text: 'Import completed successfully.'
+                                        });
+                                        this.importWs.close();
+                                        setTimeout(() => this.fetchInfo(), 1000); // Refresh service info
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('Error parsing message:', error);
+                                this.importOutput.push({
+                                    type: 'error',
+                                    text: 'Error parsing message from server'
+                                });
+                            }
+                        };
+
+                        this.importWs.onclose = () => {
+                            if (this.importProgress < 100) {
+                                this.importProgress = 100;
+                                this.importOutput.push({
+                                    type: 'normal',
+                                    text: 'Connection closed.'
+                                });
+                            }
+                        };
+
+                        this.importWs.onerror = (error) => {
+                            console.error('WebSocket error:', error);
+                            this.importOutput.push({
+                                type: 'error',
+                                text: 'WebSocket error: ' + (error.message || 'Unknown error')
+                            });
+                            this.importProgress = 100;
+                        };
+                    })
+                    .catch(error => {
+                        console.error('Upload error:', error);
+                        this.importOutput.push({
+                            type: 'error',
+                            text: 'Error: ' + (error.message || 'Unknown error')
+                        });
+                        this.importProgress = 100;
+                        this.isImporting = false;
+                    });
+                } catch (error) {
+                    console.error('Import error:', error);
+                    this.importOutput.push({
+                        type: 'error',
+                        text: 'Error: ' + (error.message || 'Unknown error')
+                    });
+                    this.importProgress = 100;
+                    this.isImporting = false;
+                }
+            },
+
+            // Add a new method for saving the PostgreSQL config
+            async saveCustomConfig() {
+                if (this.isSavingConfig || '{{.Type}}' !== 'postgres') return;
+                this.isSavingConfig = true;
+                this.configSuccess = null;
+
+                if (this.pgConfig && this.pgConfig.error) {
+                    this.pgConfig.error = null;
+                }
+
+                try {
+                    const response = await fetch(`/api/services/{{.Type}}/{{.Name}}/config`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            config: this.configContent
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to save configuration');
+                    }
+
+                    this.configSuccess = 'Configuration saved successfully';
+                    setTimeout(() => {
+                        this.configSuccess = null;
+                    }, 3000);
+                } catch (error) {
+                    console.error('Error saving config:', error);
+                    if (!this.pgConfig) {
+                        this.pgConfig = {};
+                    }
+                    this.pgConfig.error = error.message || 'Failed to save configuration';
+                } finally {
+                    this.isSavingConfig = false;
+                }
+            },
+        });
+    if (window.Alpine) {
+        window.Alpine.data('serviceDetail', init_comp);
+    } else {
+        document.addEventListener('alpine:init', () => {
+            window.Alpine.data('serviceDetail', init_comp);
+        });
+    }
+</script>
+{{end}}

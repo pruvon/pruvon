@@ -1,0 +1,533 @@
+{{define "app_docker_options"}}
+<div
+    x-data="{
+        showAddModal: false,
+        optionType: 'build',
+        newOption: '',
+        editIndex: -1,
+        editType: '',
+        editOption: '',
+        showDeleteModal: false,
+        deleteIndex: -1,
+        deleteType: '',
+        errors: {
+            newOption: ''
+        },
+        validateOption() {
+            this.errors.newOption = '';
+            if (!this.newOption.trim()) {
+                this.errors.newOption = 'Docker option is required';
+                return false;
+            }
+            return true;
+        },
+        validateEditOption() {
+            if (!this.editOption.trim()) {
+                Alpine.store('flash').show('Docker option cannot be empty', 'error');
+                return false;
+            }
+            return true;
+        },
+        async addOption() {
+            if (!this.validateOption()) return;
+
+            try {
+                const response = await fetch(`/api/apps/{{.Name}}/docker-options/${this.optionType}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        option: this.newOption
+                    })
+                });
+
+                if (response.ok) {
+                    this.showAddModal = false;
+                    this.newOption = '';
+
+                    // Fetch fresh data directly
+                    const optionsResponse = await fetch(`/api/apps/{{.Name}}/docker-options?t=${Date.now()}`);
+                    const data = await optionsResponse.json();
+
+                    // Update local data directly
+                    this.dockerOptions = {
+                        build: data.build || [],
+                        deploy: data.deploy || [],
+                        run: data.run || []
+                    };
+
+                    Alpine.store('flash').show('Docker option added successfully', 'success');
+                } else {
+                    const data = await response.json();
+                    Alpine.store('flash').show(data.error || 'Failed to add Docker option', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                Alpine.store('flash').show('Failed to add Docker option', 'error');
+            }
+        },
+        async deleteOption() {
+            try {
+                const response = await fetch(`/api/apps/{{.Name}}/docker-options/${this.deleteType}/${this.deleteIndex}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    this.showDeleteModal = false;
+                    this.deleteIndex = -1;
+                    this.deleteType = '';
+
+                    // Fetch fresh data directly
+                    const optionsResponse = await fetch(`/api/apps/{{.Name}}/docker-options?t=${Date.now()}`);
+                    const data = await optionsResponse.json();
+
+                    // Update local data directly
+                    this.dockerOptions = {
+                        build: data.build || [],
+                        deploy: data.deploy || [],
+                        run: data.run || []
+                    };
+
+                    Alpine.store('flash').show('Docker option deleted successfully', 'success');
+                } else {
+                    const data = await response.json();
+                    Alpine.store('flash').show(data.error || 'Failed to delete Docker option', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                Alpine.store('flash').show('Failed to delete Docker option', 'error');
+            }
+        },
+        async updateOption() {
+            if (!this.validateEditOption()) return;
+
+            try {
+                const response = await fetch(`/api/apps/{{.Name}}/docker-options/${this.editType}/${this.editIndex}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        option: this.editOption
+                    })
+                });
+
+                if (response.ok) {
+                    this.editIndex = -1;
+                    this.editType = '';
+                    this.editOption = '';
+
+                    // Fetch fresh data directly
+                    const optionsResponse = await fetch(`/api/apps/{{.Name}}/docker-options?t=${Date.now()}`);
+                    const data = await optionsResponse.json();
+
+                    // Update local data directly
+                    this.dockerOptions = {
+                        build: data.build || [],
+                        deploy: data.deploy || [],
+                        run: data.run || []
+                    };
+
+                    Alpine.store('flash').show('Docker option updated successfully', 'success');
+                } else {
+                    const data = await response.json();
+                    Alpine.store('flash').show(data.error || 'Failed to update Docker option', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                Alpine.store('flash').show('Failed to update Docker option', 'error');
+            }
+        }
+    }">
+    <div class="space-y-4">
+        <!-- Header with Add Button -->
+        <div class="mb-4 flex items-center justify-between">
+            <h2 class="flex items-center text-sm font-semibold text-text-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="mr-2 h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                </svg>
+                Docker Options
+            </h2>
+            <button @click="showAddModal = true" class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Docker Option
+            </button>
+        </div>
+
+        <!-- Docker Build Options -->
+        <div class="overflow-hidden rounded-md border border-border bg-card">
+            <div class="border-b border-border-subtle px-4 py-3">
+                <h3 class="flex items-center text-sm font-semibold text-text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mr-1.5 h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                    Build Options
+                </h3>
+            </div>
+            <div class="p-4">
+                <template x-if="dockerOptions.build.length === 0">
+                    <p class="text-sm text-text-secondary">No build options configured</p>
+                </template>
+                <div class="space-y-2">
+                    <template x-for="(option, index) in dockerOptions.build" :key="index">
+                        <div class="flex items-center justify-between rounded-md border border-border bg-surface p-2">
+                            <!-- If editing this item, show input field -->
+                            <template x-if="editIndex === index && editType === 'build'">
+                                <div class="flex-1 mr-2">
+                                    <input
+                                        type="text"
+                                        x-model="editOption"
+                                        class="h-8 w-full rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                        @keydown.enter.prevent="updateOption()"
+                                    >
+                                </div>
+                            </template>
+
+                            <!-- If not editing this item, show text -->
+                            <template x-if="!(editIndex === index && editType === 'build')">
+                                <div class="flex flex-1 items-center gap-2 rounded border border-border bg-card px-3 py-1.5 font-mono text-[13px] text-text-primary" x-text="option"></div>
+                            </template>
+
+                            <div class="flex items-center gap-1">
+                                <!-- Edit Button -->
+                                <template x-if="!(editIndex === index && editType === 'build')">
+                                    <button @click="editIndex = index; editType = 'build'; editOption = option" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-text-primary">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                    </button>
+                                </template>
+                                
+                                <!-- Save Button (when editing) -->
+                                <template x-if="editIndex === index && editType === 'build'">
+                                    <button @click="updateOption()" class="inline-flex h-7 w-7 items-center justify-center rounded text-status-success transition-colors duration-100 hover:bg-card">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </button>
+                                </template>
+
+                                <!-- Cancel Button (when editing) -->
+                                <template x-if="editIndex === index && editType === 'build'">
+                                    <button @click="editIndex = -1; editType = ''" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-text-primary">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </template>
+
+                                <!-- Delete Button -->
+                                <template x-if="!(editIndex === index && editType === 'build')">
+                                    <button @click="deleteIndex = index; deleteType = 'build'; showDeleteModal = true" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-status-danger">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Docker Deploy Options -->
+        <div class="overflow-hidden rounded-md border border-border bg-card">
+            <div class="border-b border-border-subtle px-4 py-3">
+                <h3 class="flex items-center text-sm font-semibold text-text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mr-1.5 h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                    </svg>
+                    Deploy Options
+                </h3>
+            </div>
+            <div class="p-4">
+                <template x-if="dockerOptions.deploy.length === 0">
+                    <p class="text-sm text-text-secondary">No deploy options configured</p>
+                </template>
+                <div class="space-y-2">
+                    <template x-for="(option, index) in dockerOptions.deploy" :key="index">
+                        <div class="flex items-center justify-between rounded-md border border-border bg-surface p-2">
+                            <!-- If editing this item, show input field -->
+                            <template x-if="editIndex === index && editType === 'deploy'">
+                                <div class="flex-1 mr-2">
+                                    <input
+                                        type="text"
+                                        x-model="editOption"
+                                        class="h-8 w-full rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                        @keydown.enter.prevent="updateOption()"
+                                    >
+                                </div>
+                            </template>
+
+                            <!-- If not editing this item, show text -->
+                            <template x-if="!(editIndex === index && editType === 'deploy')">
+                                <div class="flex flex-1 items-center gap-2 rounded border border-border bg-card px-3 py-1.5 font-mono text-[13px] text-text-primary" x-text="option"></div>
+                            </template>
+
+                            <div class="flex items-center gap-1">
+                                <!-- Edit Button -->
+                                <template x-if="!(editIndex === index && editType === 'deploy')">
+                                    <button @click="editIndex = index; editType = 'deploy'; editOption = option" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-text-primary">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                    </button>
+                                </template>
+
+                                <!-- Save Button (when editing) -->
+                                <template x-if="editIndex === index && editType === 'deploy'">
+                                    <button @click="updateOption()" class="inline-flex h-7 w-7 items-center justify-center rounded text-status-success transition-colors duration-100 hover:bg-card">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </button>
+                                </template>
+
+                                <!-- Cancel Button (when editing) -->
+                                <template x-if="editIndex === index && editType === 'deploy'">
+                                    <button @click="editIndex = -1; editType = ''" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-text-primary">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </template>
+
+                                <!-- Delete Button -->
+                                <template x-if="!(editIndex === index && editType === 'deploy')">
+                                    <button @click="deleteIndex = index; deleteType = 'deploy'; showDeleteModal = true" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-status-danger">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Docker Run Options -->
+        <div class="overflow-hidden rounded-md border border-border bg-card">
+            <div class="border-b border-border-subtle px-4 py-3">
+                <h3 class="flex items-center text-sm font-semibold text-text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mr-1.5 h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Run Options
+                </h3>
+            </div>
+            <div class="p-4">
+                <template x-if="dockerOptions.run.length === 0">
+                    <p class="text-sm text-text-secondary">No run options configured</p>
+                </template>
+                <div class="space-y-2">
+                    <template x-for="(option, index) in dockerOptions.run" :key="index">
+                        <div class="flex items-center justify-between rounded-md border border-border bg-surface p-2">
+                            <!-- If editing this item, show input field -->
+                            <template x-if="editIndex === index && editType === 'run'">
+                                <div class="flex-1 mr-2">
+                                    <input
+                                        type="text"
+                                        x-model="editOption"
+                                        class="h-8 w-full rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                        @keydown.enter.prevent="updateOption()"
+                                    >
+                                </div>
+                            </template>
+
+                            <!-- If not editing this item, show text -->
+                            <template x-if="!(editIndex === index && editType === 'run')">
+                                <div class="flex flex-1 items-center gap-2 rounded border border-border bg-card px-3 py-1.5 font-mono text-[13px] text-text-primary" x-text="option"></div>
+                            </template>
+
+                            <div class="flex items-center gap-1">
+                                <!-- Edit Button -->
+                                <template x-if="!(editIndex === index && editType === 'run')">
+                                    <button @click="editIndex = index; editType = 'run'; editOption = option" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-text-primary">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                    </button>
+                                </template>
+
+                                <!-- Save Button (when editing) -->
+                                <template x-if="editIndex === index && editType === 'run'">
+                                    <button @click="updateOption()" class="inline-flex h-7 w-7 items-center justify-center rounded text-status-success transition-colors duration-100 hover:bg-card">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </button>
+                                </template>
+
+                                <!-- Cancel Button (when editing) -->
+                                <template x-if="editIndex === index && editType === 'run'">
+                                    <button @click="editIndex = -1; editType = ''" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-text-primary">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </template>
+
+                                <!-- Delete Button -->
+                                <template x-if="!(editIndex === index && editType === 'run')">
+                                    <button @click="deleteIndex = index; deleteType = 'run'; showDeleteModal = true" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-100 hover:bg-card hover:text-status-danger">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documentation panel -->
+        <div class="rounded-md border border-border bg-surface p-4">
+            <div class="flex items-start">
+                <div class="mr-3 flex-shrink-0 rounded-sm bg-card p-2 text-text-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <div>
+                    <h4 class="mb-2 font-medium text-text-primary">Docker Options Information</h4>
+                    <p class="mb-2 text-sm text-text-secondary">Docker options allow you to customize how containers are built, deployed, and run for your application.</p>
+                    <ul class="space-y-1.5 pl-5 text-xs text-text-secondary">
+                        <li><span class="font-semibold text-text-primary">Build Options:</span> Applied during <code class="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-text-primary">docker build</code>. Control how your Docker image is constructed.</li>
+                        <li><span class="font-semibold">Deploy Options:</span> Applied when the container is deployed to your environment.</li>
+                        <li><span class="font-semibold text-text-primary">Run Options:</span> Applied when your container is started with <code class="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-text-primary">docker run</code>.</li>
+                    </ul>
+                    <p class="mt-3 text-xs text-text-secondary">Common examples:</p>
+                    <div class="mt-1 flex flex-wrap gap-1.5">
+                        <code class="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-text-primary">--memory 512m</code>
+                        <code class="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-text-primary">--ulimit nofile=4096</code>
+                        <code class="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-text-primary">--shm-size 256m</code>
+                        <code class="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-text-primary">--cpus 0.5</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Docker Option Modal -->
+    <div x-show="showAddModal" class="fixed inset-0 z-40 bg-[#1A2B3C]/30 backdrop-blur-sm" x-cloak></div>
+    <div x-show="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" x-cloak>
+        <div @click.away="showAddModal = false" class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+            <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                <h3 class="flex items-center text-sm font-semibold text-text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mr-2 h-4 w-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Docker Option
+                </h3>
+                <button @click="showAddModal = false" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="px-5 py-4">
+                <div class="mb-4">
+                    <label class="mb-1.5 block text-xs font-medium text-text-secondary">Option Type</label>
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open"
+                                @keydown.escape.window="open = false"
+                                type="button"
+                                class="inline-flex h-8 w-full items-center justify-between rounded border border-border bg-card px-3 text-sm text-text-primary transition-colors duration-150 hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                            <span x-text="optionType === 'build' ? 'Build' : (optionType === 'deploy' ? 'Deploy' : 'Run')"></span>
+                            <svg class="h-[13px] w-[13px] text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        <div x-show="open"
+                             x-cloak
+                             @click.away="open = false"
+                             x-transition:enter="transition ease-out duration-100"
+                             x-transition:enter-start="transform opacity-0 scale-95"
+                             x-transition:enter-end="transform opacity-100 scale-100"
+                             x-transition:leave="transition ease-in duration-75"
+                             x-transition:leave-start="transform opacity-100 scale-100"
+                             x-transition:leave-end="transform opacity-0 scale-95"
+                             class="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-border bg-card shadow-dropdown">
+                            <div class="py-1">
+                                <button @click="optionType = 'build'; open = false"
+                                        type="button"
+                                        :class="optionType === 'build' ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                        class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                    Build
+                                </button>
+                                <button @click="optionType = 'deploy'; open = false"
+                                        type="button"
+                                        :class="optionType === 'deploy' ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                        class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                    Deploy
+                                </button>
+                                <button @click="optionType = 'run'; open = false"
+                                        type="button"
+                                        :class="optionType === 'run' ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                        class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                    Run
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="mb-1.5 block text-xs font-medium text-text-secondary">Docker Option</label>
+                    <input type="text" x-model="newOption" placeholder="e.g. --memory 512m" class="block h-8 w-full rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                    <p x-show="errors.newOption" x-text="errors.newOption" class="mt-1 text-xs text-status-danger"></p>
+                    <p class="mt-1 text-xs text-text-tertiary">Enter a valid Docker option like <code class="rounded border border-border bg-surface px-1 py-0.5 font-mono text-[11px] text-text-primary">--memory 512m</code> or <code class="rounded border border-border bg-surface px-1 py-0.5 font-mono text-[11px] text-text-primary">--ulimit nofile=4096</code></p>
+                </div>
+                <div class="mt-6 flex justify-end gap-2 border-t border-border-subtle pt-4">
+                    <button @click="showAddModal = false" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="addOption()" class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                        Add Option
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div x-show="showDeleteModal" class="fixed inset-0 z-40 bg-[#1A2B3C]/30 backdrop-blur-sm" x-cloak></div>
+    <div x-show="showDeleteModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" x-cloak>
+        <div @click.away="showDeleteModal = false" class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+            <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                <h3 class="flex items-center text-sm font-semibold text-text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mr-2 h-4 w-4 text-status-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Confirm Delete
+                </h3>
+                <button @click="showDeleteModal = false" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="px-5 py-4">
+                <p class="mb-4 text-sm text-text-secondary">Are you sure you want to delete this Docker option?</p>
+                <template x-if="deleteType && deleteIndex >= 0">
+                    <div class="mb-4 rounded border border-border bg-surface p-3">
+                        <p class="font-mono text-[13px] text-text-primary" x-text="(dockerOptions[deleteType] || [])[deleteIndex] || ''"></p>
+                    </div>
+                </template>
+                <div class="mt-6 flex justify-end gap-2 border-t border-border-subtle pt-4">
+                    <button @click="showDeleteModal = false" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="deleteOption()" class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

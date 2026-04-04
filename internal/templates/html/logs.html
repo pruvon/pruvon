@@ -1,0 +1,177 @@
+{{define "content"}}
+<div x-data="{
+    logs: [],
+    totalPages: 1,
+    currentPage: 1,
+    username: '',
+    query: '',
+    loading: false,
+    noResults: false,
+    flashMessage: null,
+    showFlash: false,
+    async fetchLogs() {
+        this.loading = true;
+        try {
+            const response = await fetch(`/api/logs?username=${this.username}&q=${this.query}&page=${this.currentPage}&per_page=20`);
+            const data = await response.json();
+            this.logs = data.logs;
+            this.totalPages = data.total_pages;
+            this.noResults = this.logs.length === 0;
+        } catch (error) {
+            console.error('Error fetching logs:', error);
+            this.showFlashMessage('Failed to load logs', 'error');
+        }
+        this.loading = false;
+    },
+    showFlashMessage(message, type = 'success') {
+        this.flashMessage = { text: message, type: type };
+        this.showFlash = true;
+        setTimeout(() => this.showFlash = false, 10000);
+    }
+}" x-init="fetchLogs()" class="w-full">
+    <div x-show="showFlash"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 -translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 -translate-y-2"
+         class="fixed right-4 top-4 z-50 w-full max-w-sm"
+         @click="showFlash = false">
+        <div :class="{
+            'border-status-success/40 bg-status-success-bg': flashMessage?.type === 'success',
+            'border-status-danger/40 bg-status-danger-bg': flashMessage?.type === 'error'
+        }" class="rounded-md border bg-card shadow-dropdown">
+            <div class="flex items-start gap-3 p-3">
+                <span :class="flashMessage?.type === 'success' ? 'bg-status-success' : 'bg-status-danger'" class="mt-1.5 h-1.5 w-1.5 rounded-full"></span>
+                <p x-text="flashMessage?.text" class="flex-1 text-sm text-text-primary"></p>
+                <button class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary" @click="showFlash = false">
+                    <svg class="h-[14px] w-[14px]" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414 1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-6">
+        <h1 class="text-lg font-semibold text-text-primary">Activity Logs</h1>
+        <p class="mt-0.5 text-xs text-text-secondary">Filter system activity records by user or action and inspect request details in a dense operational table.</p>
+        <div class="mt-1.5 flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 rounded-sm bg-status-neutral-bg px-2 py-0.5 text-xs font-medium text-status-neutral">
+                <span class="h-1.5 w-1.5 rounded-full bg-status-neutral"></span>
+                <span x-text="`${logs.length} records`"></span>
+            </span>
+        </div>
+    </div>
+
+    <div class="mb-5 rounded-md border border-border bg-card p-4">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-medium text-text-secondary">Filter by username</label>
+                <input type="text"
+                       x-model="username"
+                       @input.debounce="currentPage = 1; fetchLogs()"
+                       placeholder="Enter username"
+                       class="h-8 rounded border border-border bg-card px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+            </div>
+            <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-medium text-text-secondary">Search in actions</label>
+                <input type="text"
+                       x-model="query"
+                       @input.debounce="currentPage = 1; fetchLogs()"
+                       placeholder="Search by action or content"
+                       class="h-8 rounded border border-border bg-card px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+            </div>
+        </div>
+    </div>
+
+    <div x-show="loading" class="flex flex-col items-center justify-center py-12">
+        <div class="h-8 w-8 animate-spin rounded-full border-2 border-border-strong border-t-transparent"></div>
+        <p class="mt-3 text-sm text-text-secondary">Loading logs...</p>
+    </div>
+
+    <div x-show="noResults && !loading" class="rounded-md border border-border bg-card p-8 text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-8 w-8 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="mt-2 text-sm text-text-secondary">No logs found matching your criteria.</p>
+        <button @click="username = ''; query = ''; fetchLogs()" class="mt-4 inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+            Clear Filters
+        </button>
+    </div>
+
+    <div x-show="logs.length > 0 && !loading" class="overflow-hidden rounded-md border border-border bg-card">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Time</th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">User</th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">IP Address</th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Action</th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Details</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-border-subtle">
+                    <template x-for="(log, index) in logs" :key="index">
+                        <tr class="transition-colors duration-100 hover:bg-surface">
+                            <td class="px-4 py-2.5 whitespace-nowrap text-xs text-text-secondary" x-text="new Date(log.time).toLocaleString()"></td>
+                            <td class="px-4 py-2.5 whitespace-nowrap">
+                                <div class="flex items-center gap-2">
+                                    <div class="inline-flex h-6 w-6 items-center justify-center rounded-sm bg-status-neutral-bg text-xs font-medium uppercase text-status-neutral" x-text="log.user ? log.user.charAt(0) : '-' "></div>
+                                    <div>
+                                        <div class="text-xs font-medium text-text-primary" x-text="log.user"></div>
+                                        <span class="inline-flex items-center gap-1 rounded-sm bg-status-neutral-bg px-2 py-0.5 text-xs font-medium text-status-neutral" x-text="log.auth_type"></span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-2.5 whitespace-nowrap font-mono text-[13px] text-text-secondary" x-text="log.ip || '-'"></td>
+                            <td class="px-4 py-2.5 whitespace-nowrap">
+                                <span class="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium"
+                                      :class="{
+                                          'bg-status-success-bg text-status-success': log.status_code >= 200 && log.status_code < 300,
+                                          'bg-status-warning-bg text-status-warning': log.status_code >= 300 && log.status_code < 400,
+                                          'bg-status-danger-bg text-status-danger': log.status_code >= 400
+                                      }"
+                                      x-text="log.action"></span>
+                            </td>
+                            <td class="px-4 py-2.5 text-xs text-text-secondary">
+                                <div class="max-w-lg rounded border border-border bg-surface px-3 py-1.5 font-mono text-[13px] text-text-primary truncate" x-text="JSON.stringify(log.parameters)"></div>
+                                <div x-show="log.error" class="mt-1 rounded border border-status-danger/30 bg-status-danger-bg px-2 py-1 text-xs text-status-danger" x-text="log.error"></div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div x-show="totalPages > 1" class="mt-4 flex items-center justify-between rounded-md border border-border bg-card p-3">
+        <button @click="currentPage--; fetchLogs()"
+                :disabled="currentPage <= 1"
+                class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-[14px] w-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span>Previous</span>
+        </button>
+
+        <div class="flex items-center gap-2 text-xs text-text-secondary">
+            <span>Page</span>
+            <span class="rounded-sm bg-brand-subtle px-2 py-1 font-medium text-brand-primary" x-text="currentPage"></span>
+            <span>of</span>
+            <span class="rounded-sm bg-surface px-2 py-1 font-medium text-text-primary" x-text="totalPages"></span>
+        </div>
+
+        <button @click="currentPage++; fetchLogs()"
+                :disabled="currentPage >= totalPages"
+                class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
+            <span>Next</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-[14px] w-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+        </button>
+    </div>
+</div>
+{{end}}

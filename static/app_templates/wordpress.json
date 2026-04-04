@@ -1,0 +1,37 @@
+{
+  "services": [
+    {
+      "type": "app",
+      "data": {
+        "name": "wordpress",
+        "image": "wordpress:6.3",
+        "env": [
+          "WORDPRESS_DB_HOST=wordpress-mariadb",
+          "WORDPRESS_DB_USER=wordpress",
+          "WORDPRESS_DB_PASSWORD=wordpressPassword",
+          "WORDPRESS_DB_NAME=wordpress"
+        ],
+        "services": [
+          {
+            "name": "mariadb",
+            "version": "10.6"
+          }
+        ],
+        "domains": [
+          "wordpress.example.com"
+        ],
+        "ssl": true,
+        "ports": [
+          "http:80:80"
+        ],
+        "mounts": [
+          {
+            "type": "volume",
+            "name": "wordpress",
+            "mountPath": "/var/www/html"
+          }
+        ]
+      }
+    }
+  ]
+}

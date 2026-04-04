@@ -1,0 +1,463 @@
+{{define "content"}}
+<div x-data="createService()" class="flex w-full max-w-4xl flex-col gap-6">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <h1 class="text-lg font-semibold text-text-primary">Create Service</h1>
+            <p class="mt-0.5 text-xs text-text-secondary" x-show="selectedServiceType">Configure a new <span x-text="selectedServiceType"></span> service and optional app link.</p>
+            <p class="mt-0.5 text-xs text-text-secondary" x-show="!selectedServiceType">Choose an installed service plugin to begin provisioning.</p>
+        </div>
+    </div>
+
+    <div x-show="errors.length > 0" class="space-y-2">
+        <template x-for="error in errors" :key="error">
+            <div class="rounded-md border border-status-danger/30 bg-status-danger-bg px-4 py-3 text-sm text-status-danger" role="alert" x-text="error"></div>
+        </template>
+    </div>
+
+    <div x-cloak x-show="success === true" class="rounded-md border border-status-success/30 bg-status-success-bg px-4 py-3 text-sm text-status-success">
+        Service created successfully. Redirecting to the detail page.
+    </div>
+
+    <div class="border-b border-border">
+        <div class="flex">
+            <button type="button" @click="step = 1" class="px-4 py-2.5 text-sm font-medium -mb-px"
+                    :class="step === 1 ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-secondary border-b-2 border-transparent hover:text-text-primary transition-colors duration-100'">
+                Service Type
+            </button>
+            <button type="button" @click="selectedServiceType ? step = 2 : null" class="px-4 py-2.5 text-sm font-medium -mb-px"
+                    :class="step === 2 ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-secondary border-b-2 border-transparent hover:text-text-primary transition-colors duration-100'">
+                Configuration
+            </button>
+        </div>
+    </div>
+
+    <section x-show="step === 1" class="rounded-md border border-border bg-card p-4">
+        <div class="flex items-center justify-between gap-4">
+            <div>
+                <h2 class="text-sm font-semibold text-text-primary">Available Service Types</h2>
+                <p class="mt-0.5 text-xs text-text-secondary">Only installed Dokku service plugins appear here.</p>
+            </div>
+        </div>
+
+        <div x-show="isLoading" class="flex items-center justify-center py-12">
+            <div class="h-8 w-8 animate-spin rounded-full border-2 border-border-strong border-t-transparent"></div>
+        </div>
+
+        <div x-show="!isLoading && availableServiceTypes.length > 0" class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <template x-for="type in availableServiceTypes" :key="type.id">
+                <button type="button" @click="selectServiceType(type.id)"
+                        class="rounded-md border p-4 text-left transition-colors duration-150"
+                        :class="type.id === selectedServiceType ? 'border-brand-primary bg-brand-subtle text-brand-primary' : 'border-border bg-card text-text-primary hover:bg-surface'">
+                    <div class="flex items-start gap-3">
+                        <img :src="type.logo" :alt="type.name + ' logo'" class="h-8 w-8 flex-shrink-0 object-contain"
+                             onerror="this.onerror=null; this.src='/static/images/logo/generic-database.svg';">
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-semibold" x-text="type.name"></p>
+                            <p class="mt-1 text-xs" :class="type.id === selectedServiceType ? 'text-brand-primary/80' : 'text-text-secondary'" x-text="type.description"></p>
+                        </div>
+                    </div>
+                </button>
+            </template>
+        </div>
+
+        <div x-show="!isLoading && availableServiceTypes.length === 0" class="mt-4 rounded-md border border-border border-dashed bg-surface px-6 py-10 text-center">
+            <h3 class="text-sm font-semibold text-text-primary">No service plugins installed</h3>
+            <p class="mt-1 text-xs text-text-secondary">Install a Dokku service plugin before creating a service instance.</p>
+            <a href="https://dokku.com/docs/getting-started/installation/#installing-the-docker-package" target="_blank"
+               class="mt-4 inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                Installation Guide
+            </a>
+        </div>
+
+        <div class="mt-5 flex justify-end">
+            <button @click="goToNext()" :disabled="!selectedServiceType"
+                    class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
+                Continue
+            </button>
+        </div>
+    </section>
+
+    <section x-show="step === 2" class="rounded-md border border-border bg-card p-4">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <h2 class="text-sm font-semibold text-text-primary">Service Configuration</h2>
+                <p class="mt-0.5 text-xs text-text-secondary">Set the service name, image options, and optional application link.</p>
+            </div>
+            <span class="inline-flex items-center rounded-sm bg-brand-subtle px-2 py-0.5 text-xs font-medium text-brand-primary" x-text="selectedServiceType || 'Unselected'"></span>
+        </div>
+
+        <div class="mt-5 grid grid-cols-1 gap-5">
+            <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-medium text-text-secondary">Service Name</label>
+                <input type="text" x-model="form.name" @input.debounce.300ms="validateAndCheckServiceName()"
+                       class="h-8 rounded border border-border bg-card px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                       :class="(!isValidName || serviceExists) ? 'border-status-danger text-status-danger focus:border-status-danger focus:ring-status-danger' : ''"
+                       placeholder="my-service">
+                <div class="flex items-center justify-between gap-3 text-xs">
+                    <p class="text-text-tertiary">Use lowercase letters, numbers, and hyphens only.</p>
+                    <template x-if="!isValidName && form.name"><p class="text-status-danger">Invalid format</p></template>
+                    <template x-if="serviceExists"><p class="text-status-danger">Already exists</p></template>
+                    <template x-if="isValidName && !serviceExists && form.name"><p class="text-status-success">Available</p></template>
+                </div>
+            </div>
+
+            <div x-show="selectedServiceType === 'postgres'" class="border-t border-border-subtle pt-5">
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">Database Image</h3>
+                <div class="mt-3 grid grid-cols-1 gap-2">
+                    <label for="standard-postgres" class="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-surface">
+                        <input type="radio" id="standard-postgres" name="imageType" value="standard" x-model="form.imageType" class="mt-0.5">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">Standard PostgreSQL</span>
+                            <span class="block text-xs text-text-secondary">Default PostgreSQL image.</span>
+                        </span>
+                    </label>
+                    <label for="postgis" class="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-surface">
+                        <input type="radio" id="postgis" name="imageType" value="postgis" x-model="form.imageType" class="mt-0.5">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">PostGIS</span>
+                            <span class="block text-xs text-text-secondary">Adds spatial and geographic extensions.</span>
+                        </span>
+                    </label>
+                    <label for="pgvector" class="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-surface">
+                        <input type="radio" id="pgvector" name="imageType" value="pgvector" x-model="form.imageType" class="mt-0.5">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">pgvector</span>
+                            <span class="block text-xs text-text-secondary">Enables vector similarity search workloads.</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="border-t border-border-subtle pt-5">
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">Custom Docker Image</h3>
+                <p class="mt-1 text-xs text-text-secondary">Set both fields only when overriding the plugin defaults.</p>
+                <div class="mt-3 grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Image</label>
+                        <input type="text" x-model="form.image" @input.debounce.300ms="validateImageFields()"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                               :class="imageError ? 'border-status-danger text-status-danger focus:border-status-danger focus:ring-status-danger' : ''"
+                               placeholder="bitnami/mariadb">
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Image Version</label>
+                        <input type="text" x-model="form.imageVersion" @input.debounce.300ms="validateImageFields()"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                               :class="imageError ? 'border-status-danger text-status-danger focus:border-status-danger focus:ring-status-danger' : ''"
+                               placeholder="latest">
+                        <p x-show="imageError" class="text-xs text-status-danger" x-text="imageErrorMessage"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-border-subtle pt-5">
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-medium text-text-secondary">Link to Application</label>
+                    <div x-data="{ open: false }" class="relative">
+                        <button @click="open = !open" type="button"
+                                class="inline-flex h-8 w-full items-center justify-between rounded border border-border bg-card px-3 text-sm text-text-primary transition-colors duration-150 hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                            <span x-text="form.app || 'Select an application'"></span>
+                            <svg class="h-3.5 w-3.5 text-text-tertiary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L10 5.414 7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3zm-3.707 9.293a1 1 0 011.414 0L10 14.586l2.293-2.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <div x-show="open" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="transform opacity-0 scale-95" x-transition:enter-end="transform opacity-100 scale-100" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="transform opacity-100 scale-100" x-transition:leave-end="transform opacity-0 scale-95" @click.away="open = false"
+                             class="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-border bg-card shadow-dropdown">
+                            <div class="max-h-64 overflow-y-auto py-1">
+                                <button @click="form.app = ''; open = false" :class="{'bg-brand-subtle text-brand-primary': !form.app}" class="block w-full px-3 py-2 text-left text-sm text-text-primary transition-colors duration-100 hover:bg-surface">None</button>
+                                <template x-for="app in apps" :key="app">
+                                    <button @click="form.app = app; open = false" :class="{'bg-brand-subtle text-brand-primary': form.app === app}" class="block w-full px-3 py-2 text-left text-sm text-text-primary transition-colors duration-100 hover:bg-surface">
+                                        <span x-text="app"></span>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-text-tertiary">If selected, the service is linked automatically after creation.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-6 flex items-center justify-between gap-3 border-t border-border-subtle pt-4">
+            <button @click="step = 1" type="button" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+                Back
+            </button>
+            <button @click="createService()" type="button" :disabled="!isValidName || !form.name || (serviceExists && !isProcessing) || imageError"
+                    class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
+                <svg x-show="!isProcessing" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                <svg x-show="isProcessing" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span x-text="isProcessing ? 'Creating…' : 'Create Service'"></span>
+            </button>
+        </div>
+    </section>
+</div>
+
+<script>
+const init_comp = () => ({
+        step: 1,
+        isProcessing: false,
+        isLoading: true,
+        errors: [],
+        success: false,
+        serviceExists: false,
+        isValidName: true,
+        imageError: false,
+        imageErrorMessage: '',
+        apps: [],
+        selectedServiceType: '',
+        availableServiceTypes: [],
+        form: {
+            name: '',
+            app: '',
+            imageType: 'standard',
+            image: '',
+            imageVersion: ''
+        },
+        async init() {
+            // Check if we have type specified in URL
+            const type = new URLSearchParams(window.location.search).get('type');
+
+            // Fetch installed service types
+            try {
+                const response = await fetch('/api/services/installed');
+                const data = await response.json();
+
+                if (data.services) {
+                    // Map to our format with proper names and descriptions
+                    this.availableServiceTypes = data.services.map(service => {
+                        const serviceInfo = {
+                            id: service,
+                            logo: service === 'mongo' ? '/static/images/logo/mongodb.svg' : `/static/images/logo/${service}.svg`,
+                            description: this.getServiceDescription(service)
+                        };
+
+                        // Set proper display name
+                        switch(service) {
+                            case 'postgres':
+                                serviceInfo.name = 'PostgreSQL';
+                                break;
+                            case 'mariadb':
+                                serviceInfo.name = 'MariaDB';
+                                break;
+                            case 'mysql':
+                                serviceInfo.name = 'MySQL';
+                                break;
+                            case 'mongo':
+                                serviceInfo.name = 'MongoDB';
+                                break;
+                            case 'redis':
+                                serviceInfo.name = 'Redis';
+                                break;
+                            default:
+                                // Capitalize first letter for other services
+                                serviceInfo.name = service.charAt(0).toUpperCase() + service.slice(1);
+                        }
+
+                        return serviceInfo;
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching service types:', error);
+                this.errors.push('Failed to load available service types');
+            } finally {
+                this.isLoading = false;
+            }
+
+            if (type) {
+                const validType = this.availableServiceTypes.find(t => t.id === type);
+                if (validType) {
+                    this.selectedServiceType = type;
+                    this.step = 2;
+                }
+            }
+
+            // Fetch available apps
+            try {
+                const response = await fetch('/api/apps/list');
+                const data = await response.json();
+                this.apps = data.apps || [];
+            } catch (error) {
+                console.error('Error fetching apps:', error);
+            }
+
+            // Validate image fields in case they are pre-filled
+            this.validateImageFields();
+        },
+        getServiceDescription(serviceType) {
+            const descriptions = {
+                'postgres': 'Advanced open source SQL database',
+                'mariadb': 'Enhanced, drop-in replacement for MySQL',
+                'mysql': 'Popular open source relational database',
+                'mongo': 'NoSQL document-oriented database',
+                'redis': 'In-memory data structure store',
+                'elasticsearch': 'Search and analytics engine',
+                'rabbitmq': 'Message broker for applications',
+                'memcached': 'Distributed memory caching system',
+                'couchdb': 'Document-oriented NoSQL database',
+                'rethinkdb': 'Real-time database for the web'
+            };
+
+            return descriptions[serviceType] || `${serviceType.charAt(0).toUpperCase() + serviceType.slice(1)} database service`;
+        },
+        selectServiceType(typeId) {
+            this.selectedServiceType = typeId;
+        },
+        goToNext() {
+            if (this.selectedServiceType) {
+                this.step = 2;
+            }
+        },
+        getServiceIconClass(typeId) {
+            const colorClasses = {
+                'postgres': 'text-blue-500',
+                'mariadb': 'text-blue-600',
+                'mongo': 'text-green-500',
+                'redis': 'text-red-500'
+            };
+
+            return colorClasses[typeId] || 'text-gray-500';
+        },
+        validateAndCheckServiceName() {
+            // Skip validation if processing
+            if (this.isProcessing) {
+                return;
+            }
+            
+            // Validate name format first
+            const nameRegex = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
+            this.isValidName = this.form.name === '' || nameRegex.test(this.form.name);
+
+            // Only check existence if name is valid
+            if (this.isValidName && this.form.name) {
+                this.checkServiceName();
+            } else {
+                this.serviceExists = false;
+            }
+        },
+        async checkServiceName() {
+            // Skip check if processing or no name/type
+            if (this.isProcessing || !this.form.name || !this.selectedServiceType) {
+                this.serviceExists = false;
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/services/${this.selectedServiceType}?minimal=true`);
+                const data = await response.json();
+                if (!data.services || data.services.length === 0) {
+                    this.serviceExists = false;
+                } else {
+                    this.serviceExists = data.services.some(svc => svc.name === this.form.name);
+                }
+            } catch (error) {
+                console.error('Error checking service name:', error);
+                this.serviceExists = false;
+            }
+        },
+        validateImageFields() {
+            const hasImage = !!this.form.image.trim();
+            const hasVersion = !!this.form.imageVersion.trim();
+
+            // Both must be set or both must be empty
+            if (hasImage && !hasVersion) {
+                this.imageError = true;
+                this.imageErrorMessage = 'Image version is required when specifying a custom image';
+                return false;
+            } else if (!hasImage && hasVersion) {
+                this.imageError = true;
+                this.imageErrorMessage = 'Image name is required when specifying a version';
+                return false;
+            }
+
+            this.imageError = false;
+            this.imageErrorMessage = '';
+            return true;
+        },
+        async createService() {
+            if (!this.isValidName || !this.form.name || this.serviceExists || !this.selectedServiceType) {
+                return;
+            }
+
+            // Validate image fields before proceeding
+            if (!this.validateImageFields()) {
+                return;
+            }
+
+            this.isProcessing = true;
+            this.errors = [];
+            this.success = false;
+            
+            // Stop name validation during creation process
+            this.serviceExists = false;
+
+            try {
+                // First, create the service
+                const createResponse = await fetch('/api/services/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        type: this.selectedServiceType,
+                        name: this.form.name,
+                        imageType: this.form.imageType,
+                        image: this.form.image.trim(),
+                        imageVersion: this.form.imageVersion.trim()
+                    }),
+                });
+
+                if (!createResponse.ok) {
+                    const errorData = await createResponse.json();
+                    throw new Error(errorData.error || 'Failed to create service');
+                }
+
+                // If we specified an app to link, do that now
+                if (this.form.app) {
+                    const linkResponse = await fetch('/api/services/link', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: this.selectedServiceType,
+                            service: this.form.name,
+                            app: this.form.app
+                        }),
+                    });
+
+                    if (!linkResponse.ok) {
+                        const errorData = await linkResponse.json();
+                        throw new Error(errorData.error || 'Service created but failed to link to application');
+                    }
+                }
+
+                this.success = true;
+
+                // Redirect to service detail page after successful creation
+                setTimeout(() => {
+                    window.location.href = `/services/${this.selectedServiceType}/${this.form.name}`;
+                }, 1000);
+            } catch (error) {
+                this.errors.push(error.message || 'An unknown error occurred');
+            } finally {
+                this.isProcessing = false;
+            }
+        }
+    });
+    if (window.Alpine) {
+        window.Alpine.data('createService', init_comp);
+    } else {
+        document.addEventListener('alpine:init', () => {
+            window.Alpine.data('createService', init_comp);
+        });
+    }
+</script>
+{{end}}

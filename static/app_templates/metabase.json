@@ -1,0 +1,33 @@
+{
+  "services": [
+    {
+      "type": "app",
+      "data": {
+        "name": "metabase",
+        "image": "metabase/metabase:v0.50.30.1",
+        "env": [
+          "MB_SITE_NAME=Örnek Metabase",
+          "MB_APPLICATION_NAME=Örnek Metabase",
+          "MB_DB_FILE=/metabase-data/metabase.db"
+        ],
+        "services": [
+        ],
+        "domains": [
+          "test.pruvon.net",
+          "test1.pruvon.net"
+        ],
+        "ssl": true,
+        "ports": [
+          "http:80:3000"
+        ],
+        "mounts": [
+          {
+            "type": "volume",
+            "name": "data",
+            "mountPath": "/metabase-data"
+          }
+        ]
+      }
+    }
+  ]
+}

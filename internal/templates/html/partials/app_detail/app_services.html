@@ -1,0 +1,101 @@
+{{define "app_services"}}
+<div class="space-y-4">
+    <div class="flex items-center justify-between gap-3">
+        <h2 class="text-sm font-semibold text-text-primary">Linked Services</h2>
+        <button @click="loadServices()"
+                class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary"
+                :class="{'animate-spin': loadingServices}"
+                :disabled="loadingServices">
+            <span class="sr-only">Refresh</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="rounded-md border border-border bg-card p-4">
+        <div x-data="{
+            getServiceTypeForUrl(type) {
+                // Convert service type to URL format
+                switch (type) {
+                    case 'PostgreSQL': return 'postgres';
+                    case 'MySQL': return 'mariadb';
+                    case 'MongoDB': return 'mongo';
+                    case 'Redis': return 'redis';
+                    default: return type.toLowerCase();
+                }
+            },
+            extractServiceName(url, type) {
+                // Extract service name from URL hostname
+                if (!url) return '';
+
+                // Convert type to prefix format
+                let prefix = '';
+                switch (type) {
+                    case 'PostgreSQL': prefix = 'dokku-postgres-'; break;
+                    case 'MySQL': prefix = 'dokku-mariadb-'; break;
+                    case 'MongoDB': prefix = 'dokku-mongo-'; break;
+                    case 'Redis': prefix = 'dokku-redis-'; break;
+                    default: return '';
+                }
+
+                // Extract hostname from URL
+                const hostnameMatch = url.match(/@([^:]+):/);
+                if (hostnameMatch && hostnameMatch[1]) {
+                    const hostname = hostnameMatch[1];
+                    if (hostname.startsWith(prefix)) {
+                        // Return the part after the prefix
+                        return hostname.substring(prefix.length);
+                    }
+                }
+
+                return '';
+            }
+        }">
+            <!-- Loading state -->
+            <div x-show="loadingServices" class="text-center py-6">
+                <svg class="mx-auto h-6 w-6 animate-spin text-text-secondary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-2 text-xs text-text-secondary">Loading service information...</p>
+            </div>
+
+            <!-- No services state -->
+            <div x-show="!loadingServices && linkedServices.length === 0" class="rounded-md border border-border border-dashed bg-surface px-6 py-10 text-center">
+                <svg class="mx-auto h-10 w-10 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                          d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+                </svg>
+                <h3 class="mt-2 text-sm font-semibold text-text-primary">No linked services</h3>
+                <p class="mt-1 text-xs text-text-secondary">This application does not have any linked services.</p>
+            </div>
+
+            <!-- Services list -->
+            <div x-show="!loadingServices && linkedServices.length > 0" class="mt-3">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <template x-for="(service, index) in linkedServices" :key="index">
+                        <a :href="`/services/${getServiceTypeForUrl(service.type)}/${extractServiceName(service.url, service.type) || service.name}`" class="block">
+                            <div class="rounded-md border border-border bg-card p-3 transition-colors duration-150 hover:bg-surface">
+                                <div class="flex items-center">
+                                    <div class="rounded-sm bg-surface px-2 py-1 text-xs font-medium text-text-secondary">
+                                        <span x-text="service.type"></span>
+                                    </div>
+                                    <div class="ml-3 min-w-0">
+                                        <h3 class="truncate text-sm font-semibold text-text-primary" x-text="extractServiceName(service.url, service.type) || service.name.replace(/_/g, '-')"></h3>
+                                        <div class="mt-1 flex items-center gap-2">
+                                            <div class="flex min-w-0 flex-1 items-center gap-2 rounded border border-border bg-surface px-3 py-1.5 font-mono text-[13px] text-text-primary">
+                                                <span class="truncate" x-text="service.url || service.name"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

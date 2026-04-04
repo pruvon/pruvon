@@ -1,0 +1,222 @@
+{{define "content"}}
+<div x-data="{
+    installedPlugins: [],
+    availablePlugins: [],
+    selectedPlugin: null,
+    showInstallModal: false,
+    isInstalling: false,
+    flashMessage: null,
+    showFlash: false,
+    async fetchInstalledPlugins() {
+        const response = await fetch('/api/plugins/list');
+        this.installedPlugins = await response.json();
+    },
+    async fetchAvailablePlugins() {
+        const response = await fetch('/api/plugins/available');
+        this.availablePlugins = await response.json();
+    },
+    async installPlugin() {
+        this.isInstalling = true;
+        try {
+            const response = await fetch('/api/plugins/install', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    url: this.selectedPlugin.url
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                const pluginName = this.selectedPlugin.name;
+                this.installedPlugins.push({
+                    name: this.selectedPlugin.name,
+                    version: 'latest'
+                });
+                this.availablePlugins = this.availablePlugins.filter(p => p.name !== this.selectedPlugin.name);
+                this.showInstallModal = false;
+                this.selectedPlugin = null;
+                this.showFlashMessage(`Plugin ${pluginName} installed successfully`);
+            } else {
+                this.showFlashMessage('Installation failed: ' + result.output, 'error');
+            }
+        } catch (error) {
+            this.showFlashMessage('Error installing plugin: ' + error, 'error');
+        } finally {
+            this.isInstalling = false;
+        }
+    },
+    showFlashMessage(message, type = 'success') {
+        this.flashMessage = { text: message, type: type };
+        this.showFlash = true;
+        setTimeout(() => this.showFlash = false, 10000);
+    }
+}" x-init="fetchInstalledPlugins(); fetchAvailablePlugins()" class="max-w-6xl">
+    <div x-show="showFlash"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 -translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 -translate-y-2"
+         class="fixed right-4 top-4 z-50 w-full max-w-sm"
+         @click="showFlash = false">
+        <div :class="{
+            'border-status-success/40 bg-status-success-bg': flashMessage?.type === 'success',
+            'border-status-danger/40 bg-status-danger-bg': flashMessage?.type === 'error'
+        }" class="rounded-md border bg-card shadow-dropdown">
+            <div class="flex items-start gap-3 p-3">
+                <span :class="flashMessage?.type === 'success' ? 'bg-status-success' : 'bg-status-danger'" class="mt-1.5 h-1.5 w-1.5 rounded-full"></span>
+                <p x-text="flashMessage?.text" class="flex-1 text-sm text-text-primary"></p>
+                <button class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary" @click="showFlash = false">
+                    <svg class="h-[14px] w-[14px]" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414 1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-6">
+        <h1 class="text-lg font-semibold text-text-primary">Plugins</h1>
+        <p class="mt-0.5 text-xs text-text-secondary">Review installed extensions and add supported Dokku plugins from their source URLs.</p>
+        <div class="mt-1.5 flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-1 rounded-sm bg-status-success-bg px-2 py-0.5 text-xs font-medium text-status-success">
+                <span class="h-1.5 w-1.5 rounded-full bg-status-success"></span>
+                <span x-text="`${installedPlugins.length} installed`"></span>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-sm bg-status-neutral-bg px-2 py-0.5 text-xs font-medium text-status-neutral">
+                <span class="h-1.5 w-1.5 rounded-full bg-status-neutral"></span>
+                <span x-text="`${availablePlugins.length} available`"></span>
+            </span>
+        </div>
+    </div>
+
+    <section class="py-4">
+        <h2 class="mb-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">Installed Plugins</h2>
+        <div class="overflow-hidden rounded-md border border-border bg-card">
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Plugin Name</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary font-mono">Version</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border-subtle">
+                        <template x-if="installedPlugins.length === 0">
+                            <tr>
+                                <td colspan="2" class="px-4 py-6 text-center text-sm text-text-secondary">No plugins installed.</td>
+                            </tr>
+                        </template>
+                        <template x-for="plugin in installedPlugins" :key="plugin.name">
+                            <tr class="transition-colors duration-100 hover:bg-surface">
+                                <td class="px-4 py-2.5 whitespace-nowrap">
+                                    <a x-text="plugin.name"
+                                       :href="plugin.name === 'letsencrypt' ? '/plugins/letsencrypt' : '#'"
+                                       :class="plugin.name === 'letsencrypt' ? 'text-link hover:text-brand-hover' : 'text-text-primary'"
+                                       class="text-sm transition-colors duration-150">
+                                    </a>
+                                </td>
+                                <td class="px-4 py-2.5 whitespace-nowrap font-mono text-[13px] text-text-secondary" x-text="plugin.version"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <div class="border-t border-border-subtle"></div>
+
+    <section class="py-4">
+        <h2 class="mb-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">Available Plugins</h2>
+        <div class="overflow-hidden rounded-md border border-border bg-card">
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Name</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Source</th>
+                            <th class="w-28 px-4 py-2.5"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border-subtle">
+                        <template x-if="availablePlugins.length === 0">
+                            <tr>
+                                <td colspan="3" class="px-4 py-6 text-center text-sm text-text-secondary">No available plugins found.</td>
+                            </tr>
+                        </template>
+                        <template x-for="plugin in availablePlugins" :key="plugin.name">
+                            <tr class="group transition-colors duration-100 hover:bg-surface">
+                                <td class="px-4 py-2.5 whitespace-nowrap text-sm text-text-primary" x-text="plugin.name"></td>
+                                <td class="px-4 py-2.5">
+                                    <div class="flex items-center gap-2 rounded border border-border bg-surface px-3 py-1.5 font-mono text-[13px] text-text-primary">
+                                        <a :href="plugin.url" target="_blank" class="min-w-0 flex-1 truncate text-link transition-colors duration-150 hover:text-brand-hover" x-text="plugin.url"></a>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-2.5 text-right">
+                                    <template x-if="!plugin.isInstalled">
+                                        <button @click="selectedPlugin = plugin; showInstallModal = true"
+                                                class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                                            Install
+                                        </button>
+                                    </template>
+                                    <template x-if="plugin.isInstalled">
+                                        <span class="inline-flex items-center gap-1 rounded-sm bg-status-success-bg px-2 py-0.5 text-xs font-medium text-status-success">
+                                            <span class="h-1.5 w-1.5 rounded-full bg-status-success"></span>
+                                            Installed
+                                        </span>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <div x-show="showInstallModal"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+         x-cloak
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm" @click="showInstallModal = false"></div>
+        <div class="relative w-full max-w-md rounded-lg border border-border bg-card shadow-modal"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 transform scale-95"
+             x-transition:enter-end="opacity-100 transform scale-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 transform scale-100"
+             x-transition:leave-end="opacity-0 transform scale-95">
+            <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                <h3 class="text-sm font-semibold text-text-primary">Confirm Installation</h3>
+                <button @click="showInstallModal = false" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                    <svg class="h-[14px] w-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="px-5 py-4 text-sm text-text-primary">
+                <p>Install plugin <span class="font-medium" x-text="selectedPlugin?.name"></span>?</p>
+            </div>
+            <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                <button @click="showInstallModal = false" :disabled="isInstalling" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">Cancel</button>
+                <button @click="installPlugin()" :disabled="isInstalling" class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                    <svg x-show="isInstalling" class="h-[13px] w-[13px] animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span x-text="isInstalling ? 'Installing...' : 'Install'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

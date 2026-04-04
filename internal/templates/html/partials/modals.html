@@ -1,0 +1,167 @@
+<!-- Confirmation Modal Template -->
+    <div
+        x-show="showFlash"
+        x-transition:enter="transition ease-out duration-150"
+        x-transition:enter-start="opacity-0 -translate-y-2"
+        x-transition:enter-end="opacity-100 translate-y-0"
+        x-transition:leave="transition ease-in duration-100"
+        x-transition:leave-start="opacity-100 translate-y-0"
+        x-transition:leave-end="opacity-0 -translate-y-2"
+        class="fixed right-4 top-4 z-50 w-full max-w-sm"
+        x-cloak
+    >
+        <div
+            :class="{
+                'border-status-success/40 bg-status-success-bg': flashMessage && flashMessage.type === 'success',
+                'border-status-danger/40 bg-status-danger-bg': flashMessage && flashMessage.type === 'error',
+                'border-brand-primary/25 bg-brand-subtle': flashMessage && flashMessage.type === 'info'
+            }"
+            class="rounded-md border bg-card shadow-dropdown"
+        >
+            <div class="flex items-start gap-3 p-3">
+                <span
+                    :class="{
+                        'bg-status-success': flashMessage && flashMessage.type === 'success',
+                        'bg-status-danger': flashMessage && flashMessage.type === 'error',
+                        'bg-brand-primary': flashMessage && flashMessage.type === 'info'
+                    }"
+                    class="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                ></span>
+                <p class="flex-1 text-sm text-text-primary" x-text="flashMessage ? flashMessage.text : ''"></p>
+                <button type="button" @click="showFlash = false" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[14px] w-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showContainerLogsModal" class="fixed inset-0 z-50" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm" @click="closeContainerLogs()"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-2xl rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <div>
+                        <h2 class="text-sm font-semibold text-text-primary">Container Logs</h2>
+                        <p class="mt-0.5 font-mono text-xs text-text-secondary" x-text="containerLogsName"></p>
+                    </div>
+                    <button type="button" @click="closeContainerLogs()" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-[14px] w-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4">
+                    <pre class="h-96 overflow-y-auto rounded-md bg-[#1A2B3C] p-4 font-mono text-xs text-[#a8d5c2] whitespace-pre-wrap container-logs" x-text="containerLogs"></pre>
+                </div>
+                <div class="flex items-center justify-end border-t border-border-subtle px-5 py-4">
+                    <button @click="closeContainerLogs()" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showContainerTerminalModal" class="fixed inset-0 z-50" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm" @click="disconnectContainerTerminal()"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-2xl rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <div>
+                        <h2 class="text-sm font-semibold text-text-primary">Container Terminal</h2>
+                        <p class="mt-0.5 font-mono text-xs text-text-secondary" x-text="activeContainerName"></p>
+                    </div>
+                    <button type="button" @click="disconnectContainerTerminal()" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-[14px] w-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4">
+                    <div id="containerTerminal" class="h-96 overflow-hidden rounded-md border border-border-subtle bg-[#1A2B3C]"></div>
+                </div>
+                <div class="flex items-center justify-end border-t border-border-subtle px-5 py-4">
+                    <button @click="disconnectContainerTerminal()" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showRemoveContainerModal" class="fixed inset-0 z-50" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm" @click="showRemoveContainerModal = false"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h2 class="text-sm font-semibold text-text-primary">Remove Container</h2>
+                    <button type="button" @click="showRemoveContainerModal = false" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-[14px] w-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4 text-sm text-text-primary">
+                    <p>Remove container <span x-text="activeContainerName" class="font-mono text-[13px]"></span>?</p>
+                    <div class="mt-4 rounded-md border border-status-warning/30 bg-status-warning-bg p-3 text-xs text-text-secondary">
+                        This action cannot be undone. Data will be lost unless the container uses persistent storage volumes.
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showRemoveContainerModal = false" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">Cancel</button>
+                    <button @click="removeContainer(activeContainerId, false)" class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">Remove</button>
+                    <button @click="removeContainer(activeContainerId, true)" class="inline-flex h-8 items-center gap-1.5 rounded px-3 text-sm font-medium text-status-danger transition-colors duration-150 hover:bg-status-danger-bg">Force Remove</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showStopContainerModal" class="fixed inset-0 z-50" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm" @click="showStopContainerModal = false"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h2 class="text-sm font-semibold text-text-primary">Stop Container</h2>
+                    <button type="button" @click="showStopContainerModal = false" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-[14px] w-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4 text-sm text-text-primary">
+                    <p>Stop container <span x-text="activeContainerName" class="font-mono text-[13px]"></span>?</p>
+                    <div class="mt-4 rounded-md border border-status-warning/30 bg-status-warning-bg p-3 text-xs text-text-secondary">
+                        Stopping a container terminates processes inside it but preserves the container data.
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showStopContainerModal = false" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">Cancel</button>
+                    <button @click="stopContainer(activeContainerId); showStopContainerModal = false" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">Stop Container</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showRestartContainerModal" class="fixed inset-0 z-50" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm" @click="showRestartContainerModal = false"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h2 class="text-sm font-semibold text-text-primary">Restart Container</h2>
+                    <button type="button" @click="showRestartContainerModal = false" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-[14px] w-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4 text-sm text-text-primary">
+                    <p>Restart container <span x-text="activeContainerName" class="font-mono text-[13px]"></span>?</p>
+                    <div class="mt-4 rounded-md border border-brand-primary/20 bg-brand-subtle p-3 text-xs text-text-secondary">
+                        Restarting stops and starts the container, which may cause a brief interruption.
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showRestartContainerModal = false" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">Cancel</button>
+                    <button @click="restartContainer(activeContainerId); showRestartContainerModal = false" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">Restart Container</button>
+                </div>
+            </div>
+        </div>
+    </div>

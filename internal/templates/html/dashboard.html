@@ -1,0 +1,379 @@
+{{define "content"}}
+
+<div x-data="{
+    resourceMetrics: null,
+    countMetrics: null,
+    serverInfo: null,
+    error: null,
+    debugInfo: '',
+    initialized: false,
+    flashMessage: null,
+    showFlash: false,
+    intervalId: null,
+    loading: {
+        resources: false,
+        counts: false,
+        server: false
+    },
+    initialLoading: {
+        resources: true,
+        counts: true,
+        server: true
+    },
+
+    showFlashMessage(message, type = 'success') {
+        this.flashMessage = { text: message, type: type };
+        this.showFlash = true;
+        setTimeout(() => this.showFlash = false, 10000);
+    },
+
+    validateMetrics(data) {
+        if (!data) return null;
+        
+        return {
+            cpu_usage: Math.min(Math.max(data.cpu_usage || 0, 0), 100),
+            ram_usage: Math.min(Math.max(data.ram_usage || 0, 0), 100),
+            disk_usage: Math.min(Math.max(data.disk_usage || 0, 0), 100),
+            cpu_info: data.cpu_info || '-',
+            load_avg: data.load_avg || '-',
+            ram_info: data.ram_info || '-',
+            swap_info: data.swap_info || '-',
+            disk_info: data.disk_info || '-'
+        };
+    },
+
+    async fetchWithRetry(url, options = {}, retries = 3) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                const response = await fetch(url, options);
+                if (response.ok) return response;
+                
+                if (i === retries - 1) throw new Error(`Failed after ${retries} retries`);
+                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            } catch (err) {
+                if (i === retries - 1) throw err;
+                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            }
+        }
+    },
+
+    async fetchResourceMetrics() {
+        try {
+            this.loading.resources = true;
+            const response = await this.fetchWithRetry('/api/metrics/resources', {
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                this.debugInfo = `Resource metrics fetch failed with status: ${response.status}`;
+                this.showFlashMessage('Failed to load resource metrics', 'error');
+                return;
+            }
+
+            const data = await response.json();
+            this.resourceMetrics = this.validateMetrics(data);
+        } catch (err) {
+            this.error = `Resource metrics error: ${err.message}`;
+            this.debugInfo = `Resource metrics fetch exception: ${err.message}`;
+            this.showFlashMessage(`Error loading resource metrics: ${err.message}`, 'error');
+        } finally {
+            this.loading.resources = false;
+            this.initialLoading.resources = false;
+        }
+    },
+
+    async fetchCountMetrics() {
+        try {
+            this.loading.counts = true;
+            const response = await this.fetchWithRetry('/api/metrics/counts', {
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                this.debugInfo = `Count metrics fetch failed with status: ${response.status}`;
+                this.showFlashMessage('Failed to load count metrics', 'error');
+                return;
+            }
+
+            this.countMetrics = await response.json();
+        } catch (err) {
+            this.error = `Count metrics error: ${err.message}`;
+            this.debugInfo = `Count metrics fetch exception: ${err.message}`;
+            this.showFlashMessage(`Error loading count metrics: ${err.message}`, 'error');
+        } finally {
+            this.loading.counts = false;
+            this.initialLoading.counts = false;
+        }
+    },
+
+    async fetchServerInfo() {
+        try {
+            this.loading.server = true;
+            const response = await fetch('/api/server/info', {
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                this.debugInfo = `Server info fetch failed with status: ${response.status}`;
+                this.showFlashMessage('Failed to load server information', 'error');
+                return;
+            }
+
+            this.serverInfo = await response.json();
+        } catch (err) {
+            this.error = `Server info error: ${err.message}`;
+            this.debugInfo = `Server info fetch exception: ${err.message}`;
+            this.showFlashMessage(`Error loading server info: ${err.message}`, 'error');
+        } finally {
+            this.loading.server = false;
+            this.initialLoading.server = false;
+        }
+    },
+
+    destroy() {
+        if (this.intervalId) {
+            clearInterval(this.intervalId);
+            this.intervalId = null;
+        }
+    },
+
+    init() {
+        if (this.initialized) return;
+
+        this.initialized = true;
+
+        this.fetchResourceMetrics();
+        this.fetchCountMetrics();
+        this.fetchServerInfo();
+
+        this.intervalId = setInterval(() => {
+            this.fetchResourceMetrics();
+            this.fetchCountMetrics();
+            this.fetchServerInfo();
+        }, 10000);
+    }
+}" x-init="$nextTick(() => init())" @destroy.window="destroy()">
+    <div x-show="showFlash"
+         x-cloak
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform -translate-y-2"
+         x-transition:enter-end="opacity-100 transform translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 transform translate-y-0"
+         x-transition:leave-end="opacity-0 transform -translate-y-2"
+         class="fixed top-4 right-4 z-50"
+         role="alert"
+         aria-live="polite"
+         @click="showFlash = false">
+        <div :class="{
+            'border-status-success/30 bg-status-success-bg text-status-success': flashMessage?.type === 'success',
+            'border-status-danger/30 bg-status-danger-bg text-status-danger': flashMessage?.type === 'error'
+        }" class="flex items-start gap-3 rounded-md border px-4 py-3 text-sm shadow-dropdown">
+            <p x-text="flashMessage?.text" class="flex-1"></p>
+            <button class="text-text-tertiary hover:text-text-primary transition-colors duration-150" @click="showFlash = false">
+                <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div x-show="(error || debugInfo) && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')"
+         x-cloak
+         class="mb-4 rounded-md border border-status-danger/30 bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
+        <p x-text="error || debugInfo"></p>
+    </div>
+
+    <div class="space-y-5">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+            <h1 class="text-lg font-semibold text-text-primary">Dashboard</h1>
+            <p class="mt-0.5 text-sm text-text-secondary">Server overview, capacity, and live Dokku activity.</p>
+            <div class="mt-1.5 flex items-center gap-2">
+                <span class="inline-flex items-center gap-1 rounded-sm bg-status-success-bg px-2 py-0.5 text-xs font-medium text-status-success">
+                    <span class="h-1.5 w-1.5 rounded-full bg-status-success animate-pulse"></span>
+                    Live
+                </span>
+                <span class="text-xs text-text-tertiary">Auto refresh every 10 seconds</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="/services/create" class="inline-flex h-8 items-center gap-1.5 rounded bg-transparent px-3 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-surface">
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                New Service
+            </a>
+            <a href="/apps/create" class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                New App
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div class="rounded-md border border-border bg-card p-4">
+            <p class="text-xs font-medium text-text-secondary">Dokku Version</p>
+            <p class="mt-1.5 text-xl font-semibold text-text-primary">{{.DokkuVersion}}</p>
+        </div>
+
+        <div class="rounded-md border border-border bg-card p-4">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-xs font-medium text-text-secondary">Applications</p>
+                    <template x-if="initialLoading.counts">
+                        <div class="mt-1.5 h-6 w-10 animate-pulse rounded bg-surface"></div>
+                    </template>
+                    <template x-if="!initialLoading.counts">
+                        <p class="mt-1.5 text-xl font-semibold text-text-primary" x-text="countMetrics?.app_count || 0"></p>
+                    </template>
+                </div>
+                <a href="/apps" class="text-xs text-text-tertiary transition-colors duration-150 hover:text-brand-primary">View all</a>
+            </div>
+        </div>
+
+        <div class="rounded-md border border-border bg-card p-4">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-xs font-medium text-text-secondary">Services</p>
+                    <template x-if="initialLoading.counts">
+                        <div class="mt-1.5 h-6 w-10 animate-pulse rounded bg-surface"></div>
+                    </template>
+                    <template x-if="!initialLoading.counts">
+                        <p class="mt-1.5 text-xl font-semibold text-text-primary" x-text="countMetrics?.service_count || 0"></p>
+                    </template>
+                </div>
+                <a href="/services" class="text-xs text-text-tertiary transition-colors duration-150 hover:text-brand-primary">View all</a>
+            </div>
+        </div>
+
+        <div class="rounded-md border border-border bg-card p-4">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-xs font-medium text-text-secondary">Containers</p>
+                    <template x-if="initialLoading.counts">
+                        <div class="mt-1.5 h-6 w-10 animate-pulse rounded bg-surface"></div>
+                    </template>
+                    <template x-if="!initialLoading.counts">
+                        <p class="mt-1.5 text-xl font-semibold text-text-primary" x-text="countMetrics?.container_count || 0"></p>
+                    </template>
+                </div>
+                <a href="/docker" class="text-xs text-text-tertiary transition-colors duration-150 hover:text-brand-primary">View all</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="rounded-md border border-border bg-card">
+        <div class="grid grid-cols-1 xl:grid-cols-2">
+            <div class="p-4">
+                <h2 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">System Summary</h2>
+                <template x-if="initialLoading.server">
+                    <div class="mt-4 space-y-2">
+                        <div class="h-8 animate-pulse rounded bg-surface"></div>
+                        <div class="h-8 animate-pulse rounded bg-surface"></div>
+                        <div class="h-8 animate-pulse rounded bg-surface"></div>
+                        <div class="h-8 animate-pulse rounded bg-surface"></div>
+                    </div>
+                </template>
+                <template x-if="!initialLoading.server">
+                    <div class="mt-3.5 space-y-0 divide-y divide-border">
+                        <div class="flex items-center justify-between py-2">
+                            <span class="text-xs text-text-secondary">Hostname</span>
+                            <span class="font-mono text-[13px] text-text-primary" x-text="serverInfo?.hostname || '-'"></span>
+                        </div>
+                        <div class="flex items-center justify-between py-2">
+                            <span class="text-xs text-text-secondary">OS</span>
+                            <span class="text-sm text-text-primary" x-text="serverInfo?.os || '-'"></span>
+                        </div>
+                        <div class="flex items-center justify-between py-2">
+                            <span class="text-xs text-text-secondary">Kernel</span>
+                            <span class="font-mono text-[13px] text-text-primary" x-text="serverInfo?.kernel || '-'"></span>
+                        </div>
+                        <div class="flex items-center justify-between py-2">
+                            <span class="text-xs text-text-secondary">Uptime</span>
+                            <span class="text-sm text-text-primary" x-text="serverInfo?.uptime || '-'"></span>
+                        </div>
+                        <div class="flex items-center justify-between py-2">
+                            <span class="text-xs text-text-secondary">Public IP</span>
+                            <span class="font-mono text-[13px] text-text-primary" x-text="serverInfo?.public_ip || '-'"></span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="border-t border-border xl:border-l xl:border-t-0">
+                <div class="p-4">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h2 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">Resources</h2>
+                        <span class="text-xs text-text-tertiary">Live</span>
+                    </div>
+                    <template x-if="initialLoading.resources">
+                        <div class="flex h-40 items-center justify-center">
+                            <div class="h-6 w-6 animate-spin rounded-full border-2 border-border-strong border-t-transparent"></div>
+                        </div>
+                    </template>
+                    <template x-if="!initialLoading.resources">
+                        <div class="space-y-3.5">
+                            <div>
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="text-xs font-medium text-text-secondary">CPU</span>
+                                    <span class="text-sm font-semibold text-text-primary" x-text="(resourceMetrics?.cpu_usage ?? 0) + '%'"></span>
+                                </div>
+                                <div class="h-1.5 w-full overflow-hidden rounded bg-surface">
+                                    <div class="h-full rounded bg-brand-primary transition-all duration-500"
+                                         :style="'width: ' + (resourceMetrics?.cpu_usage ?? 0) + '%'"></div>
+                                </div>
+                                <div class="mt-1 flex gap-3 text-xs text-text-secondary">
+                                    <span><span class="font-medium text-text-primary">CPU:</span> <span x-text="resourceMetrics?.cpu_info || '-'"></span></span>
+                                    <span><span class="font-medium text-text-primary">Load:</span> <span x-text="resourceMetrics?.load_avg || '-'"></span></span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="text-xs font-medium text-text-secondary">Memory</span>
+                                    <span class="text-sm font-semibold text-text-primary" x-text="(resourceMetrics?.ram_usage ?? 0) + '%'"></span>
+                                </div>
+                                <div class="h-1.5 w-full overflow-hidden rounded bg-surface">
+                                    <div class="h-full rounded bg-brand-accent transition-all duration-500"
+                                         :style="'width: ' + (resourceMetrics?.ram_usage ?? 0) + '%'"></div>
+                                </div>
+                                <div class="mt-1 flex gap-3 text-xs text-text-secondary">
+                                    <span><span class="font-medium text-text-primary">RAM:</span> <span x-text="resourceMetrics?.ram_info || '-'"></span></span>
+                                    <span><span class="font-medium text-text-primary">Swap:</span> <span x-text="resourceMetrics?.swap_info || '-'"></span></span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="text-xs font-medium text-text-secondary">Disk</span>
+                                    <span class="text-sm font-semibold text-text-primary" x-text="(resourceMetrics?.disk_usage ?? 0) + '%'"></span>
+                                </div>
+                                <div class="h-1.5 w-full overflow-hidden rounded bg-surface">
+                                    <div class="h-full rounded bg-status-success transition-all duration-500"
+                                         :style="'width: ' + (resourceMetrics?.disk_usage ?? 0) + '%'"></div>
+                                </div>
+                                <p class="mt-1 text-xs text-text-secondary"><span class="font-medium text-text-primary">Disk:</span> <span x-text="resourceMetrics?.disk_info || '-'"></span></p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+</div>
+{{end}}

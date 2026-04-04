@@ -1,0 +1,1203 @@
+{{define "app_nginx"}}
+<div class="space-y-5" x-data="{
+    nginxSubTab: 'settings',
+    ports: [],
+    showPortModal: false,
+    showDeletePortModal: false,
+    portToDelete: null,
+    newPort: {
+        protocol: 'http',
+        host: '',
+        container: ''
+    },
+    showDomainModal: false,
+    newDomain: '',
+    domains: [],
+    redirects: [],
+    showRedirectModal: false,
+    newRedirect: { source: '', destination: '' },
+    showDeleteRedirectModal: false,
+    deletingRedirect: null,
+    showDeleteDomainModal: false,
+    deletingDomain: null,
+    customConfigPath: '',
+    isLoadingConfigPath: false,
+    isSavingConfigPath: false,
+    isResettingConfigPath: false,
+    showPathToastMessage: false,
+    pathToastType: 'success',
+    pathToastMessage: '',
+    showLetsEncryptModal: false,
+    isProcessingLetsEncrypt: false,
+    letsEncryptErrorMessage: null,
+    async fetchCustomConfigPath() {
+        try {
+            this.isLoadingConfigPath = true;
+            const response = await fetch(`/api/apps/{{.Name}}/nginx/custom-config-path`);
+            if (response.ok) {
+                const data = await response.json();
+                this.customConfigPath = data.path || '';
+            }
+        } catch (error) {
+            console.error('Error fetching custom config path:', error);
+        } finally {
+            this.isLoadingConfigPath = false;
+        }
+    },
+    async saveCustomConfigPath() {
+        if (this.customConfigPath && this.customConfigPath.startsWith('/')) {
+            this.showPathToast('error', 'Path cannot start with a slash (/)');
+            return;
+        }
+
+        try {
+            this.isSavingConfigPath = true;
+            const response = await fetch(`/api/apps/{{.Name}}/nginx/custom-config-path`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path: this.customConfigPath })
+            });
+
+            if (response.ok) {
+                this.showPathToast('success', 'Custom configuration path saved successfully');
+            } else {
+                const data = await response.json();
+                this.showPathToast('error', data.message || 'Failed to save custom configuration path');
+            }
+        } catch (error) {
+            console.error('Error saving custom config path:', error);
+            this.showPathToast('error', 'An error occurred while saving the path');
+        } finally {
+            this.isSavingConfigPath = false;
+        }
+    },
+    async resetCustomConfigPath() {
+        try {
+            this.isResettingConfigPath = true;
+            const response = await fetch(`/api/apps/{{.Name}}/nginx/custom-config-path/reset`, {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                this.customConfigPath = '';
+                this.showPathToast('success', 'Custom configuration path has been reset');
+            } else {
+                const data = await response.json();
+                this.showPathToast('error', data.message || 'Failed to reset custom configuration path');
+            }
+        } catch (error) {
+            console.error('Error resetting custom config path:', error);
+            this.showPathToast('error', 'An error occurred while resetting the path');
+        } finally {
+            this.isResettingConfigPath = false;
+        }
+    },
+    showPathToast(type, message) {
+        this.pathToastType = type;
+        this.pathToastMessage = message;
+        this.showPathToastMessage = true;
+
+        setTimeout(() => {
+            this.showPathToastMessage = false;
+        }, 3000);
+    },
+    async addPort() {
+        if (!this.newPort.host || !this.newPort.container) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/ports`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(this.newPort)
+            });
+
+            if (response.ok) {
+                this.showPortModal = false;
+                this.newPort = { protocol: 'http', host: '', container: '' };
+                await this.fetchPorts();
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    },
+    async deletePort(port) {
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/ports`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(port)
+            });
+
+            if (response.ok) {
+                this.showDeletePortModal = false;
+                this.portToDelete = null;
+                await this.fetchPorts();
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    },
+    async fetchPorts() {
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/ports`);
+            const data = await response.json();
+            this.ports = data.ports;
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    },
+    async fetchDomains() {
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/domains`);
+            const data = await response.json();
+            this.domains = data.domains || [];
+            this.redirects = data.redirects || [];
+        } catch (error) {
+            console.error('Error fetching domains:', error);
+        }
+    },
+    async addDomain() {
+        if (!this.newDomain) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/domains`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ domain: this.newDomain })
+            });
+
+            if (response.ok) {
+                this.showDomainModal = false;
+                this.newDomain = '';
+                await this.fetchDomains();
+            }
+        } catch (error) {
+            console.error('Error adding domain:', error);
+        }
+    },
+    async deleteDomain(domain) {
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/domains/${domain}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                this.showDeleteDomainModal = false;
+                this.deletingDomain = null;
+                await this.fetchDomains();
+            }
+        } catch (error) {
+            console.error('Error deleting domain:', error);
+        }
+    },
+    async addRedirect() {
+        if (!this.newRedirect.source || !this.newRedirect.destination || this.newRedirect.source === this.newRedirect.destination) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/redirects`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.newRedirect)
+            });
+
+            if (response.ok) {
+                this.showRedirectModal = false;
+                this.newRedirect = { source: '', destination: '' };
+                await this.fetchDomains();
+            }
+        } catch (error) {
+            console.error('Error adding redirect:', error);
+        }
+    },
+    async deleteRedirect(redirect) {
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/redirects`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(redirect)
+            });
+
+            if (response.ok) {
+                this.showDeleteRedirectModal = false;
+                this.deletingRedirect = null;
+                await this.fetchDomains();
+            }
+        } catch (error) {
+            console.error('Error deleting redirect:', error);
+        }
+    },
+    init() {
+        this.fetchPorts();
+        this.fetchCustomConfigPath();
+        this.fetchDomains();
+    }
+}">
+    <div x-show="showPathToastMessage"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 translate-y-1"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-1"
+         class="fixed top-4 right-4 z-[9999] max-w-sm"
+         x-cloak>
+        <div class="rounded-md border bg-card px-4 py-3 shadow-dropdown"
+             :class="pathToastType === 'success' ? 'border-status-success text-status-success' : 'border-status-danger text-status-danger'">
+            <div class="flex items-start justify-between gap-3">
+                <p class="text-sm" x-text="pathToastMessage"></p>
+                <button @click="showPathToastMessage = false"
+                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="border-b border-border">
+        <div class="flex flex-wrap gap-1 -mb-px">
+            <template x-for="tab in [
+                { key: 'settings', label: 'Settings', action: () => fetchCustomConfigPath() },
+                { key: 'domains', label: 'Domains', action: () => fetchDomains() },
+                { key: 'ports', label: 'Ports', action: () => fetchPorts() },
+                { key: 'letsencrypt', label: 'Let\'s Encrypt', action: () => fetchData('nginx') },
+                { key: 'access', label: 'Access Logs', action: null },
+                { key: 'error', label: 'Error Logs', action: null }
+            ]" :key="tab.key">
+                <button @click="nginxSubTab = tab.key; if (tab.action) { tab.action(); }"
+                        class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors duration-100"
+                        :class="nginxSubTab === tab.key ? 'border-brand-primary text-brand-primary' : 'border-transparent text-text-secondary hover:text-text-primary'"
+                        x-text="tab.label"></button>
+            </template>
+        </div>
+    </div>
+
+    <template x-if="nginxSubTab === 'settings'">
+        <section class="py-4 space-y-5">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-sm font-semibold text-text-primary">Nginx Settings</h3>
+                    <p class="mt-0.5 text-xs text-text-secondary">Review generated values and override custom configuration file paths when necessary.</p>
+                </div>
+                <button @click="fetchData('nginx')"
+                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="rounded-md border border-border bg-card overflow-hidden">
+                <div class="w-full overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-border">
+                                <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Setting</th>
+                                <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Value</th>
+                                <th class="w-20 px-4 py-2.5"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border-subtle">
+                            <template x-for="config in nginxConfigs" :key="config.name">
+                                <tr class="group transition-colors duration-100 hover:bg-surface">
+                                    <td class="px-4 py-2.5 text-sm font-medium text-text-primary" x-text="config.name"></td>
+                                    <td class="px-4 py-2.5 font-mono text-[13px] text-text-secondary break-all" x-text="config.value"></td>
+                                    <td class="px-4 py-2.5">
+                                        <div class="flex justify-end opacity-0 transition-opacity duration-100 group-hover:opacity-100">
+                                            <button @click="editingConfig = config; newConfigValue = config.value; showNginxModal = true"
+                                                    class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="rounded-md border border-border bg-card p-4">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h4 class="text-sm font-semibold text-text-primary">Custom Configuration File</h4>
+                        <p class="mt-0.5 text-xs text-text-secondary">Set a relative path such as `conf/nginx.conf.sigil`. Absolute paths are rejected.</p>
+                    </div>
+                    <button @click="fetchCustomConfigPath()"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="mt-4 flex flex-col gap-1.5">
+                    <label class="text-xs font-medium text-text-secondary">Custom Path</label>
+                    <div class="relative">
+                        <input type="text"
+                               x-model="customConfigPath"
+                               placeholder="e.g. conf/nginx.conf.sigil"
+                               class="h-8 w-full rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                               :class="{'border-status-danger text-status-danger focus:border-status-danger focus:ring-status-danger': customConfigPath && customConfigPath.startsWith('/')}"
+                               :disabled="isLoadingConfigPath || isSavingConfigPath || isResettingConfigPath">
+                        <div x-show="isLoadingConfigPath" class="absolute inset-y-0 right-0 flex items-center pr-3">
+                            <svg class="h-3.5 w-3.5 animate-spin text-text-secondary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <p x-show="customConfigPath && customConfigPath.startsWith('/')" class="text-xs text-status-danger">Path cannot start with a slash (/).</p>
+                </div>
+                <div class="mt-4 flex justify-end gap-2">
+                    <button @click="resetCustomConfigPath()"
+                            :disabled="isLoadingConfigPath || isSavingConfigPath || isResettingConfigPath || !customConfigPath"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
+                        <svg x-show="isResettingConfigPath" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isResettingConfigPath ? 'Resetting...' : 'Reset'"></span>
+                    </button>
+                    <button @click="saveCustomConfigPath()"
+                            :disabled="isLoadingConfigPath || isSavingConfigPath || isResettingConfigPath || (customConfigPath && customConfigPath.startsWith('/'))"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
+                        <svg x-show="isSavingConfigPath" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isSavingConfigPath ? 'Saving...' : 'Save'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <div x-show="showNginxModal" class="fixed inset-0 z-40" x-cloak>
+                <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                        <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                            <h3 class="text-sm font-semibold text-text-primary" x-text="'Edit ' + editingConfig?.name"></h3>
+                            <button @click="showNginxModal = false"
+                                    class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="px-5 py-4">
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-xs font-medium text-text-secondary">Value</label>
+                                <input type="text"
+                                       x-model="newConfigValue"
+                                       class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                            <button @click="showNginxModal = false"
+                                    class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                                Cancel
+                            </button>
+                            <button @click="fetch(`/api/apps/{{.Name}}/nginx/${editingConfig.name}`, {
+                                         method: 'POST',
+                                         headers: { 'Content-Type': 'application/json' },
+                                         body: JSON.stringify({ value: newConfigValue })
+                                     }).then(() => {
+                                         showNginxModal = false;
+                                         fetchData('nginx');
+                                     })"
+                                    class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                                Update
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <template x-if="nginxSubTab === 'domains'">
+        <section class="py-4 space-y-6">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-sm font-semibold text-text-primary">Domains</h3>
+                    <p class="mt-0.5 text-xs text-text-secondary">Manage assigned domains and domain-to-domain redirects.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="fetchDomains()"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                    <button @click="showDomainModal = true"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                        Add Domain
+                    </button>
+                </div>
+            </div>
+
+            <div class="rounded-md border border-border bg-card overflow-hidden">
+                <div class="w-full overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-border">
+                                <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Domain</th>
+                                <th class="w-20 px-4 py-2.5"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border-subtle">
+                            <template x-for="domain in domains" :key="domain">
+                                <tr class="group transition-colors duration-100 hover:bg-surface">
+                                    <td class="px-4 py-2.5">
+                                        <a :href="'https://' + domain" target="_blank" class="font-mono text-[13px] text-link hover:underline">
+                                            <span x-text="domain"></span>
+                                        </a>
+                                    </td>
+                                    <td class="px-4 py-2.5">
+                                        <div class="flex justify-end opacity-0 transition-opacity duration-100 group-hover:opacity-100">
+                                            <button @click="deletingDomain = domain; showDeleteDomainModal = true"
+                                                    class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-status-danger">
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="domains.length === 0">
+                                <td colspan="2" class="px-4 py-8 text-center text-sm text-text-secondary">No domains configured yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div>
+                <div class="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                        <h4 class="text-sm font-semibold text-text-primary">Redirects</h4>
+                        <p class="mt-0.5 text-xs text-text-secondary">Forward one configured domain to another.</p>
+                    </div>
+                    <button @click="newRedirect = { source: '', destination: '' }; showRedirectModal = true"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Add Redirect
+                    </button>
+                </div>
+                <div class="rounded-md border border-border bg-card overflow-hidden">
+                    <div class="w-full overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-border">
+                                    <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Source</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Destination</th>
+                                    <th class="w-20 px-4 py-2.5"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-border-subtle">
+                                <template x-for="redirect in redirects" :key="`${redirect.source}-${redirect.destination}`">
+                                    <tr class="group transition-colors duration-100 hover:bg-surface">
+                                        <td class="px-4 py-2.5 font-mono text-[13px] text-text-primary" x-text="redirect.source"></td>
+                                        <td class="px-4 py-2.5 font-mono text-[13px] text-text-secondary" x-text="redirect.destination"></td>
+                                        <td class="px-4 py-2.5">
+                                            <div class="flex justify-end opacity-0 transition-opacity duration-100 group-hover:opacity-100">
+                                                <button @click="deletingRedirect = redirect; showDeleteRedirectModal = true"
+                                                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-status-danger">
+                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <tr x-show="redirects.length === 0">
+                                    <td colspan="3" class="px-4 py-8 text-center text-sm text-text-secondary">No redirects configured yet.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <template x-if="nginxSubTab === 'ports'">
+        <section class="py-4 space-y-5">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-sm font-semibold text-text-primary">Port Mappings</h3>
+                    <p class="mt-0.5 text-xs text-text-secondary">Expose HTTP, TCP, or UDP ports for the app through Dokku and Nginx.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="fetchPorts()"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                    <button @click="newPort = { protocol: 'http', host: '', container: '' }; showPortModal = true"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                        Add Port
+                    </button>
+                </div>
+            </div>
+
+            <div class="rounded-md border border-border bg-card overflow-hidden">
+                <div class="w-full overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-border">
+                                <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Protocol</th>
+                                <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Host Port</th>
+                                <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Container Port</th>
+                                <th class="w-20 px-4 py-2.5"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border-subtle">
+                            <template x-for="port_item in ports" :key="`${port_item.protocol}-${port_item.host}-${port_item.container}`">
+                                <tr class="group transition-colors duration-100 hover:bg-surface">
+                                    <td class="px-4 py-2.5 text-sm text-text-primary" x-text="port_item.protocol"></td>
+                                    <td class="px-4 py-2.5 font-mono text-[13px] text-text-secondary" x-text="port_item.host"></td>
+                                    <td class="px-4 py-2.5 font-mono text-[13px] text-text-secondary" x-text="port_item.container"></td>
+                                    <td class="px-4 py-2.5">
+                                        <div class="flex justify-end opacity-0 transition-opacity duration-100 group-hover:opacity-100">
+                                            <button @click="portToDelete = port_item; showDeletePortModal = true"
+                                                    class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-status-danger">
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="ports.length === 0">
+                                <td colspan="4" class="px-4 py-8 text-center text-sm text-text-secondary">No port mappings configured yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <template x-if="nginxSubTab === 'letsencrypt'">
+        <section class="py-4 space-y-5">
+            <div x-show="letsEncryptErrorMessage" class="rounded-md border border-status-danger/30 bg-status-danger-bg px-4 py-3 text-sm text-status-danger" x-cloak>
+                <div class="flex items-start justify-between gap-3">
+                    <p x-text="letsEncryptErrorMessage"></p>
+                    <button @click="letsEncryptErrorMessage = null"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-status-danger transition-colors duration-150 hover:bg-status-danger/10">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-sm font-semibold text-text-primary">SSL Certificates</h3>
+                    <p class="mt-0.5 text-xs text-text-secondary">Inspect certificate state, renewal mode, and expiration for the app domains.</p>
+                </div>
+                <button @click="fetchData('nginx')"
+                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="rounded-md border border-border bg-card p-4 space-y-4">
+                <div class="flex items-start justify-between gap-4 rounded-md border border-border bg-surface px-4 py-3">
+                    <div>
+                        <div class="text-sm font-semibold text-text-primary">SSL Status</div>
+                        <p class="mt-0.5 text-xs text-text-secondary" x-text="sslInfo.active ? 'SSL is currently active.' : 'SSL is not enabled.'"></p>
+                    </div>
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium"
+                          :class="sslInfo.active ? 'bg-status-success-bg text-status-success' : 'bg-status-neutral-bg text-status-neutral'">
+                        <span class="h-1.5 w-1.5 rounded-full" :class="sslInfo.active ? 'bg-status-success' : 'bg-status-neutral'"></span>
+                        <span x-text="sslInfo.active ? 'Active' : 'Inactive'"></span>
+                    </span>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div class="rounded-md border border-border bg-card p-4">
+                        <div class="text-xs font-medium uppercase tracking-wide text-text-secondary">Expiration</div>
+                        <div class="mt-2 font-mono text-[13px] text-text-primary"
+                             x-text="(() => {
+                                 if (!sslInfo.expiration) return 'Not available';
+                                 const expirationDate = new Date(sslInfo.expiration * 1000);
+                                 return expirationDate.toLocaleDateString();
+                             })()"></div>
+                        <div class="mt-1 text-xs"
+                             :class="(() => {
+                                 if (!sslInfo.expiration) return 'text-text-secondary';
+                                 const now = Math.floor(Date.now() / 1000);
+                                 const diff = sslInfo.expiration - now;
+                                 const days = Math.floor(diff / (24 * 60 * 60));
+                                 if (days < 7) return 'text-status-danger';
+                                 if (days < 30) return 'text-status-warning';
+                                 return 'text-status-success';
+                             })()"
+                             x-text="(() => {
+                                 if (!sslInfo.expiration) return 'No certificate metadata returned.';
+                                 const now = Math.floor(Date.now() / 1000);
+                                 const diff = sslInfo.expiration - now;
+                                 const days = Math.floor(diff / (24 * 60 * 60));
+                                 return `${days} days remaining`;
+                             })()"></div>
+                    </div>
+                    <div class="rounded-md border border-border bg-card p-4">
+                        <div class="text-xs font-medium uppercase tracking-wide text-text-secondary">Auto-Renewal</div>
+                        <div class="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium"
+                             :class="sslInfo.autorenew ? 'bg-status-success-bg text-status-success' : 'bg-status-neutral-bg text-status-neutral'">
+                            <span class="h-1.5 w-1.5 rounded-full" :class="sslInfo.autorenew ? 'bg-status-success' : 'bg-status-neutral'"></span>
+                            <span x-text="sslInfo.autorenew ? 'Automatic' : 'Manual'"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="sslInfo.email" class="rounded-md border border-border bg-surface px-4 py-3">
+                    <div class="text-xs font-medium uppercase tracking-wide text-text-secondary">Certificate Contact</div>
+                    <div class="mt-2 flex items-center gap-2 rounded border border-border bg-card px-3 py-1.5 font-mono text-[13px] text-text-primary">
+                        <span class="flex-1 truncate" x-text="sslInfo.email"></span>
+                    </div>
+                </div>
+
+                <div class="rounded-md border border-border bg-surface px-4 py-3 text-xs text-text-secondary">
+                    Let's Encrypt certificates are valid for 90 days. Ensure all domains resolve to this host before enabling or renewing SSL.
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button @click="showLetsEncryptModal = true"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                    <span x-text="sslInfo.active ? 'Renew Certificate' : 'Enable Let\'s Encrypt'"></span>
+                </button>
+            </div>
+        </section>
+    </template>
+
+    <template x-if="nginxSubTab === 'access'">
+        <section class="py-4">
+            <div class="rounded-md border border-border bg-[#1A2B3C] overflow-hidden">
+                <div class="flex items-center justify-between gap-3 border-b border-[#3B342E] bg-[#28221D] px-4 py-3">
+                    <div>
+                        <div class="text-sm font-semibold text-[#a8d5c2]">Nginx Access Logs</div>
+                        <p class="mt-0.5 text-xs text-[#B8A898]">Stream access logs from the active app proxy.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button @click="startNginxLogs('access')"
+                                x-show="!showNginxLogs"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                            Show Logs
+                        </button>
+                        <button @click="stopNginxLogs()"
+                                x-show="showNginxLogs"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                            Stop
+                        </button>
+                    </div>
+                </div>
+                <div class="relative min-h-[22rem] bg-[#1A2B3C]">
+                    <div id="nginxLogContainer"
+                         x-show="showNginxLogs"
+                         x-transition:enter="transition ease-out duration-150"
+                         x-transition:enter-start="opacity-0"
+                         x-transition:enter-end="opacity-100"
+                         x-transition:leave="transition ease-in duration-100"
+                         x-transition:leave-start="opacity-100"
+                         x-transition:leave-end="opacity-0"
+                         class="h-[22rem] overflow-y-auto overflow-x-hidden p-3 font-mono text-[13px] text-[#a8d5c2]">
+                        <template x-if="!showNginxLogs || nginxLogsData.length === 0">
+                            <div class="flex h-full items-center justify-center text-center text-xs text-[#7A96B0]">
+                                Click “Show Logs” to start streaming Nginx access logs.
+                            </div>
+                        </template>
+                        <template x-for="(log, index) in nginxLogsData" :key="index">
+                            <div class="border-b border-[#3B342E] px-2 py-1.5 last:border-b-0">
+                                <pre class="whitespace-pre-wrap break-all" x-text="log"></pre>
+                            </div>
+                        </template>
+                    </div>
+                    <div x-show="!showNginxLogs" class="flex h-[22rem] items-center justify-center text-center text-xs text-[#7A96B0]">
+                        Click “Show Logs” to start streaming Nginx access logs.
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <template x-if="nginxSubTab === 'error'">
+        <section class="py-4">
+            <div class="rounded-md border border-border bg-[#1A2B3C] overflow-hidden">
+                <div class="flex items-center justify-between gap-3 border-b border-[#3B342E] bg-[#28221D] px-4 py-3">
+                    <div>
+                        <div class="text-sm font-semibold text-[#a8d5c2]">Nginx Error Logs</div>
+                        <p class="mt-0.5 text-xs text-[#B8A898]">Stream proxy and certificate related error output.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button @click="startNginxLogs('error')"
+                                x-show="!showNginxLogs"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                            Show Logs
+                        </button>
+                        <button @click="stopNginxLogs()"
+                                x-show="showNginxLogs"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                            Stop
+                        </button>
+                    </div>
+                </div>
+                <div class="relative min-h-[22rem] bg-[#1A2B3C]">
+                    <div id="nginxLogContainer"
+                         x-show="showNginxLogs"
+                         x-transition:enter="transition ease-out duration-150"
+                         x-transition:enter-start="opacity-0"
+                         x-transition:enter-end="opacity-100"
+                         x-transition:leave="transition ease-in duration-100"
+                         x-transition:leave-start="opacity-100"
+                         x-transition:leave-end="opacity-0"
+                         class="h-[22rem] overflow-y-auto overflow-x-hidden p-3 font-mono text-[13px] text-[#a8d5c2]">
+                        <template x-if="!showNginxLogs || nginxLogsData.length === 0">
+                            <div class="flex h-full items-center justify-center text-center text-xs text-[#7A96B0]">
+                                Click “Show Logs” to start streaming Nginx error logs.
+                            </div>
+                        </template>
+                        <template x-for="(log, index) in nginxLogsData" :key="index">
+                            <div class="border-b border-[#3B342E] px-2 py-1.5 last:border-b-0">
+                                <pre class="whitespace-pre-wrap break-all" x-text="log"></pre>
+                            </div>
+                        </template>
+                    </div>
+                    <div x-show="!showNginxLogs" class="flex h-[22rem] items-center justify-center text-center text-xs text-[#7A96B0]">
+                        Click “Show Logs” to start streaming Nginx error logs.
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <div x-show="showDomainModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Add New Domain</h3>
+                    <button @click="showDomainModal = false"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4">
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Domain Name</label>
+                        <input type="text"
+                               x-model="newDomain"
+                               placeholder="e.g., example.com"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showDomainModal = false"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="addDomain()"
+                            :disabled="!newDomain"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
+                        Add Domain
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showDeleteDomainModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Confirm Domain Removal</h3>
+                    <button @click="showDeleteDomainModal = false"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4 text-sm text-text-primary">
+                    Are you sure you want to remove <span class="font-mono text-[13px]" x-text="deletingDomain"></span>?
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showDeleteDomainModal = false"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="deleteDomain(deletingDomain)"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showRedirectModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Add New Redirect</h3>
+                    <button @click="showRedirectModal = false"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="space-y-4 px-5 py-4">
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Source Domain</label>
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open"
+                                    @keydown.escape.window="open = false"
+                                    type="button"
+                                    class="inline-flex h-8 w-full items-center justify-between rounded border border-border bg-card px-3 text-sm text-text-primary transition-colors duration-150 hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                                <span x-text="newRedirect.source || 'Select source domain'"
+                                      :class="!newRedirect.source ? 'text-text-tertiary' : 'text-text-primary'"></span>
+                                <svg class="h-[13px] w-[13px] text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div x-show="open"
+                                 x-cloak
+                                 @click.away="open = false"
+                                 x-transition:enter="transition ease-out duration-100"
+                                 x-transition:enter-start="transform opacity-0 scale-95"
+                                 x-transition:enter-end="transform opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-75"
+                                 x-transition:leave-start="transform opacity-100 scale-100"
+                                 x-transition:leave-end="transform opacity-0 scale-95"
+                                 class="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-border bg-card shadow-dropdown">
+                                <div class="max-h-64 overflow-y-auto py-1">
+                                    <button @click="newRedirect.source = ''; open = false"
+                                            type="button"
+                                            :class="!newRedirect.source ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                            class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                        Select source domain
+                                    </button>
+                                    <template x-for="domain_item in domains" :key="domain_item">
+                                        <button @click="newRedirect.source = domain_item; open = false"
+                                                type="button"
+                                                :class="newRedirect.source === domain_item ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                                class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                            <span x-text="domain_item"></span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Destination Domain</label>
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open"
+                                    @keydown.escape.window="open = false"
+                                    type="button"
+                                    class="inline-flex h-8 w-full items-center justify-between rounded border border-border bg-card px-3 text-sm text-text-primary transition-colors duration-150 hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                                <span x-text="newRedirect.destination || 'Select destination domain'"
+                                      :class="!newRedirect.destination ? 'text-text-tertiary' : 'text-text-primary'"></span>
+                                <svg class="h-[13px] w-[13px] text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div x-show="open"
+                                 x-cloak
+                                 @click.away="open = false"
+                                 x-transition:enter="transition ease-out duration-100"
+                                 x-transition:enter-start="transform opacity-0 scale-95"
+                                 x-transition:enter-end="transform opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-75"
+                                 x-transition:leave-start="transform opacity-100 scale-100"
+                                 x-transition:leave-end="transform opacity-0 scale-95"
+                                 class="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-border bg-card shadow-dropdown">
+                                <div class="max-h-64 overflow-y-auto py-1">
+                                    <button @click="newRedirect.destination = ''; open = false"
+                                            type="button"
+                                            :class="!newRedirect.destination ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                            class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                        Select destination domain
+                                    </button>
+                                    <template x-for="domain_item in domains" :key="domain_item + '-target'">
+                                        <button @click="newRedirect.destination = domain_item; open = false"
+                                                type="button"
+                                                :class="newRedirect.destination === domain_item ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                                class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                            <span x-text="domain_item"></span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showRedirectModal = false"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="addRedirect()"
+                            :disabled="!newRedirect.source || !newRedirect.destination || newRedirect.source === newRedirect.destination"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
+                        Add Redirect
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showDeleteRedirectModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Confirm Redirect Removal</h3>
+                    <button @click="showDeleteRedirectModal = false"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4 text-sm text-text-primary">
+                    Remove redirect from <span class="font-mono text-[13px]" x-text="deletingRedirect?.source"></span> to
+                    <span class="font-mono text-[13px]" x-text="deletingRedirect?.destination"></span>?
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showDeleteRedirectModal = false"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="deleteRedirect(deletingRedirect)"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showPortModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Add Port Mapping</h3>
+                    <button @click="showPortModal = false"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="space-y-4 px-5 py-4">
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Protocol</label>
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open"
+                                    @keydown.escape.window="open = false"
+                                    type="button"
+                                    class="inline-flex h-8 w-full items-center justify-between rounded border border-border bg-card px-3 text-sm text-text-primary transition-colors duration-150 hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                                <span x-text="newPort.protocol === 'http' ? 'HTTP' : (newPort.protocol === 'tcp' ? 'TCP' : 'UDP')"></span>
+                                <svg class="h-[13px] w-[13px] text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div x-show="open"
+                                 x-cloak
+                                 @click.away="open = false"
+                                 x-transition:enter="transition ease-out duration-100"
+                                 x-transition:enter-start="transform opacity-0 scale-95"
+                                 x-transition:enter-end="transform opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-75"
+                                 x-transition:leave-start="transform opacity-100 scale-100"
+                                 x-transition:leave-end="transform opacity-0 scale-95"
+                                 class="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-border bg-card shadow-dropdown">
+                                <div class="py-1">
+                                    <button @click="newPort.protocol = 'http'; open = false"
+                                            type="button"
+                                            :class="newPort.protocol === 'http' ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                            class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                        HTTP
+                                    </button>
+                                    <button @click="newPort.protocol = 'tcp'; open = false"
+                                            type="button"
+                                            :class="newPort.protocol === 'tcp' ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                            class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                        TCP
+                                    </button>
+                                    <button @click="newPort.protocol = 'udp'; open = false"
+                                            type="button"
+                                            :class="newPort.protocol === 'udp' ? 'bg-brand-subtle text-brand-primary' : 'text-text-primary hover:bg-surface'"
+                                            class="block w-full px-3 py-2 text-left text-sm transition-colors duration-100">
+                                        UDP
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Host Port</label>
+                        <input type="text"
+                               x-model="newPort.host"
+                               placeholder="e.g., 8080"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Container Port</label>
+                        <input type="text"
+                               x-model="newPort.container"
+                               placeholder="e.g., 80"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showPortModal = false"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="addPort()"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                        Add Port
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showDeletePortModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Delete Port Mapping</h3>
+                    <button @click="showDeletePortModal = false"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4 text-sm text-text-primary">
+                    Delete the port mapping from <span class="font-mono text-[13px]" x-text="portToDelete?.host"></span> to
+                    <span class="font-mono text-[13px]" x-text="portToDelete?.container"></span>?
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showDeletePortModal = false"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="deletePort(portToDelete)"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showLetsEncryptModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary" x-text="sslInfo.active ? 'Renew SSL Certificate' : 'Enable Let\'s Encrypt'"></h3>
+                    <button @click="showLetsEncryptModal = false"
+                            :disabled="isProcessingLetsEncrypt"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-5 py-4 text-sm text-text-primary">
+                    <p x-show="!sslInfo.active">This will enable Let's Encrypt SSL certificates for all configured domains.</p>
+                    <p x-show="sslInfo.active">This will renew the Let's Encrypt SSL certificate for all configured domains.</p>
+                    <ul class="mt-3 space-y-1 text-xs text-text-secondary">
+                        <li>All domains should resolve to this host.</li>
+                        <li>The application must be reachable through those domains.</li>
+                        <li>At least one domain must be attached before enabling SSL.</li>
+                    </ul>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showLetsEncryptModal = false"
+                            :disabled="isProcessingLetsEncrypt"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="isProcessingLetsEncrypt = true;
+                                    letsEncryptErrorMessage = null;
+                                    fetch(`/api/apps/{{.Name}}/ssl`, {
+                                        method: 'POST'
+                                    }).then(async response => {
+                                        const data = await response.json();
+                                        showLetsEncryptModal = false;
+                                        if (response.ok) {
+                                            Alpine.store('flash').show(data.message || 'SSL certificates have been processed successfully', 'success');
+                                            fetchData('nginx');
+                                        } else {
+                                            const errorText = data.message || data.error || 'Failed to process SSL certificates';
+                                            let detailedMessage = errorText;
+                                            if (data.output) {
+                                                console.error('SSL Process Error Output:', data.output);
+                                                const outputLines = data.output.split('\n').slice(0, 3).join('\n');
+                                                if (outputLines.length < 100) {
+                                                    detailedMessage += `: ${outputLines}`;
+                                                }
+                                            }
+                                            letsEncryptErrorMessage = detailedMessage;
+                                            Alpine.store('flash').show(detailedMessage, 'error');
+                                        }
+                                    }).catch(error => {
+                                        console.error('SSL Process Error:', error);
+                                        const msg = 'An error occurred while processing SSL. Please check the console for details.';
+                                        letsEncryptErrorMessage = msg;
+                                        Alpine.store('flash').show(msg, 'error');
+                                    }).finally(() => {
+                                        isProcessingLetsEncrypt = false;
+                                    })"
+                            :disabled="isProcessingLetsEncrypt"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
+                        <svg x-show="isProcessingLetsEncrypt" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isProcessingLetsEncrypt ? 'Processing...' : (sslInfo.active ? 'Renew SSL' : 'Enable SSL')"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

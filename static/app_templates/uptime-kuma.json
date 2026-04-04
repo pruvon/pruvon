@@ -1,0 +1,27 @@
+{
+  "services": [
+    {
+      "type": "app",
+      "data": {
+        "name": "uptime-kuma",
+        "image": "louislam/uptime-kuma:1.23.16",
+        "env": [],
+        "services": [],
+        "domains": [
+          "status.example.com"
+        ],
+        "ssl": true,
+        "ports": [
+          "http:80:3001"
+        ],
+        "mounts": [
+          {
+            "type": "volume",
+            "name": "uptime-kuma-data",
+            "mountPath": "/app/data"
+          }
+        ]
+      }
+    }
+  ]
+}

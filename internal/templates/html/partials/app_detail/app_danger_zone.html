@@ -1,0 +1,86 @@
+{{define "app_danger_zone"}}
+<section class="py-4">
+    <div class="rounded-md border border-status-danger/30 bg-status-danger-bg/30 p-4">
+        <h3 class="mb-1 text-sm font-semibold text-status-danger">Danger Zone</h3>
+        <p class="mb-3 text-xs text-text-secondary">These actions cannot be undone.</p>
+        <div class="space-y-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h4 class="text-xs font-medium text-text-primary">Delete this application</h4>
+                    <p class="text-xs text-text-secondary">Once you delete an application, there is no going back.</p>
+                </div>
+                <button @click="showDeleteModal = true"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                    Delete Application
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Delete Modal -->
+    <div x-show="showDeleteModal"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2B3C]/30 p-4 backdrop-blur-sm"
+         x-cloak>
+        <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+            <div class="border-b border-border-subtle px-5 py-4">
+                <h3 class="text-sm font-semibold text-text-primary">Delete Application</h3>
+            </div>
+            <div class="space-y-4 px-5 py-4">
+            <div class="space-y-3">
+                <div class="flex items-start">
+                    <div class="flex items-center h-5">
+                        <input id="deleteData"
+                               type="checkbox"
+                               x-model="deleteData"
+                               class="h-3.5 w-3.5 rounded border-border text-status-danger focus:ring-1 focus:ring-brand-primary">
+                    </div>
+                    <div class="ml-2 text-xs">
+                        <label for="deleteData" class="font-medium text-text-primary">Delete application data</label>
+                        <p class="text-text-secondary">This will remove all files in the storage directory.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-start">
+                    <div class="flex items-center h-5">
+                        <input id="deleteDb"
+                               type="checkbox"
+                               x-model="deleteDb"
+                               class="h-3.5 w-3.5 rounded border-border text-status-danger focus:ring-1 focus:ring-brand-primary">
+                    </div>
+                    <div class="ml-2 text-xs">
+                        <label for="deleteDb" class="font-medium text-text-primary">Delete linked databases</label>
+                        <p class="text-text-secondary">This will remove all linked databases permanently.</p>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="block text-xs font-medium text-text-secondary">
+                        To confirm, type <span class="font-semibold text-status-danger" x-text="'{{.Name}}'"></span>
+                    </label>
+                    <input type="text"
+                           x-model="confirmationName"
+                           placeholder="Type the application name to confirm"
+                           class="mt-1 block h-8 w-full rounded border border-border bg-card px-3 text-sm text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                           :class="{'border-status-danger bg-status-danger-bg/40': confirmationName && confirmationName !== '{{.Name}}',
+                                  'border-status-success bg-status-success-bg/40': confirmationName === '{{.Name}}'}">
+                </div>
+
+                <div class="flex justify-end gap-2 border-t border-border-subtle pt-4">
+                    <button @click="showDeleteModal = false"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="deleteApplication()"
+                            :disabled="confirmationName !== '{{.Name}}' || isDeleting"
+                            :class="{'opacity-50 cursor-not-allowed': confirmationName !== '{{.Name}}' || isDeleting}"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                        <span x-show="!isDeleting">Delete</span>
+                        <span x-show="isDeleting">Deleting...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{{end}}

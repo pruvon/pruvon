@@ -1,0 +1,47 @@
+# Pruvon binaries
+pruvon
+pruvon-backup
+!scripts/cron/pruvon-backup
+pruvon-amd64
+pruvon-arm64
+dokkum
+dokkum-backup
+
+# Build artifacts
+builds/
+
+# Config (contains secrets)
+config.yaml
+*.local.yaml
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Backup files
+*.bak
+*.backup
+
+# Cursor rules (not needed in repo)
+.cursor/
+.opencode/
+.playwright-mcp/
+
+# Local artifacts
+coverage.out
+dist/

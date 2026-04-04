@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# pruvon-backup: Daily script to run pruvon auto backup
+# Install this file during provisioning instead of generating it at runtime.
+
+set -e
+
+PRUVON_PATH="${PRUVON_PATH:-/opt/pruvon/pruvon}"
+CONFIG_PATH="${CONFIG_PATH:-/etc/pruvon.yml}"
+LOG_FILE="${LOG_FILE:-/var/log/pruvon-backup.log}"
+
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo "$(date): Error - Configuration file $CONFIG_PATH not found" >> "$LOG_FILE"
+    exit 1
+fi
+
+if [ ! -x "$PRUVON_PATH" ]; then
+    echo "$(date): Error - $PRUVON_PATH not found or not executable" >> "$LOG_FILE"
+    PRUVON_PATH=$(command -v pruvon 2>/dev/null || echo "")
+
+    if [ -z "$PRUVON_PATH" ]; then
+        echo "$(date): Error - pruvon not found in PATH either. Exiting." >> "$LOG_FILE"
+        exit 1
+    fi
+
+    echo "$(date): Found pruvon at $PRUVON_PATH" >> "$LOG_FILE"
+fi
+
+echo "$(date): Starting pruvon automatic backup" >> "$LOG_FILE"
+"$PRUVON_PATH" -config "$CONFIG_PATH" -backup auto >> "$LOG_FILE" 2>&1
+RESULT=$?
+
+if [ "$RESULT" -eq 0 ]; then
+    echo "$(date): Backup completed successfully" >> "$LOG_FILE"
+else
+    echo "$(date): Backup failed with exit code $RESULT" >> "$LOG_FILE"
+fi
+
+exit "$RESULT"

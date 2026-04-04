@@ -1,0 +1,38 @@
+admin:
+  username: admin
+  password: <bcrypt-admin>
+pruvon:
+  listen: 127.0.0.1:8080
+
+# Backup configuration
+backup:
+  backup_dir: "/var/lib/dokku/data/pruvon-backup"  # Directory to store backups
+  do_weekly: 0                                     # Day of week for weekly backups (0-6, where 0 is Sunday)
+  do_monthly: 1                                    # Day of month for monthly backups (1-31)
+  db_types:                                        # Database types to backup
+    - "postgres"
+    - "mariadb"
+    - "mongo"                                      # MongoDB support
+    - "redis"                                      # Redis support
+  keep_daily_days: 7                               # Number of days to keep daily backups
+  keep_weekly_num: 6                               # Number of weekly backups to keep
+  keep_monthly_num: 3                              # Number of monthly backups to keep
+
+github:
+  client_id: 123
+  client_secret: 123
+  users:
+    - username: ecylmz
+      routes:
+        - "/foo"
+      apps:
+        - "metabase"
+      services:
+        - postgres:
+            - "metabase"
+        - redis:
+            - "foo"
+            - "bar"
+    - username: isubas
+      routes:
+        - "*"

@@ -1,0 +1,47 @@
+{
+  "services": [
+    {
+      "type": "app",
+      "data": {
+        "name": "moodle",
+        "image": "bitnami/moodle:4.3.1",
+        "env": [
+          "MOODLE_DATABASE_TYPE=mariadb",
+          "MOODLE_DATABASE_HOST=mariadb",
+          "MOODLE_DATABASE_USER=moodle",
+          "MOODLE_DATABASE_PASSWORD=moodlePassword",
+          "MOODLE_DATABASE_NAME=moodle",
+          "MOODLE_USERNAME=admin",
+          "MOODLE_PASSWORD=adminPassword",
+          "MOODLE_EMAIL=admin@example.com",
+          "MOODLE_SITE_NAME=Moodle Learning Platform"
+        ],
+        "services": [
+          {
+            "name": "mariadb",
+            "version": "10.11"
+          }
+        ],
+        "domains": [
+          "moodle.example.com"
+        ],
+        "ssl": true,
+        "ports": [
+          "http:80:8080"
+        ],
+        "mounts": [
+          {
+            "type": "volume",
+            "name": "moodledata",
+            "mountPath": "/bitnami/moodle"
+          },
+          {
+            "type": "volume",
+            "name": "moodleconfig",
+            "mountPath": "/bitnami/moodledata"
+          }
+        ]
+      }
+    }
+  ]
+}

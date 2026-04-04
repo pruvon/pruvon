@@ -1,0 +1,901 @@
+{{define "content"}}
+<script>
+const userManagementComponent = () => ({
+        activeTab: 'admin',
+        userModalTab: 'username',
+        showUserModal: false,
+        showDeleteModal: false,
+        editingUser: null,
+        userToDelete: null,
+        adminCredentials: {
+            username: '',
+            password: ''
+        },
+        githubUsers: [],
+        availableApps: [],
+        availableServices: {},
+        selectedServiceType: '',
+        userForm: {
+            username: '',
+            routes: [],
+            apps: [],
+            services: {}
+        },
+        flashMessage: null,
+        flashTimeout: null,
+        newRoute: '',
+        newApp: '',
+        newService: {},
+
+        init() {
+            this.fetchUsers();
+            this.fetchApps();
+            this.fetchInstalledServicePlugins();
+        },
+
+        destroy() {
+            if (this.flashTimeout) {
+                clearTimeout(this.flashTimeout);
+                this.flashTimeout = null;
+            }
+        },
+
+        async fetchUsers() {
+            try {
+                const response = await fetch('/api/settings/users');
+                if (!response.ok) throw new Error('Failed to fetch users');
+
+                const data = await response.json();
+                console.log('API response data:', data);
+
+                if (data) {
+                    if (data.github && data.github.users) {
+                        this.githubUsers = data.github.users.map(user => ({
+                            username: user.Username || user.username || '',
+                            routes: Array.isArray(user.Routes) ? user.Routes : (Array.isArray(user.routes) ? user.routes : []),
+                            apps: Array.isArray(user.Apps) ? user.Apps : (Array.isArray(user.apps) ? user.apps : []),
+                            services: user.Services || user.services || {}
+                        }));
+                    } else {
+                        this.githubUsers = [];
+                    }
+
+                    if (data.admin) {
+                        this.adminCredentials.username = data.admin.username || '';
+                    }
+                } else {
+                    this.githubUsers = [];
+                }
+            } catch (error) {
+                console.error('Error fetching users:', error);
+                this.githubUsers = [];
+            }
+        },
+
+        async fetchApps() {
+            try {
+                const response = await fetch('/api/apps/list');
+                if (!response.ok) throw new Error('Failed to fetch apps');
+
+                const data = await response.json();
+                this.availableApps = data.apps || [];
+            } catch (error) {
+                console.error('Error fetching apps:', error);
+                this.showErrorMessage('Failed to load apps. Please try again.');
+            }
+        },
+
+        async fetchInstalledServicePlugins() {
+            try {
+                const response = await fetch('/api/services/installed');
+                if (!response.ok) throw new Error('Failed to fetch installed service plugins');
+
+                const data = await response.json();
+                this.availableServices = {};
+
+                // Initialize empty arrays for each service type
+                if (data.services && Array.isArray(data.services)) {
+                    data.services.forEach(type => {
+                        this.availableServices[type] = [];
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching installed service plugins:', error);
+                this.showErrorMessage('Failed to load service plugins. Please try again.');
+            }
+        },
+
+        async fetchServicesForType(type) {
+            if (!type) return;
+
+            try {
+                const response = await fetch(`/api/services/${type}`);
+                if (!response.ok) throw new Error(`Failed to fetch services for type ${type}`);
+
+                const data = await response.json();
+                if (data.services && Array.isArray(data.services)) {
+                    // Extract service names from the services array
+                    this.availableServices[type] = data.services.map(service => service.name);
+                }
+            } catch (error) {
+                console.error(`Error fetching services for type ${type}:`, error);
+                this.showErrorMessage(`Failed to load services for ${type}. Please try again.`);
+            }
+        },
+
+        async updateAdminCredentials() {
+            try {
+                const response = await fetch('/api/settings/users/admin', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.adminCredentials)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to update admin credentials');
+                }
+
+                this.showSuccessMessage('Admin credentials updated successfully');
+                this.adminCredentials.password = ''; // Clear password field
+            } catch (error) {
+                console.error('Error updating admin credentials:', error);
+                this.showErrorMessage(error.message || 'Failed to update admin credentials. Please try again.');
+            }
+        },
+
+        openAddUserModal() {
+            this.editingUser = null;
+            this.userForm = {
+                username: '',
+                routes: [],
+                apps: [],
+                services: {}
+            };
+            this.showUserModal = true;
+            this.userModalTab = 'username';
+            this.selectedServiceType = '';
+        },
+
+        editUser(user) {
+            console.log('Editing user:', user);
+            this.editingUser = user;
+            this.userForm = {
+                username: user.username,
+                routes: [...user.routes],
+                apps: [...user.apps],
+                services: JSON.parse(JSON.stringify(user.services || {}))
+            };
+            this.showUserModal = true;
+            this.userModalTab = 'username';
+            this.selectedServiceType = '';
+        },
+
+        closeUserModal() {
+            console.log('Closing modal, editingUser:', this.editingUser);
+            this.showUserModal = false;
+            this.editingUser = null;
+            this.selectedServiceType = '';
+        },
+
+        addRoute() {
+            if (this.newRoute && !this.userForm.routes.includes(this.newRoute)) {
+                this.userForm.routes.push(this.newRoute);
+                this.newRoute = '';
+            }
+        },
+
+        removeRoute(route) {
+            this.userForm.routes = this.userForm.routes.filter(r => r !== route);
+        },
+
+        addApp() {
+            if (this.newApp && !this.userForm.apps.includes(this.newApp)) {
+                this.userForm.apps.push(this.newApp);
+                this.newApp = '';
+            }
+        },
+
+        removeApp(app) {
+            this.userForm.apps = this.userForm.apps.filter(a => a !== app);
+        },
+
+        addService(type) {
+            if (!this.newService[type]) return;
+
+            if (!this.userForm.services[type]) {
+                this.userForm.services[type] = [];
+            }
+
+            if (!this.userForm.services[type].includes(this.newService[type])) {
+                this.userForm.services[type].push(this.newService[type]);
+            }
+
+            this.newService[type] = '';
+        },
+
+        removeService(type, service) {
+            if (this.userForm.services[type]) {
+                this.userForm.services[type] = this.userForm.services[type].filter(s => s !== service);
+
+                // Remove empty service type
+                if (this.userForm.services[type].length === 0) {
+                    delete this.userForm.services[type];
+                }
+            }
+        },
+
+        async saveUser() {
+            if (!this.userForm.username) {
+                this.showErrorMessage('Username is required');
+                return;
+            }
+
+            try {
+                let response;
+
+                console.log('Saving user, editingUser:', this.editingUser);
+
+                // Check if we're editing an existing user
+                const isEditing = this.editingUser !== null;
+
+                if (isEditing) {
+                    // Update existing user
+                    response = await fetch(`/api/settings/users/github/${this.editingUser.username}/routes`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            routes: this.userForm.routes,
+                            apps: this.userForm.apps,
+                            services: this.userForm.services
+                        })
+                    });
+                } else {
+                    // Add new user
+                    response = await fetch('/api/settings/users/github', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(this.userForm)
+                    });
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to save user');
+                }
+
+                this.closeUserModal();
+                await this.fetchUsers();
+
+                // Show success message and switch to GitHub users tab
+                this.activeTab = 'github';
+                this.showSuccessMessage(isEditing ? 'User updated successfully' : 'User added successfully');
+            } catch (error) {
+                console.error('Error saving user:', error);
+                this.showErrorMessage(error.message || 'Failed to save user. Please try again.');
+            }
+        },
+
+        showSuccessMessage(message) {
+            this.setFlashMessage(message, 'success');
+        },
+
+        showErrorMessage(message) {
+            this.setFlashMessage(message, 'error');
+        },
+
+        setFlashMessage(message, type) {
+            this.flashMessage = { text: message, type };
+            if (this.flashTimeout) {
+                clearTimeout(this.flashTimeout);
+            }
+            this.flashTimeout = setTimeout(() => {
+                this.flashMessage = null;
+                this.flashTimeout = null;
+            }, 3000);
+        },
+
+        deleteUser(user) {
+            this.userToDelete = user;
+            this.showDeleteModal = true;
+        },
+
+        async confirmDeleteUser() {
+            if (!this.userToDelete) return;
+
+            try {
+                const response = await fetch(`/api/settings/users/github/${this.userToDelete.username}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to delete user');
+                }
+
+                this.showDeleteModal = false;
+                this.userToDelete = null;
+                await this.fetchUsers();
+
+                // Show success message
+                this.showSuccessMessage('User deleted successfully');
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                this.showErrorMessage(error.message || 'Failed to delete user. Please try again.');
+            }
+        },
+
+        // Watch for changes in selectedServiceType
+        async selectedServiceTypeChanged() {
+            const selectedServices = this.availableServices[this.selectedServiceType] || [];
+
+            if (this.selectedServiceType && selectedServices.length === 0) {
+                await this.fetchServicesForType(this.selectedServiceType);
+            }
+        }
+    });
+
+if (window.Alpine) {
+    window.Alpine.data('userManagement', userManagementComponent);
+} else {
+    document.addEventListener('alpine:init', () => {
+        window.Alpine.data('userManagement', userManagementComponent);
+    });
+}
+</script>
+
+<div x-data="userManagement" class="space-y-6">
+    <div x-show="flashMessage" x-cloak class="fixed right-4 top-4 z-50 max-w-sm">
+        <div :class="{
+                'border-status-success/30 bg-status-success-bg text-status-success': flashMessage?.type === 'success',
+                'border-status-danger/30 bg-status-danger-bg text-status-danger': flashMessage?.type === 'error'
+            }"
+            class="rounded-md border px-4 py-3 shadow-modal">
+            <div class="flex items-start justify-between gap-3">
+                <p class="text-sm" x-text="flashMessage?.text"></p>
+                <button @click="flashMessage = null" class="text-current transition-colors duration-150 hover:opacity-80">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="flex items-center gap-2">
+            <svg class="h-5 w-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            <div>
+                <h1 class="text-sm font-semibold text-text-primary">User Management</h1>
+                <p class="mt-0.5 text-xs text-text-secondary">Manage admin credentials and scoped GitHub access.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="border-b border-border">
+        <div class="flex flex-wrap">
+            <button @click="activeTab = 'admin'"
+                    :class="activeTab === 'admin' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-secondary border-b-2 border-transparent hover:text-text-primary transition-colors duration-100'"
+                    class="flex items-center justify-center gap-1 px-4 py-2.5 text-sm font-medium -mb-px">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Admin Credentials</span>
+            </button>
+
+            <button @click="activeTab = 'github'"
+                    :class="activeTab === 'github' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-secondary border-b-2 border-transparent hover:text-text-primary transition-colors duration-100'"
+                    class="flex items-center justify-center gap-1 px-4 py-2.5 text-sm font-medium -mb-px">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.239 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+                <span>GitHub Users</span>
+            </button>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'admin'" x-cloak>
+        <div class="rounded-md border border-border bg-card p-4">
+            <div>
+                <h2 class="text-sm font-semibold text-text-primary mb-4">Admin Credentials</h2>
+                <form @submit.prevent="updateAdminCredentials">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div class="flex flex-col gap-1.5">
+                            <label for="admin-username" class="text-xs font-medium text-text-secondary">Username</label>
+                            <input type="text" id="admin-username" x-model="adminCredentials.username"
+                                   class="h-8 rounded border border-border bg-card px-3 text-sm text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                            <label for="admin-password" class="text-xs font-medium text-text-secondary">Password</label>
+                            <input type="password" id="admin-password" x-model="adminCredentials.password"
+                                   class="h-8 rounded border border-border bg-card px-3 text-sm text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end border-t border-border-subtle pt-4">
+                        <button type="submit" class="inline-flex h-8 items-center rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                            Update Admin Credentials
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'github'" x-cloak>
+        <div class="rounded-md border border-border bg-card p-4">
+            <div class="flex justify-between items-center mb-5 gap-4">
+                    <h2 class="text-sm font-semibold text-text-primary">GitHub Users</h2>
+                    <button @click="openAddUserModal" class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                        <div class="flex items-center">
+                            <svg class="h-3.5 w-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            Add GitHub User
+                        </div>
+                    </button>
+                </div>
+
+                <!-- Users Table -->
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                <thead>
+                            <tr>
+                                <th scope="col" class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Username</th>
+                                <th scope="col" class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Routes</th>
+                                <th scope="col" class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Apps</th>
+                                <th scope="col" class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Services</th>
+                                <th scope="col" class="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-text-secondary">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border-subtle">
+                            <template x-if="githubUsers.length === 0">
+                                <tr>
+                                    <td colspan="5" class="px-4 py-6 text-center text-xs text-text-secondary">No GitHub users found</td>
+                                </tr>
+                            </template>
+                            <template x-for="(user, index) in githubUsers" :key="index">
+                                <tr class="group hover:bg-surface transition-colors duration-100">
+                                    <td class="px-4 py-2.5 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded bg-surface text-text-secondary">
+                                                <span class="text-xs font-medium uppercase" x-text="user.username.charAt(0)"></span>
+                                            </div>
+                                            <div class="ml-2">
+                                                <div class="text-sm font-medium text-text-primary" x-text="user.username"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-2.5 whitespace-nowrap">
+                                        <div class="flex flex-wrap gap-1">
+                                            <template x-for="(route, routeIndex) in user.routes" :key="routeIndex">
+                                                <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-sm bg-brand-subtle text-brand-primary" x-text="route"></span>
+                                            </template>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-2.5 whitespace-nowrap">
+                                        <div class="flex flex-wrap gap-1">
+                                            <template x-for="(app, appIndex) in user.apps" :key="appIndex">
+                                                <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-sm bg-status-success-bg text-status-success" x-text="app"></span>
+                                            </template>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-2.5">
+                                        <div class="flex flex-wrap gap-1">
+                                            <template x-for="(services, type) in user.services" :key="type">
+                                                <template x-for="(service, serviceIndex) in services" :key="type + '-' + serviceIndex">
+                                                    <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-sm bg-status-neutral-bg text-status-neutral" x-text="type + ': ' + service"></span>
+                                                </template>
+                                            </template>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-2.5 whitespace-nowrap text-right">
+                                        <div class="flex items-center justify-end gap-1 opacity-0 transition-opacity duration-100 group-hover:opacity-100">
+                                            <button @click="editUser(user)" class="inline-flex h-7 items-center rounded px-2 text-xs font-medium text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">Edit</button>
+                                            <button @click="deleteUser(user)" class="inline-flex h-7 items-center rounded px-2 text-xs font-medium text-status-danger transition-colors duration-150 hover:bg-status-danger-bg">Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    <!-- Add/Edit User Modal -->
+    <div x-show="showUserModal" class="fixed inset-0 z-50 overflow-y-auto bg-[#1A2B3C]/30 backdrop-blur-sm" x-cloak>
+        <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative max-w-4xl w-full bg-card rounded-lg shadow-modal border border-border p-4">
+            <div class="space-y-4">
+                <div class="flex justify-between items-center pb-2 border-b border-border-subtle">
+                    <div class="flex items-center">
+                        <div class="mr-2 text-text-secondary">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                        </div>
+                        <h3 class="text-sm font-semibold text-text-primary" x-text="editingUser ? 'Edit GitHub User' : 'Add GitHub User'"></h3>
+                    </div>
+                    <button @click="closeUserModal" class="text-text-tertiary hover:text-text-primary p-1 rounded transition-colors duration-150 hover:bg-surface">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- User Modal Tabs -->
+                <div class="border-b border-border">
+                    <ul class="flex flex-wrap -mb-px text-sm font-medium text-center" role="tablist">
+                        <li class="mr-2" role="presentation">
+                            <button class="inline-block px-4 py-2.5"
+                                    :class="userModalTab === 'username' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-secondary hover:text-text-primary border-b-2 border-transparent'"
+                                    @click="userModalTab = 'username'"
+                                    role="tab"
+                                    aria-selected="false">
+                                Username
+                            </button>
+                        </li>
+                        <li class="mr-2" role="presentation">
+                            <button class="inline-block px-4 py-2.5"
+                                    :class="userModalTab === 'apps' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-secondary hover:text-text-primary border-b-2 border-transparent'"
+                                    @click="userModalTab = 'apps'"
+                                    role="tab"
+                                    aria-selected="false">
+                                Apps
+                            </button>
+                        </li>
+                        <li class="mr-2" role="presentation">
+                            <button class="inline-block px-4 py-2.5"
+                                    :class="userModalTab === 'services' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-secondary hover:text-text-primary border-b-2 border-transparent'"
+                                    @click="userModalTab = 'services'"
+                                    role="tab"
+                                    aria-selected="false">
+                                Services
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Username Tab -->
+                <div x-show="userModalTab === 'username'" x-cloak>
+                    <div class="space-y-4">
+                        <div class="flex flex-col gap-1.5">
+                            <label for="github-username" class="text-xs font-medium text-text-secondary">GitHub Username</label>
+                            <input type="text" id="github-username" x-model="userForm.username"
+                                   class="h-8 rounded border border-border bg-card px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                        </div>
+                        <div class="space-y-3">
+                            <label class="text-xs font-medium text-text-secondary">Routes</label>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="route in userForm.routes" :key="route">
+                                    <div class="group inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface px-2 py-1 text-xs font-medium text-text-primary">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                        </svg>
+                                        <span x-text="route"></span>
+                                        <button type="button" @click="removeRoute(route)" class="inline-flex h-5 w-5 items-center justify-center rounded text-text-tertiary opacity-0 transition-opacity duration-100 hover:bg-card hover:text-status-danger group-hover:opacity-100">
+                                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="flex">
+                                <input type="text" x-model="newRoute"
+                                       class="h-8 flex-1 rounded-l border border-border bg-card px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                       placeholder="Add route (e.g., /apps/*)">
+                                <button @click="addRoute"
+                                        class="inline-flex h-8 items-center rounded-r border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                                    Add
+                                </button>
+                            </div>
+                            <p class="text-xs text-text-tertiary">Use `*` for wildcard access, for example `/apps/*`.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Apps Tab -->
+                <div x-show="userModalTab === 'apps'" x-cloak>
+                    <div class="space-y-4">
+                        <div class="space-y-3">
+                            <label class="text-xs font-medium text-text-secondary">Apps</label>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="app in userForm.apps" :key="app">
+                                    <div class="group inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface px-2 py-1 text-xs font-medium text-text-primary">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                                        </svg>
+                                        <span x-text="app"></span>
+                                        <button type="button" @click="removeApp(app)" class="inline-flex h-5 w-5 items-center justify-center rounded text-text-tertiary opacity-0 transition-opacity duration-100 hover:bg-card hover:text-status-danger group-hover:opacity-100">
+                                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="flex">
+                                <div class="relative flex-1" x-data="{ open: false }">
+                                    <div @click="open = !open"
+                                         class="flex h-8 w-full cursor-pointer items-center justify-between rounded-l border border-border bg-card px-3 text-sm text-text-primary transition-colors duration-150 hover:border-border-strong">
+                                        <div class="flex items-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="mr-2 h-4 w-4 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                                            </svg>
+                                            <span x-text="newApp || 'Select an app'" :class="!newApp && 'text-text-tertiary'"></span>
+                                        </div>
+                                        <svg class="h-4 w-4 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                    <div x-show="open"
+                                         @click.away="open = false"
+                                         class="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-card shadow-dropdown">
+                                        <div class="p-2 space-y-1">
+                                            <template x-for="app in availableApps" :key="app">
+                                                <div @click="newApp = app; open = false"
+                                                      class="flex cursor-pointer items-center space-x-2 rounded px-3 py-2 text-sm transition-colors duration-100"
+                                                      :class="newApp === app ? 'bg-brand-subtle text-brand-primary font-medium' : 'text-text-primary hover:bg-surface'">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                                                    </svg>
+                                                    <span x-text="app"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button @click="addApp(); newApp = ''"
+                                        class="inline-flex h-8 items-center rounded-r border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                                    Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Services Tab -->
+                <div x-show="userModalTab === 'services'" x-cloak>
+                    <div class="space-y-4">
+                        <div class="space-y-4">
+                            <label class="text-xs font-medium text-text-secondary">Services</label>
+
+                            <!-- Service Type Selection -->
+                            <div class="mb-4">
+                                <label class="text-xs font-medium text-text-secondary">Service Type</label>
+                                <div class="relative" x-data="{ open: false }">
+                                    <div @click="open = !open"
+                                         class="flex h-8 w-full cursor-pointer items-center justify-between rounded border border-border bg-card px-3 text-sm text-text-primary transition-colors duration-150 hover:border-border-strong">
+                                        <div class="flex items-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="mr-2 h-4 w-4 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                            </svg>
+                                            <span x-text="selectedServiceType || 'Select a service type'" :class="!selectedServiceType && 'text-text-tertiary'"></span>
+                                        </div>
+                                        <svg class="h-4 w-4 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                    <div x-show="open"
+                                         @click.away="open = false"
+                                         class="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-card shadow-dropdown">
+                                        <div class="p-2 space-y-1">
+                                            <template x-for="type in Object.keys(availableServices)" :key="type">
+                                                <div @click="selectedServiceType = type; selectedServiceTypeChanged(); open = false"
+                                                      class="flex cursor-pointer items-center space-x-2 rounded px-3 py-2 text-sm transition-colors duration-100"
+                                                      :class="selectedServiceType === type ? 'bg-brand-subtle text-brand-primary font-medium' : 'text-text-primary hover:bg-surface'">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                                    </svg>
+                                                    <span x-text="type"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Service Selection -->
+                            <div x-show="selectedServiceType" class="mb-4">
+                                <label class="text-xs font-medium text-text-secondary">Services of type <span x-text="selectedServiceType"></span></label>
+
+                                <!-- Loading indicator -->
+                                <div x-show="(availableServices[selectedServiceType] || []).length === 0" class="flex items-center justify-center py-4">
+                                    <div class="h-6 w-6 animate-spin rounded-full border-b-2 border-brand-primary"></div>
+                                    <span class="ml-2 text-xs text-text-tertiary">Loading services...</span>
+                                </div>
+
+                                <!-- Selected Services -->
+                                <div x-show="(availableServices[selectedServiceType] || []).length > 0" class="flex flex-wrap gap-2 mb-2">
+                                    <template x-for="service in userForm.services[selectedServiceType] || []" :key="service">
+                                    <div class="group inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface px-2 py-1 text-xs font-medium text-text-primary">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                            </svg>
+                                            <span x-text="service"></span>
+                                            <button type="button" @click="removeService(selectedServiceType, service)" class="inline-flex h-5 w-5 items-center justify-center rounded text-text-tertiary opacity-0 transition-opacity duration-100 hover:bg-card hover:text-status-danger group-hover:opacity-100">
+                                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                <!-- Service Selection -->
+                                <div x-show="(availableServices[selectedServiceType] || []).length > 0" class="flex">
+                                    <div class="relative flex-1" x-data="{ open: false }">
+                                        <div @click="open = !open"
+                                             class="flex h-8 w-full cursor-pointer items-center justify-between rounded-l border border-border bg-card px-3 text-sm text-text-primary transition-colors duration-150 hover:border-border-strong">
+                                            <div class="flex items-center">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="mr-2 h-4 w-4 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                                </svg>
+                                                <span x-text="newService[selectedServiceType] || 'Select a service'" :class="!newService[selectedServiceType] && 'text-text-tertiary'"></span>
+                                            </div>
+                                            <svg class="h-4 w-4 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </div>
+                                        <div x-show="open"
+                                             @click.away="open = false"
+                                             class="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-card shadow-dropdown">
+                                            <div class="p-2 space-y-1">
+                                                <template x-for="service in availableServices[selectedServiceType] || []" :key="service">
+                                                    <div @click="newService[selectedServiceType] = service; open = false"
+                                                      class="flex cursor-pointer items-center space-x-2 rounded px-3 py-2 text-sm transition-colors duration-100"
+                                                      :class="newService[selectedServiceType] === service ? 'bg-brand-subtle text-brand-primary font-medium' : 'text-text-primary hover:bg-surface'">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                                        </svg>
+                                                        <span x-text="service"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button @click="addService(selectedServiceType); newService[selectedServiceType] = ''"
+                                            class="inline-flex h-8 items-center rounded-r border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Summary of all selected services -->
+                            <div class="mt-6">
+                                <h4 class="mb-2 flex items-center text-xs font-medium text-text-secondary">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="mr-1 h-3.5 w-3.5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                    </svg>
+                                    Services Summary
+                                </h4>
+                                <div class="rounded-md border border-border bg-surface p-3">
+                                    <template x-if="Object.keys(userForm.services).length === 0">
+                                        <p class="text-xs text-text-tertiary">No services selected</p>
+                                    </template>
+                                    <template x-for="(services, type) in userForm.services" :key="type">
+                                        <div class="mb-2 last:mb-0">
+                                            <h5 class="mb-1.5 flex items-center text-xs font-medium text-text-secondary">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="mr-1 h-3 w-3 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                                                </svg>
+                                                <span x-text="type"></span>
+                                            </h5>
+                                            <div class="flex flex-wrap gap-1.5 pl-4">
+                                                <template x-for="service in services" :key="service">
+                                                    <div class="group inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-2 py-1 text-xs text-text-primary">
+                                                        <span x-text="service"></span>
+                                                        <button type="button" @click="removeService(type, service)" class="inline-flex h-5 w-5 items-center justify-center rounded text-text-tertiary opacity-0 transition-opacity duration-100 hover:bg-surface hover:text-status-danger group-hover:opacity-100">
+                                                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-3 border-t border-border-subtle">
+                    <button @click="closeUserModal"
+                            class="inline-flex h-8 items-center rounded border border-border bg-card px-3 text-sm font-medium text-text-primary hover:bg-surface focus:outline-none focus:ring-1 focus:ring-brand-primary transition-colors">
+                        Cancel
+                    </button>
+                    <button @click="saveUser"
+                            class="inline-flex h-8 items-center rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white hover:bg-brand-hover focus:outline-none focus:ring-1 focus:ring-brand-primary transition-colors duration-150">
+                        <span x-text="editingUser ? 'Update User' : 'Add User'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+
+    <div x-show="showDeleteModal" class="fixed inset-0 z-50 overflow-y-auto bg-[#1A2B3C]/30 backdrop-blur-sm" x-cloak>
+        <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative max-w-md w-full bg-card rounded-lg shadow-modal border border-border p-4">
+            <div class="space-y-4">
+                <div class="flex justify-between items-center pb-2 border-b border-border-subtle">
+                    <div class="flex items-center">
+                        <div class="mr-2 text-status-danger">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-semibold text-text-primary">Delete User</h3>
+                    </div>
+                    <button @click="showDeleteModal = false" class="text-text-tertiary hover:text-text-primary p-1 rounded hover:bg-surface transition-colors duration-150">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="bg-status-danger-bg/30 border border-status-danger/30 rounded-md p-3">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-status-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-xs text-status-danger">
+                                Are you sure you want to delete the user <span class="font-semibold" x-text="userToDelete?.username"></span>?
+                            </p>
+                            <p class="text-xs text-text-secondary mt-1">This action cannot be undone.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-3 border-t border-border-subtle">
+                    <button @click="showDeleteModal = false"
+                            class="inline-flex h-8 items-center rounded border border-border bg-card px-3 text-sm font-medium text-text-primary hover:bg-surface focus:outline-none focus:ring-1 focus:ring-brand-primary transition-colors">
+                        Cancel
+                    </button>
+                    <button @click="confirmDeleteUser"
+                            class="inline-flex h-8 items-center rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white hover:bg-[#833530] focus:outline-none focus:ring-1 focus:ring-status-danger transition-colors duration-150">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    [x-cloak] { display: none !important; }
+
+    .overflow-y-auto::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .overflow-y-auto::-webkit-scrollbar-track {
+        background-color: rgba(0,0,0,0.04);
+        border-radius: 3px;
+    }
+
+    .overflow-y-auto::-webkit-scrollbar-thumb {
+        background-color: rgba(0,0,0,0.10);
+        border-radius: 3px;
+    }
+
+    .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+        background-color: #7A96B0;
+    }
+</style>
+{{end}}

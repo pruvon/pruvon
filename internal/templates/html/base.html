@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="view-transition" content="same-origin">
+    <title>{{if .title}}{{.title}} - Pruvon{{else if .Title}}{{.Title}} - Pruvon{{else}}Pruvon{{end}}</title>
+    {{if not .HideNavigation}}
+    <link rel="icon" type="image/x-icon" href="/static/images/logo/favicon.ico">
+    <link rel="preload" href="/static/images/logo/logo.webp" as="image" type="image/webp">
+    {{end}}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" as="style">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    {{if not .HideNavigation}}
+    <script src="/static/js/tailwind.min.js"></script>
+    <script defer src="/static/js/alpine.min.js"></script>
+    {{end}}
+    <script src="https://cdn.tailwindcss.com/3.3.0"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['DM Sans', 'sans-serif'],
+                        serif: ['Instrument Serif', 'serif'],
+                        mono: ['DM Mono', 'monospace'],
+                    },
+                    fontSize: {
+                        '2xs': ['11px', { lineHeight: '1.4' }],
+                    },
+                    colors: {
+                        surface: '#F4F6F8',
+                        sidebar: '#162436',
+                        'sidebar-text': '#F4F6F8',
+                        'sidebar-text-muted': '#7A96B0',
+                        card: '#FFFFFF',
+                        border: {
+                            DEFAULT: 'rgba(0,0,0,0.07)',
+                            subtle: 'rgba(0,0,0,0.05)',
+                            strong: 'rgba(0,0,0,0.10)',
+                        },
+                        brand: {
+                            primary: '#2D9B6F',
+                            hover: '#3DBF8A',
+                            subtle: 'rgba(45,155,111,0.10)',
+                            accent: '#3DBF8A',
+                            'accent-subtle': 'rgba(61,191,138,0.10)',
+                        },
+                        status: {
+                            success: '#2D9B6F',
+                            'success-bg': 'rgba(45,155,111,0.10)',
+                            warning: '#B06A2B',
+                            'warning-bg': '#FBF0E4',
+                            danger: '#9C3F33',
+                            'danger-bg': '#F7EDED',
+                            neutral: '#7A96B0',
+                            'neutral-bg': 'rgba(0,0,0,0.04)',
+                        },
+                        text: {
+                            primary: '#1A2B3C',
+                            secondary: '#3D5166',
+                            tertiary: '#7A96B0',
+                            link: '#2D9B6F',
+                        },
+                    },
+                    borderRadius: {
+                        none: '0',
+                        sm: '3px',
+                        DEFAULT: '5px',
+                        md: '6px',
+                        lg: '8px',
+                        xl: '12px',
+                        full: '9999px',
+                    },
+                    boxShadow: {
+                        none: 'none',
+                        dropdown: '0 2px 8px rgba(0,0,0,0.08)',
+                        modal: '0 8px 32px rgba(0,0,0,0.12)',
+                        tooltip: '0 2px 6px rgba(0,0,0,0.10)',
+                    },
+                },
+            },
+            plugins: [],
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+
+        /* Sidebar FOUC prevention */
+        html.sidebar-collapsed aside[data-primary-sidebar] [x-show="!sidebarCollapsed"] {
+            display: none !important;
+        }
+        html:not(.sidebar-collapsed) aside[data-primary-sidebar] [x-show="sidebarCollapsed"] {
+            display: none !important;
+        }
+        html.sidebar-collapsed aside[data-primary-sidebar] {
+            width: 3.5rem !important; /* w-14 */
+        }
+        html:not(.sidebar-collapsed) aside[data-primary-sidebar] {
+            width: 11rem !important; /* w-44 */
+        }
+        html.sidebar-collapsed aside[data-primary-sidebar] {
+            width: 3.5rem !important; /* w-14 */
+        }
+
+        html,
+        body {
+            min-height: 100%;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: #F4F6F8;
+            color: #1A2B3C;
+        }
+
+        .terminal,
+        pre,
+        code,
+        .font-mono,
+        .xterm {
+            font-family: 'DM Mono', monospace;
+        }
+
+        ::selection {
+            background: rgba(45, 155, 111, 0.18);
+            color: #1A2B3C;
+        }
+    </style>
+    <script>
+        // Apply sidebar state immediately to prevent layout shift (FOUC)
+        if (localStorage.getItem('sidebarCollapsed') === 'true') {
+            document.documentElement.classList.add('sidebar-collapsed');
+        }
+    </script>
+    {{template "scripts" .}}
+</head>
+<body
+    class="min-h-screen bg-surface font-sans text-sm text-text-primary antialiased lg:h-screen lg:overflow-hidden"
+    x-data="{
+        flashMessage: null,
+        showFlash: false,
+        dismissTimer: null,
+        showMessage(text, type = 'success') {
+            this.flashMessage = { text, type };
+            this.showFlash = true;
+            if (this.dismissTimer) {
+                clearTimeout(this.dismissTimer);
+            }
+            this.dismissTimer = setTimeout(() => {
+                this.showFlash = false;
+            }, 8000);
+        },
+        hideMessage() {
+            this.showFlash = false;
+            if (this.dismissTimer) {
+                clearTimeout(this.dismissTimer);
+                this.dismissTimer = null;
+            }
+        }
+    }"
+>
+    <div
+        x-show="showFlash"
+        x-cloak
+        x-transition:enter="transition ease-out duration-150"
+        x-transition:enter-start="opacity-0 -translate-y-2"
+        x-transition:enter-end="opacity-100 translate-y-0"
+        x-transition:leave="transition ease-in duration-100"
+        x-transition:leave-start="opacity-100 translate-y-0"
+        x-transition:leave-end="opacity-0 -translate-y-2"
+        class="fixed right-4 top-4 z-50 w-full max-w-sm"
+    >
+        <div
+            :class="{
+                'border-status-success/40 bg-status-success-bg': flashMessage?.type === 'success',
+                'border-status-danger/40 bg-status-danger-bg': flashMessage?.type === 'error',
+                'border-status-warning/40 bg-status-warning-bg': flashMessage?.type === 'warning',
+                'border-brand-primary/25 bg-brand-subtle': flashMessage?.type === 'info'
+            }"
+            class="rounded-md border bg-card shadow-dropdown"
+        >
+            <div class="flex items-start gap-3 p-3">
+                <span
+                    :class="{
+                        'bg-status-success': flashMessage?.type === 'success',
+                        'bg-status-danger': flashMessage?.type === 'error',
+                        'bg-status-warning': flashMessage?.type === 'warning',
+                        'bg-brand-primary': flashMessage?.type === 'info'
+                    }"
+                    class="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                ></span>
+                <p class="flex-1 text-sm text-text-primary break-words" x-text="flashMessage?.text"></p>
+                <button
+                    type="button"
+                    class="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary"
+                    @click="hideMessage()"
+                >
+                    <svg class="h-[14px] w-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            window.showFlashMessage = function(text, type = 'success') {
+                const root = document.body;
+                if (root && root.__x && root.__x.$data && typeof root.__x.$data.showMessage === 'function') {
+                    root.__x.$data.showMessage(text, type);
+                }
+            }
+        })
+    </script>
+
+    {{if .FlashMessage}}
+    <script type="application/json" id="flash-data">
+        {"message": {{printf "%q" .FlashMessage}}, "type": {{printf "%q" .FlashType}}}
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const data = JSON.parse(document.getElementById('flash-data').textContent);
+                window.showFlashMessage(data.message, data.type);
+            } catch(e) {}
+        })
+    </script>
+    {{end}}
+
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const flashMessage = localStorage.getItem('flashMessage')
+            const flashType = localStorage.getItem('flashType')
+            if (flashMessage) {
+                window.showFlashMessage(flashMessage, flashType || 'success')
+                localStorage.removeItem('flashMessage')
+                localStorage.removeItem('flashType')
+            }
+        })
+    </script>
+
+    {{if not .HideNavigation}}
+    <div
+        id="spa-layout"
+        class="min-h-screen lg:flex lg:h-screen lg:overflow-hidden"
+        x-data="{
+            currentPath: window.location.pathname,
+            sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true',
+            mobileSidebarOpen: false,
+            isActive(path) {
+                if (path === '/') {
+                    return this.currentPath === '/';
+                }
+                if (path.split('/') > 2) {
+                    return this.currentPath.startsWith(path);
+                }
+                return this.currentPath === path || (this.currentPath.startsWith(path + '/') && path !== '/');
+            },
+            toggleSidebar() {
+                this.sidebarCollapsed = !this.sidebarCollapsed;
+                localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed);
+                if (this.sidebarCollapsed) {
+                    document.documentElement.classList.add('sidebar-collapsed');
+                } else {
+                    document.documentElement.classList.remove('sidebar-collapsed');
+                }
+            }
+        }"
+        @popstate.window="currentPath = window.location.pathname"
+        @keydown.escape.window="mobileSidebarOpen = false"
+    >
+        <aside data-primary-sidebar class="hidden h-screen flex-col border-r border-border bg-sidebar transition-all duration-200 lg:flex lg:flex-shrink-0 w-44" :class="sidebarCollapsed ? 'w-14' : 'w-44'">
+            <div class="flex h-11 items-center justify-between border-b border-white/10 px-2.5">
+                <a href="/" class="flex flex-1 items-center justify-center gap-2 text-base font-medium tracking-wide text-sidebar-text">
+                    <span x-show="!sidebarCollapsed">Pruvon</span>
+                    <span x-show="sidebarCollapsed" class="flex h-7 w-7 items-center justify-center rounded bg-brand-primary text-sm font-medium text-white">P</span>
+                </a>
+                <button
+                    @click="toggleSidebar()"
+                    class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-sidebar-text-muted transition-colors duration-150 hover:bg-white/10 hover:text-sidebar-text"
+                    :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+                >
+                    <svg x-show="!sidebarCollapsed" xmlns="http://www.w3.org/2000/svg" class="h-[14px] w-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path>
+                    </svg>
+                    <svg x-show="sidebarCollapsed" xmlns="http://www.w3.org/2000/svg" class="h-[14px] w-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <nav class="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
+                <a
+                    href="/"
+                    :class="isActive('/') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm font-medium transition-colors duration-100"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    <span x-show="!sidebarCollapsed">Dashboard</span>
+                </a>
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/apps" .AuthType) (hasAppAccess .Username "" .AuthType)}}
+                <a
+                    href="/apps"
+                    :class="isActive('/apps') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path d="M9.5 2h-6A1.502 1.502 0 0 0 2 3.5v6A1.502 1.502 0 0 0 3.5 11h6A1.502 1.502 0 0 0 11 9.5v-6A1.502 1.502 0 0 0 9.5 2zm.5 7.5a.501.501 0 0 1-.5.5h-6a.501.501 0 0 1-.5-.5v-6a.501.501 0 0 1 .5-.5h6a.501.501 0 0 1 .5.5zM20.5 2h-6A1.502 1.502 0 0 0 13 3.5v6a1.502 1.502 0 0 0 1.5 1.5h6A1.502 1.502 0 0 0 22 9.5v-6A1.502 1.502 0 0 0 20.5 2zm.5 7.5a.501.501 0 0 1-.5.5h-6a.501.501 0 0 1-.5-.5v-6a.501.501 0 0 1 .5-.5h6a.501.501 0 0 1 .5.5zM9.5 13h-6A1.502 1.502 0 0 0 2 14.5v6A1.502 1.502 0 0 0 3.5 22h6a1.502 1.502 0 0 0 1.5-1.5v-6A1.502 1.502 0 0 0 9.5 13zm.5 7.5a.501.501 0 0 1-.5.5h-6a.501.501 0 0 1-.5-.5v-6a.501.501 0 0 1 .5-.5h6a.501.501 0 0 1 .5.5zM20.5 13h-6a1.502 1.502 0 0 0-1.5 1.5v6a1.502 1.502 0 0 0 1.5 1.5h6a1.502 1.502 0 0 0 1.5-1.5v-6a1.502 1.502 0 0 0-1.5-1.5zm.5 7.5a.501.501 0 0 1-.5.5h-6a.501.501 0 0 1-.5-.5v-6a.501.501 0 0 1 .5-.5h6a.501.501 0 0 1 .5.5z" stroke-width="1.2"></path>
+                    </svg>
+                    <span x-show="!sidebarCollapsed">Applications</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasServiceAccess .Username "" "" .AuthType)}}
+                <a
+                    href="/services"
+                    :class="isActive('/services') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                    </svg>
+                    <span x-show="!sidebarCollapsed">Services</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/docker" .AuthType)}}
+                <a
+                    href="/docker"
+                    :class="isActive('/docker') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" viewBox="0 0 32 32" fill="none" stroke="currentColor">
+                        <path d="M12.75,22c0,0.414-0.336,0.75-0.75,0.75s-0.75-0.336-0.75-0.75s0.336-0.75,0.75-0.75S12.75,21.586,12.75,22z M27.814,17.26h0.215c1.345,0,2.603-0.719,3.281-1.875c0.066-0.112,0.066-0.252,0-0.364c-0.613-1.044-1.664-1.718-2.857-1.848 c-0.111-1.225-0.83-2.331-1.932-2.939c-0.107-0.061-0.239-0.061-0.349,0c-1.2,0.665-1.946,1.919-1.946,3.273 c0,0.768,0.241,1.514,0.679,2.138H22.36V12c0-0.199-0.161-0.36-0.36-0.36h-3.64V4c0-0.199-0.161-0.36-0.36-0.36h-4 c-0.199,0-0.36,0.161-0.36,0.36v3.64H10C9.801,7.64,9.64,7.801,9.64,8v3.64H6c-0.199,0-0.36,0.161-0.36,0.36v3.642H1l0,0 c-0.096,0-0.187,0.038-0.254,0.105c-0.068,0.067-0.105,0.159-0.105,0.254v0.898c0,2.826,1.148,5.394,3.011,7.277 c0.033,0.058,0.081,0.105,0.139,0.138c1.929,1.882,4.586,3.046,7.516,3.046C20.144,27.36,27.121,21.447,27.814,17.26z M10.047,23.647c0.19-0.057,0.299-0.257,0.243-0.447s-0.256-0.301-0.448-0.242c-1.425,0.423-3.499,0.67-5.71,0.682 C2.416,21.889,1.36,19.513,1.36,16.9v-0.539l24.34,0.003l0,0c0.148,0,0.282-0.091,0.336-0.23s0.017-0.296-0.094-0.396 c-0.633-0.574-0.995-1.387-0.995-2.231c0-1.026,0.531-1.981,1.4-2.54c0.869,0.558,1.4,1.513,1.4,2.54v0.004 c0,0.196,0.156,0.355,0.353,0.36c1.005,0.022,1.915,0.517,2.474,1.333c-0.57,0.83-1.526,1.337-2.545,1.337h-0.531 c-0.187,0-0.343,0.143-0.358,0.329c-0.337,3.844-7.287,9.771-15.834,9.771c-2.438,0-4.673-0.863-6.404-2.294 C6.889,24.287,8.727,24.039,10.047,23.647z M18.36,12.36h3.279v3.28H18.36V12.36z M14.36,12.36h3.28v3.28h-3.28V12.36z M10.36,12.36 h3.28v3.28h-3.28V12.36z M6.36,12.36h3.28v3.28H6.36V12.36z M14.36,8.36h3.28v3.28h-3.28V8.36z M10.36,8.36h3.28v3.28h-3.28V8.36z M14.36,4.36h3.28v3.28h-3.28V4.36z"></path>
+                    </svg>
+                    <span x-show="!sidebarCollapsed">Docker</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/plugins" .AuthType)}}
+                <a
+                    href="/plugins"
+                    :class="isActive('/plugins') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 011-1h1a2 2 0 100-4H7a1 1 0 01-1-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"></path>
+                    </svg>
+                    <span x-show="!sidebarCollapsed">Plugins</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/backups" .AuthType)}}
+                <a
+                    href="/backups"
+                    :class="isActive('/backups') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20"></path>
+                    </svg>
+                    <span x-show="!sidebarCollapsed">Backups</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/logs" .AuthType)}}
+                <a
+                    href="/logs"
+                    :class="isActive('/logs') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                    <span x-show="!sidebarCollapsed">Logs</span>
+                </a>
+                {{end}}
+
+                {{if eq .AuthType "admin"}}
+                <a
+                    href="/settings"
+                    :class="isActive('/settings') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    <span x-show="!sidebarCollapsed">Settings</span>
+                </a>
+                {{end}}
+            </nav>
+
+            <div class="border-t border-white/10 p-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-1.5">
+                        {{if .updateCheckError}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning animate-pulse" title="Update Check Error"></div>
+                        {{else if .updateAvailable}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning" title="Update Available"></div>
+                        {{else}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-success/60" title="System Online"></div>
+                        {{end}}
+                        <span class="text-[11px] font-mono text-sidebar-text-muted uppercase tracking-wide" x-show="!sidebarCollapsed">
+                            {{if .version}}v{{.version}}{{else if .appVersionNumber}}v{{.appVersionNumber}}{{else if .pruvonAppVersion}}v{{.pruvonAppVersion}}{{else}}v0.1.0{{end}}
+                        </span>
+                    </div>
+
+                    <a href="/logout" class="inline-flex items-center justify-center text-sidebar-text-muted transition-colors duration-150 hover:text-sidebar-text" :class="sidebarCollapsed ? 'mx-auto' : ''" title="Logout">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </aside>
+
+        <template x-teleport="body">
+            <div x-show="mobileSidebarOpen" x-cloak class="fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 lg:hidden" @click="mobileSidebarOpen = false"></div>
+        </template>
+
+        <aside
+            x-show="mobileSidebarOpen"
+            x-cloak
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="-translate-x-full"
+            x-transition:enter-end="translate-x-0"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="translate-x-0"
+            x-transition:leave-end="-translate-x-full"
+            class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-sidebar lg:hidden"
+        >
+            <div class="flex h-11 items-center justify-between border-b border-white/10 px-3">
+                <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-tight text-sidebar-text">
+                    <span>Pruvon</span>
+                </a>
+                <button
+                    @click="mobileSidebarOpen = false"
+                    class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-sidebar-text-muted transition-colors duration-150 hover:bg-white/10 hover:text-sidebar-text"
+                    aria-label="Close menu"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[14px] w-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <nav class="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
+                <a
+                    href="/"
+                    :class="isActive('/') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm font-medium transition-colors duration-100"
+                    @click="mobileSidebarOpen = false"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/apps" .AuthType) (hasAppAccess .Username "" .AuthType)}}
+                <a
+                    href="/apps"
+                    :class="isActive('/apps') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                    @click="mobileSidebarOpen = false"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path d="M9.5 2h-6A1.502 1.502 0 0 0 2 3.5v6A1.502 1.502 0 0 0 3.5 11h6A1.502 1.502 0 0 0 11 9.5v-6A1.502 1.502 0 0 0 9.5 2zm.5 7.5a.501.501 0 0 1-.5.5h-6a.501.501 0 0 1-.5-.5v-6a.501.501 0 0 1 .5-.5h6a.501.501 0 0 1 .5.5zM20.5 2h-6A1.502 1.502 0 0 0 13 3.5v6a1.502 1.502 0 0 0 1.5 1.5h6A1.502 1.502 0 0 0 22 9.5v-6A1.502 1.502 0 0 0 20.5 2zm.5 7.5a.501.501 0 0 1-.5.5h-6a.501.501 0 0 1-.5-.5v-6a.501.501 0 0 1 .5-.5h6a.501.501 0 0 1 .5.5zM9.5 13h-6A1.502 1.502 0 0 0 2 14.5v6A1.502 1.502 0 0 0 3.5 22h6a1.502 1.502 0 0 0 1.5-1.5v-6A1.502 1.502 0 0 0 9.5 13zm.5 7.5a.501.501 0 0 1-.5.5h-6a.501.501 0 0 1-.5-.5v-6a.501.501 0 0 1 .5-.5h6a.501.501 0 0 1 .5.5zM20.5 13h-6a1.502 1.502 0 0 0-1.5 1.5v6a1.502 1.502 0 0 0 1.5 1.5h6a1.502 1.502 0 0 0 1.5-1.5v-6a1.502 1.502 0 0 0-1.5-1.5zm.5 7.5a.501.501 0 0 1-.5.5h-6a.501.501 0 0 1-.5-.5v-6a.501.501 0 0 1 .5-.5h6a.501.501 0 0 1 .5.5z" stroke-width="1.2"></path>
+                    </svg>
+                    <span>Applications</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasServiceAccess .Username "" "" .AuthType)}}
+                <a
+                    href="/services"
+                    :class="isActive('/services') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                    @click="mobileSidebarOpen = false"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                    </svg>
+                    <span>Services</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/docker" .AuthType)}}
+                <a
+                    href="/docker"
+                    :class="isActive('/docker') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                    @click="mobileSidebarOpen = false"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" viewBox="0 0 32 32" fill="none" stroke="currentColor">
+                        <path d="M12.75,22c0,0.414-0.336,0.75-0.75,0.75s-0.75-0.336-0.75-0.75s0.336-0.75,0.75-0.75S12.75,21.586,12.75,22z M27.814,17.26h0.215c1.345,0,2.603-0.719,3.281-1.875c0.066-0.112,0.066-0.252,0-0.364c-0.613-1.044-1.664-1.718-2.857-1.848 c-0.111-1.225-0.83-2.331-1.932-2.939c-0.107-0.061-0.239-0.061-0.349,0c-1.2,0.665-1.946,1.919-1.946,3.273 c0,0.768,0.241,1.514,0.679,2.138H22.36V12c0-0.199-0.161-0.36-0.36-0.36h-3.64V4c0-0.199-0.161-0.36-0.36-0.36h-4 c-0.199,0-0.36,0.161-0.36,0.36v3.64H10C9.801,7.64,9.64,7.801,9.64,8v3.64H6c-0.199,0-0.36,0.161-0.36,0.36v3.642H1l0,0 c-0.096,0-0.187,0.038-0.254,0.105c-0.068,0.067-0.105,0.159-0.105,0.254v0.898c0,2.826,1.148,5.394,3.011,7.277 c0.033,0.058,0.081,0.105,0.139,0.138c1.929,1.882,4.586,3.046,7.516,3.046C20.144,27.36,27.121,21.447,27.814,17.26z M10.047,23.647c0.19-0.057,0.299-0.257,0.243-0.447s-0.256-0.301-0.448-0.242c-1.425,0.423-3.499,0.67-5.71,0.682 C2.416,21.889,1.36,19.513,1.36,16.9v-0.539l24.34,0.003l0,0c0.148,0,0.282-0.091,0.336-0.23s0.017-0.296-0.094-0.396 c-0.633-0.574-0.995-1.387-0.995-2.231c0-1.026,0.531-1.981,1.4-2.54c0.869,0.558,1.4,1.513,1.4,2.54v0.004 c0,0.196,0.156,0.355,0.353,0.36c1.005,0.022,1.915,0.517,2.474,1.333c-0.57,0.83-1.526,1.337-2.545,1.337h-0.531 c-0.187,0-0.343,0.143-0.358,0.329c-0.337,3.844-7.287,9.771-15.834,9.771c-2.438,0-4.673-0.863-6.404-2.294 C6.889,24.287,8.727,24.039,10.047,23.647z M18.36,12.36h3.279v3.28H18.36V12.36z M14.36,12.36h3.28v3.28h-3.28V12.36z M10.36,12.36 h3.28v3.28h-3.28V12.36z M6.36,12.36h3.28v3.28H6.36V12.36z M14.36,8.36h3.28v3.28h-3.28V8.36z M10.36,8.36h3.28v3.28h-3.28V8.36z M14.36,4.36h3.28v3.28h-3.28V4.36z"></path>
+                    </svg>
+                    <span>Docker</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/plugins" .AuthType)}}
+                <a
+                    href="/plugins"
+                    :class="isActive('/plugins') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                    @click="mobileSidebarOpen = false"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 011-1h1a2 2 0 100-4H7a1 1 0 01-1-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"></path>
+                    </svg>
+                    <span>Plugins</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/backups" .AuthType)}}
+                <a
+                    href="/backups"
+                    :class="isActive('/backups') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                    @click="mobileSidebarOpen = false"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20"></path>
+                    </svg>
+                    <span>Backups</span>
+                </a>
+                {{end}}
+
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/logs" .AuthType)}}
+                <a
+                    href="/logs"
+                    :class="isActive('/logs') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                    @click="mobileSidebarOpen = false"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                    <span>Logs</span>
+                </a>
+                {{end}}
+
+                {{if eq .AuthType "admin"}}
+                <a
+                    href="/settings"
+                    :class="isActive('/settings') ? 'border-l-2 border-brand-accent text-brand-accent' : 'border-l-2 border-transparent text-sidebar-text-muted hover:text-sidebar-text'"
+                    class="flex items-center gap-2 border-l-2 px-2.5 py-1.5 text-sm transition-colors duration-100"
+                    @click="mobileSidebarOpen = false"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[15px] w-[15px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    <span>Settings</span>
+                </a>
+                {{end}}
+            </nav>
+
+            <div class="border-t border-white/10 p-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-1.5">
+                        {{if .updateCheckError}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning animate-pulse" title="Update Check Error"></div>
+                        {{else if .updateAvailable}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning" title="Update Available"></div>
+                        {{else}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-success/60" title="System Online"></div>
+                        {{end}}
+                        <span class="text-[11px] font-mono text-sidebar-text-muted uppercase tracking-wide">
+                            {{if .version}}v{{.version}}{{else if .appVersionNumber}}v{{.appVersionNumber}}{{else if .pruvonAppVersion}}v{{.pruvonAppVersion}}{{else}}v0.1.0{{end}}
+                        </span>
+                    </div>
+
+                    <a href="/logout" class="inline-flex items-center justify-center text-sidebar-text-muted transition-colors duration-150 hover:text-sidebar-text" title="Logout">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </aside>
+
+        <div class="min-w-0 flex-1 lg:h-screen lg:overflow-y-auto" style="scrollbar-gutter: stable">
+            <header class="border-b border-border bg-sidebar lg:hidden">
+                <div class="flex items-center justify-between gap-4 px-4 py-3">
+                    <button
+                        @click="mobileSidebarOpen = true"
+                        class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary"
+                        aria-label="Open menu"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
+                    <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-tight text-text-primary">
+                        <img src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-6 w-6 rounded-sm border border-border bg-card p-0.5">
+                        <span>Pruvon</span>
+                    </a>
+                    <a href="/logout" class="text-xs font-medium text-text-secondary transition-colors duration-150 hover:text-text-primary">Logout</a>
+                </div>
+            </header>
+
+            <main id="spa-main" class="min-w-0 px-4 py-4 sm:px-6 sm:py-5">
+                {{template "content" .}}
+            </main>
+        </div>
+    </div>
+    {{else}}
+    <main class="min-h-screen">
+        {{template "content" .}}
+    </main>
+    {{end}}
+    <script>
+    (function() {
+        // Mini SPA Router — keeps sidebar static, swaps only <main>
+        const mainEl = document.getElementById('spa-main');
+        if (!mainEl) return;
+
+        // Track loaded head scripts so we don't duplicate them
+        const loadedScripts = new Set();
+        document.querySelectorAll('head script[src]').forEach(s => loadedScripts.add(s.src));
+
+        function destroyAlpineInEl(el) {
+            // Walk the element tree and destroy Alpine components
+            el.querySelectorAll('[x-data]').forEach(node => {
+                if (node._x_dataStack) {
+                    // Call destroy lifecycle if available
+                    try {
+                        const data = node._x_dataStack[0];
+                        if (data && typeof data.destroy === 'function') data.destroy();
+                    } catch(e) {}
+                }
+                // Tell Alpine to clean up
+                if (window.Alpine && window.Alpine.destroyTree) {
+                    try { window.Alpine.destroyTree(node); } catch(e) {}
+                }
+            });
+        }
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                if (loadedScripts.has(src)) { resolve(); return; }
+                const s = document.createElement('script');
+                s.src = src;
+                s.onload = () => { loadedScripts.add(src); resolve(); };
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        }
+
+        function isExecutableInlineScript(script) {
+            const type = (script.getAttribute('type') || '').trim();
+            return type === '' || type === 'text/javascript' || type === 'application/javascript' || type === 'module';
+        }
+
+        function executeInlineScripts(container) {
+            // Execute inline <script> tags inside the new content.
+            // Wrap classic scripts in an IIFE so page-local const/let bindings do
+            // not collide across repeated SPA navigations.
+            const scripts = container.querySelectorAll('script:not([src])');
+            scripts.forEach(oldScript => {
+                const newScript = document.createElement('script');
+                for (const attr of oldScript.attributes) {
+                    newScript.setAttribute(attr.name, attr.value);
+                }
+
+                if (isExecutableInlineScript(oldScript)) {
+                    const type = (oldScript.getAttribute('type') || '').trim();
+                    newScript.textContent = type === 'module'
+                        ? oldScript.textContent
+                        : `;(() => {\n${oldScript.textContent}\n})();`;
+                } else {
+                    newScript.textContent = oldScript.textContent;
+                }
+
+                oldScript.parentNode.replaceChild(newScript, oldScript);
+            });
+        }
+
+        async function navigateTo(url, pushState = true) {
+            try {
+                const resp = await fetch(url, {
+                    headers: { 'Accept': 'text/html' },
+                    credentials: 'same-origin'
+                });
+
+                if (!resp.ok) {
+                    // Fall back to normal navigation on error
+                    window.location.href = url;
+                    return;
+                }
+
+                // Check if response is a redirect to login (auth expired)
+                if (resp.redirected && resp.url.includes('/login')) {
+                    window.location.href = resp.url;
+                    return;
+                }
+
+                const html = await resp.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                // Extract the new <main id="spa-main"> content
+                const newMain = doc.getElementById('spa-main');
+                if (!newMain) {
+                    // Page doesn't have spa-main (login, error pages) — full nav
+                    window.location.href = url;
+                    return;
+                }
+
+                // 1. Update page title
+                document.title = doc.title || document.title;
+
+                // 2. Load any required head scripts from the new page
+                //    (xterm, apexcharts, etc.)
+                const newHeadScripts = doc.querySelectorAll('head script[src]');
+                const scriptPromises = [];
+                newHeadScripts.forEach(s => {
+                    if (!loadedScripts.has(s.src)) {
+                        scriptPromises.push(loadScript(s.src));
+                    }
+                });
+
+                // Load any new CSS from head
+                const newHeadLinks = doc.querySelectorAll('head link[rel="stylesheet"]');
+                newHeadLinks.forEach(link => {
+                    const href = link.href;
+                    if (!document.querySelector(`head link[href="${link.getAttribute('href')}"]`)) {
+                        const newLink = document.createElement('link');
+                        newLink.rel = 'stylesheet';
+                        newLink.href = link.getAttribute('href');
+                        document.head.appendChild(newLink);
+                    }
+                });
+
+                await Promise.all(scriptPromises);
+
+                // 3. Destroy Alpine trees in old content
+                destroyAlpineInEl(mainEl);
+
+                // 4. Swap content
+                mainEl.innerHTML = newMain.innerHTML;
+
+                // 5. Execute inline scripts (Alpine component definitions)
+                executeInlineScripts(mainEl);
+
+                // 6. Re-initialize Alpine on the new DOM
+                if (window.Alpine && window.Alpine.initTree) {
+                    window.Alpine.initTree(mainEl);
+                }
+
+                // 7. Push state
+                if (pushState) {
+                    history.pushState({ spaNav: true }, '', url);
+                }
+
+                // 8. Update sidebar active state via Alpine
+                const layoutEl = document.getElementById('spa-layout');
+                if (layoutEl && layoutEl._x_dataStack) {
+                    const sidebarData = layoutEl._x_dataStack[0];
+                    if (sidebarData && 'currentPath' in sidebarData) {
+                        sidebarData.currentPath = new URL(url, window.location.origin).pathname;
+                    }
+                }
+
+                // 9. Scroll content area to top
+                const contentArea = mainEl.closest('.lg\\:overflow-y-auto') || mainEl.parentElement;
+                if (contentArea) contentArea.scrollTop = 0;
+
+            } catch(err) {
+                console.error('SPA navigation failed, falling back:', err);
+                window.location.href = url;
+            }
+        }
+
+        // Intercept clicks on internal links
+        document.addEventListener('click', function(e) {
+            // Find the closest <a> tag
+            const link = e.target.closest('a[href]');
+            if (!link) return;
+
+            const href = link.getAttribute('href');
+            if (!href) return;
+
+            // Skip: external links, hash links, new tab, download, mailto, tel
+            if (href.startsWith('http') || href.startsWith('//') ||
+                href.startsWith('#') || href.startsWith('mailto:') ||
+                href.startsWith('tel:') || href.startsWith('javascript:')) return;
+            if (link.target === '_blank' || link.hasAttribute('download')) return;
+            if (link.getAttribute('data-spa') === 'false') return;
+
+            // Skip: form submit buttons, modifier keys (open in new tab)
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+            // Skip: /logout
+            if (href === '/logout' || href.startsWith('/logout')) return;
+
+            e.preventDefault();
+            // Don't navigate if already on this URL
+            const targetPath = new URL(href, window.location.origin).pathname;
+            if (targetPath === window.location.pathname && !window.location.search) return;
+
+            navigateTo(href);
+        });
+
+        // Handle browser back/forward
+        window.addEventListener('popstate', function(e) {
+            navigateTo(window.location.href, false);
+        });
+
+        // Mark initial state
+        history.replaceState({ spaNav: true }, '', window.location.href);
+    })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,261 @@
+{{define "content"}}
+<div x-data="createDatabase()" class="flex w-full max-w-4xl flex-col gap-6">
+    <div>
+        <h1 class="text-lg font-semibold text-text-primary">Create Database</h1>
+        <p class="mt-0.5 text-xs text-text-secondary">Provision a new <span x-text="dbType"></span> database and optionally link it to an application.</p>
+    </div>
+
+    <div x-show="errors.length > 0" class="space-y-2">
+        <template x-for="error in errors" :key="error">
+            <div class="rounded-md border border-status-danger/30 bg-status-danger-bg px-4 py-3 text-sm text-status-danger" role="alert" x-text="error"></div>
+        </template>
+    </div>
+
+    <div x-cloak x-show="success === true" class="rounded-md border border-status-success/30 bg-status-success-bg px-4 py-3 text-sm text-status-success">
+        Database created successfully. Redirecting to the detail page.
+    </div>
+
+    <section class="rounded-md border border-border bg-card p-4">
+        <div>
+            <h2 class="text-sm font-semibold text-text-primary">Database Configuration</h2>
+            <p class="mt-0.5 text-xs text-text-secondary">Use a short name. The service suffix is added automatically.</p>
+        </div>
+
+        <div class="mt-5 grid grid-cols-1 gap-5">
+            <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-medium text-text-secondary">Database Name</label>
+                <input type="text" x-model="form.name" @input.debounce.300ms="validateAndCheckDbName()"
+                       class="h-8 rounded border border-border bg-card px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                       :class="(!isValidName || dbExists) ? 'border-status-danger text-status-danger focus:border-status-danger focus:ring-status-danger' : ''"
+                       placeholder="my-database">
+                <div class="flex items-center justify-between gap-3 text-xs">
+                    <p class="text-text-tertiary">The final service name becomes <span class="font-mono">&lt;name&gt;-db</span>.</p>
+                    <template x-if="!isValidName && form.name"><p class="text-status-danger">Invalid format</p></template>
+                    <template x-if="dbExists"><p class="text-status-danger">Already exists</p></template>
+                    <template x-if="isValidName && !dbExists && form.name"><p class="text-status-success">Available</p></template>
+                </div>
+            </div>
+
+            <div x-show="dbType === 'postgres'" class="border-t border-border-subtle pt-5">
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">PostgreSQL Image</h3>
+                <div class="mt-3 grid grid-cols-1 gap-2">
+                    <label for="standard-postgres" class="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-surface">
+                        <input type="radio" id="standard-postgres" name="imageType" value="standard" x-model="form.imageType" class="mt-0.5">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">Standard PostgreSQL</span>
+                            <span class="block text-xs text-text-secondary">Default PostgreSQL image.</span>
+                        </span>
+                    </label>
+                    <label for="postgis" class="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-surface">
+                        <input type="radio" id="postgis" name="imageType" value="postgis" x-model="form.imageType" class="mt-0.5">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">PostGIS</span>
+                            <span class="block text-xs text-text-secondary">Spatial extensions for mapping workloads.</span>
+                        </span>
+                    </label>
+                    <label for="pgvector" class="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-surface">
+                        <input type="radio" id="pgvector" name="imageType" value="pgvector" x-model="form.imageType" class="mt-0.5">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">pgvector</span>
+                            <span class="block text-xs text-text-secondary">Vector search support for embeddings and AI workloads.</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="border-t border-border-subtle pt-5">
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-medium text-text-secondary">Link to Application</label>
+                    <div x-data="{ open: false }" class="relative">
+                        <button @click="open = !open" type="button"
+                                class="inline-flex h-8 w-full items-center justify-between rounded border border-border bg-card px-3 text-sm text-text-primary transition-colors duration-150 hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                            <span x-text="form.app || 'Select an application'"></span>
+                            <svg class="h-3.5 w-3.5 text-text-tertiary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L10 5.414 7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3zm-3.707 9.293a1 1 0 011.414 0L10 14.586l2.293-2.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+
+                        <div x-show="open" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="transform opacity-0 scale-95" x-transition:enter-end="transform opacity-100 scale-100" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="transform opacity-100 scale-100" x-transition:leave-end="transform opacity-0 scale-95" @click.away="open = false"
+                             class="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-border bg-card shadow-dropdown">
+                            <div class="max-h-64 overflow-y-auto py-1">
+                                <button @click="form.app = ''; open = false" :class="{'bg-brand-subtle text-brand-primary': !form.app}" class="block w-full px-3 py-2 text-left text-sm text-text-primary transition-colors duration-100 hover:bg-surface">None</button>
+                                <template x-for="app in apps" :key="app">
+                                    <button @click="form.app = app; open = false" :class="{'bg-brand-subtle text-brand-primary': form.app === app}" class="block w-full px-3 py-2 text-left text-sm text-text-primary transition-colors duration-100 hover:bg-surface">
+                                        <span x-text="app"></span>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-text-tertiary">When selected, the database is linked immediately after creation.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end border-t border-border-subtle pt-4">
+            <button @click="createDatabase()" type="button" :disabled="!isValidName || !form.name || dbExists"
+                    class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
+                <svg x-show="!isProcessing" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                <svg x-show="isProcessing" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span x-text="isProcessing ? 'Creating…' : 'Create Database'"></span>
+            </button>
+        </div>
+    </section>
+</div>
+
+<script>
+function registerCreateDatabaseComponent() {
+    if (!window.Alpine) {
+        return false;
+    }
+
+    window.Alpine.data('createDatabase', () => ({
+        isProcessing: false,
+        errors: [],
+        success: false,
+        dbExists: false,
+        isValidName: true,
+        apps: [],
+        dbType: '',
+        form: {
+            name: '',
+            app: '',
+            imageType: 'standard',
+        },
+        async init() {
+            // Get and validate database type
+            const type = new URLSearchParams(window.location.search).get('type');
+            const validTypes = ['postgres', 'mariadb', 'mongo', 'redis'];
+
+            if (!type || !validTypes.includes(type)) {
+                window.location.href = '/databases';
+                return;
+            }
+
+            this.dbType = type;
+
+            // Fetch available apps
+            const response = await fetch('/api/apps/list');
+            const data = await response.json();
+            this.apps = data.apps || [];
+        },
+        validateAndCheckDbName() {
+            // Validate name format first
+            const nameRegex = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
+            this.isValidName = this.form.name === '' || nameRegex.test(this.form.name);
+
+            // Only check existence if name is valid
+            if (this.isValidName && this.form.name) {
+                this.checkDbName();
+            } else {
+                this.dbExists = false;
+            }
+        },
+        async checkDbName() {
+            if (!this.form.name) {
+                this.dbExists = false;
+                return;
+            }
+
+            const dbName = `${this.form.name}-db`;
+            try {
+                const response = await fetch(`/api/databases/${this.dbType}`);
+                const data = await response.json();
+                if (!data.databases || data.databases.length === 0) {
+                    this.dbExists = false;
+                } else {
+                    this.dbExists = data.databases.some(db => db.name === dbName);
+                }
+            } catch (error) {
+                console.error('Error checking database name:', error);
+                this.dbExists = false;
+            }
+        },
+        async createDatabase() {
+            if (!this.isValidName || !this.form.name || this.dbExists) {
+                return;
+            }
+
+            this.isProcessing = true;
+            this.errors = [];
+            this.success = false;
+
+            const dbName = `${this.form.name}-db`;
+
+            // Build request data based on selected options
+            const requestData = {
+                type: this.dbType,
+                name: dbName,
+                imageType: this.form.imageType
+            };
+
+            // Add image and imageVersion for custom PostgreSQL images
+            if (this.dbType === 'postgres' && this.form.imageType !== 'standard') {
+                if (this.form.imageType === 'postgis') {
+                    requestData.image = 'postgis/postgis';
+                    requestData.imageVersion = '13-3.1';
+                } else if (this.form.imageType === 'pgvector') {
+                    requestData.image = 'pgvector/pgvector';
+                    requestData.imageVersion = 'pg17';
+                }
+            }
+
+            try {
+                // Create database
+                const createResponse = await fetch('/api/databases/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                if (!createResponse.ok) {
+                    throw new Error('Failed to create database');
+                }
+
+                // If app is selected, link database to app
+                if (this.form.app) {
+                    const linkResponse = await fetch('/api/databases/link', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: this.dbType,
+                            database: dbName,
+                            app: this.form.app
+                        })
+                    });
+
+                    if (!linkResponse.ok) {
+                        throw new Error('Failed to link database to application');
+                    }
+                }
+
+                this.success = true;
+                setTimeout(() => {
+                    window.location.href = `/databases/${this.dbType}/${dbName}`;
+                }, 1500);
+
+            } catch (error) {
+                this.errors.push(error.message);
+            } finally {
+                this.isProcessing = false;
+            }
+        }
+    }))
+
+    return true;
+}
+
+if (!registerCreateDatabaseComponent()) {
+    document.addEventListener('alpine:init', registerCreateDatabaseComponent, { once: true })
+}
+</script>
+{{end}}

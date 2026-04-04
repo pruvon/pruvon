@@ -1,0 +1,11 @@
+{{define "scripts"}}
+{{if .LoadXTerm}}
+    <link rel="stylesheet" href="/static/css/xterm.min.css" />
+    <script src="/static/js/xterm.min.js"></script>
+    <script src="/static/js/xterm-addon-fit.min.js"></script>
+{{end}}
+
+{{if .LoadApexCharts}}
+    <script src="/static/js/apexcharts.min.js"></script>
+{{end}}
+{{end}}

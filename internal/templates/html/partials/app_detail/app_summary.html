@@ -1,0 +1,324 @@
+{{define "app_summary"}}
+<div class="space-y-4" x-data="{
+    showProcessModal: false,
+    actionType: '',
+    selectedProcessType: 'all',
+    selectedProcessTypes: [],
+    openProcessModal(action) {
+        this.actionType = action || '';
+        this.selectedProcessType = 'all';
+        this.selectedProcessTypes = [];
+        this.showProcessModal = true;
+    },
+    getProcessTypes() {
+        return Object.keys(appDetails.processes || {}).filter(type => !!type);
+    },
+    toggleProcessType(type) {
+        if (type === 'all') {
+            this.selectedProcessType = 'all';
+            this.selectedProcessTypes = [];
+            return;
+        }
+
+        this.selectedProcessType = '';
+
+        const index = this.selectedProcessTypes.indexOf(type);
+        if (index === -1) {
+            this.selectedProcessTypes = [type];
+        } else {
+            this.selectedProcessTypes.splice(index, 1);
+        }
+
+        if (this.selectedProcessTypes.length === 0) {
+            this.selectedProcessType = 'all';
+        }
+    },
+    executeAction() {
+        let processType = '';
+        if (this.selectedProcessType !== 'all' && this.selectedProcessTypes.length > 0) {
+            processType = this.selectedProcessTypes[0];
+        }
+
+        performAppAction(this.actionType, processType);
+        this.showProcessModal = false;
+    }
+}">
+    <div class="flex items-center justify-between gap-3">
+        <h3 class="text-sm font-semibold text-text-primary">Application Summary</h3>
+        <button @click="loadAppDetails()"
+                class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary"
+                :class="{'animate-spin': loadingSummary}"
+                :disabled="loadingSummary">
+            <span class="sr-only">Refresh</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="border-b border-border-subtle pb-4 mb-4">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex items-center gap-3">
+                <template x-if="summaryLoading">
+                    <div class="h-2.5 w-2.5 rounded-full bg-status-neutral animate-pulse"></div>
+                </template>
+                <template x-if="!summaryLoading && appDetails.deployed">
+                    <div class="h-2.5 w-2.5 rounded-full" :class="{
+                        'bg-status-danger': !appDetails.running,
+                        'bg-status-success': appDetails.running
+                    }"></div>
+                </template>
+                <template x-if="!summaryLoading && !appDetails.deployed">
+                    <div class="h-2.5 w-2.5 rounded-full bg-status-neutral"></div>
+                </template>
+                <div>
+                    <p class="text-sm font-medium text-text-primary" x-text="summaryLoading ? 'Loading status' : (!appDetails.deployed ? 'Not deployed' : (appDetails.running ? 'Running' : 'Stopped'))"></p>
+                    <p class="text-xs text-text-secondary">Current deployment and runtime status.</p>
+                </div>
+            </div>
+
+            <div x-show="!summaryLoading && appDetails.deployed" class="flex flex-wrap items-center gap-2">
+                <button @click="openProcessModal(appDetails.running ? 'stop' : 'start')"
+                        :class="appDetails.running ? 'bg-card border-border text-text-primary hover:bg-surface' : 'border-brand-primary bg-brand-primary text-white hover:bg-brand-hover'"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border px-3 text-sm font-medium transition-colors duration-150 disabled:opacity-50">
+                    <svg x-show="appDetails.running" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
+                    </svg>
+                    <svg x-show="!appDetails.running" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span x-text="appDetails.running ? 'Stop' : 'Start'"></span>
+                </button>
+
+                <button @click="openProcessModal('restart')"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-transparent bg-transparent px-3 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary disabled:opacity-50">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Restart
+                </button>
+
+                <button @click="openProcessModal('rebuild')"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-transparent bg-transparent px-3 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary disabled:opacity-50">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                    Rebuild
+                </button>
+            </div>
+        </div>
+
+        <div x-show="!summaryLoading && !appDetails.deployed" class="mt-4 rounded-md border border-border bg-surface p-3">
+            <h4 class="mb-2 text-sm font-medium text-text-primary">Deploy Instructions</h4>
+            <p class="mb-2 text-xs text-text-secondary">To deploy your application, run these commands in your project directory.</p>
+            <div class="space-y-2">
+                <div class="flex items-center gap-2 rounded border border-border bg-card px-3 py-1.5 font-mono text-[13px] text-text-primary">
+                    <span class="flex-1 truncate">git remote add dokku dokku@<span x-text="serverDomain"></span>:{{.Name}}</span>
+                    <button @click="navigator.clipboard.writeText(`git remote add dokku dokku@${serverDomain}:{{.Name}}`)" class="text-text-tertiary transition-colors duration-150 hover:text-text-primary">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2 rounded border border-border bg-card px-3 py-1.5 font-mono text-[13px] text-text-primary">
+                    <span class="flex-1 truncate">git push dokku main:master</span>
+                    <button @click="navigator.clipboard.writeText('git push dokku main:master')" class="text-text-tertiary transition-colors duration-150 hover:text-text-primary">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <template x-if="!summaryLoading && appDetails.deployed">
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div class="flex items-center gap-4 rounded border border-border-subtle bg-transparent px-4 py-3">
+                <div class="relative h-[50px] w-[50px] flex-shrink-0">
+                    <svg class="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(0,0,0,0.07)" stroke-width="3"/>
+                        <circle cx="18" cy="18" r="16" fill="none" stroke="#2D9B6F" stroke-width="3" :stroke-dasharray="stats.cpu_usage + ', 100'" stroke-linecap="round"/>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center font-mono text-xs font-medium text-text-primary" x-text="Math.round(stats.cpu_usage) + '%'"></div>
+                </div>
+                <div>
+                    <span class="text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">CPU</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 rounded border border-border-subtle bg-transparent px-4 py-3">
+                <div class="relative h-[50px] w-[50px] flex-shrink-0">
+                    <svg class="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(0,0,0,0.07)" stroke-width="3"/>
+                        <circle cx="18" cy="18" r="16" fill="none" stroke="#3DBF8A" stroke-width="3" :stroke-dasharray="stats.memory_usage + ', 100'" stroke-linecap="round"/>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center font-mono text-xs font-medium text-text-primary" x-text="Math.round(stats.memory_usage) + '%'"></div>
+                </div>
+                <div>
+                    <span class="text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">Memory</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 rounded border border-border-subtle bg-transparent px-4 py-3">
+                <div class="relative h-[50px] w-[50px] flex-shrink-0">
+                    <svg class="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(0,0,0,0.07)" stroke-width="3"/>
+                        <circle cx="18" cy="18" r="16" fill="none" stroke="#2D9B6F" stroke-width="3" :stroke-dasharray="stats.disk_usage + ', 100'" stroke-linecap="round"/>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center font-mono text-xs font-medium text-text-primary" x-text="Math.round(stats.disk_usage) + '%'"></div>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">Disk</span>
+                    <span class="font-mono text-[11px] text-text-tertiary mt-0.5" x-text="stats.disk_usage_text"></span>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-2 mt-4 pt-4 border-t border-border-subtle">
+        <div>
+            <h3 class="mb-3 text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">Information</h3>
+            <div class="space-y-4">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-text-secondary w-20">Created:</span>
+                    <span class="font-mono text-[13px] text-text-primary">{{if .CreatedAt}}{{.CreatedAt}}{{else}}N/A{{end}}</span>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-text-secondary w-20">Deploy:</span>
+                    <span class="font-mono text-[13px] text-text-primary">{{if .LastDeployAt}}{{.LastDeployAt}}{{else}}No deploys yet{{end}}</span>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-text-secondary w-20">Version:</span>
+                    <span class="font-mono text-[13px] text-text-primary">{{if .Version}}{{.Version}}{{else}}v0{{end}}</span>
+                </div>
+
+                {{if .RepositoryURL}}
+                <div class="flex flex-col gap-1.5 pt-1">
+                    <span class="text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">Repository</span>
+                    <div class="flex items-center gap-2 rounded border border-border bg-surface px-3 py-1.5 font-mono text-[13px] text-text-primary">
+                        <span class="flex-1 truncate">{{.RepositoryURL}}</span>
+                        <a href="{{.RepositoryURL}}" target="_blank" class="text-text-tertiary transition-colors duration-150 hover:text-text-primary shrink-0">
+                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+        </div>
+
+        <div>
+            <h3 class="mb-3 text-[11px] font-medium uppercase tracking-wider text-text-secondary/70">Application URLs</h3>
+            <div x-show="summaryLoading" class="py-1 text-xs text-text-secondary">Loading...</div>
+            <div x-show="!summaryLoading && domains.length === 0" class="py-1 text-xs text-text-secondary">No domains configured</div>
+            <div x-show="!summaryLoading && domains.length > 0" class="space-y-2">
+                <template x-for="(domain, index) in domains" :key="index">
+                    <div class="flex items-center gap-2 rounded border border-border bg-surface px-3 py-1.5 font-mono text-[13px] text-text-primary">
+                        <span x-text="'https://' + domain" class="flex-1 truncate"></span>
+                        <button @click="navigator.clipboard.writeText('https://' + domain)" class="text-text-tertiary transition-colors duration-150 hover:text-text-primary shrink-0">
+                            <svg class="h-[13px] w-[13px]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showProcessModal"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2B3C]/30 p-4 backdrop-blur-sm"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+        <div @click.away="showProcessModal = false"
+             class="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-modal transform transition-all"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95">
+
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-text-primary" x-text="`${(actionType || '').charAt(0).toUpperCase() + (actionType || '').slice(1)} Application`"></h3>
+                <button @click="showProcessModal = false" class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div>
+                <label class="mb-2 block text-xs font-medium text-text-secondary">Select Process Type</label>
+
+                <div class="space-y-2">
+                    <div class="flex items-center">
+                        <button @click="toggleProcessType('all')"
+                                type="button"
+                                class="flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm"
+                                :class="selectedProcessType === 'all' ? 'border-brand-primary bg-brand-subtle text-brand-primary' : 'border-border text-text-primary'">
+                            <span>All Processes</span>
+                            <svg x-show="selectedProcessType === 'all'" class="h-5 w-5 text-brand-primary" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div x-show="getProcessTypes().length > 0" class="space-y-2">
+                        <p class="mb-1 text-xs text-text-secondary">Available Process Types:</p>
+                        <template x-for="processType in getProcessTypes()" :key="processType">
+                            <div class="flex items-center">
+                                <button @click="toggleProcessType(processType)"
+                                        type="button"
+                                        class="flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm"
+                                        :class="selectedProcessTypes.includes(processType) ? 'border-brand-primary bg-brand-subtle text-brand-primary' : 'border-border text-text-primary'">
+                                    <span x-text="processType"></span>
+                                    <svg x-show="selectedProcessTypes.includes(processType)" class="h-5 w-5 text-brand-primary" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div x-show="getProcessTypes().length === 0" class="mt-2">
+                        <p class="text-xs text-text-secondary">No specific process types found for this application.</p>
+                    </div>
+                </div>
+
+                <div class="mb-4 mt-3 text-xs text-text-secondary">
+                    <p x-show="selectedProcessType === 'all'">All processes will be affected by this action.</p>
+                    <p x-show="selectedProcessType !== 'all' && selectedProcessTypes.length > 0" x-text="`Only the '${selectedProcessTypes[0]}' process will be affected.`"></p>
+                    <p class="mt-1">Command: <code x-text="`dokku ps:${actionType || ''} {{.Name}}${selectedProcessType === 'all' ? '' : ' ' + selectedProcessTypes[0]}`" class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[13px] text-text-primary"></code></p>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-2">
+                    <button @click="showProcessModal = false" type="button" class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="executeAction()" type="button"
+                            :class="{
+                                'border-status-danger bg-status-danger hover:bg-[#833530] text-white': actionType === 'stop',
+                                'border-brand-primary bg-brand-primary hover:bg-brand-hover text-white': actionType === 'start',
+                                'border-border bg-card hover:bg-surface text-text-primary': actionType === 'restart',
+                                'border-border bg-card hover:bg-surface text-text-primary': actionType === 'rebuild'
+                            }"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border px-3 text-sm font-medium transition-colors duration-150 focus:outline-none">
+                        <span x-text="`Confirm ${(actionType || '').charAt(0).toUpperCase() + (actionType || '').slice(1)}`"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

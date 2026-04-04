@@ -1,0 +1,256 @@
+{{define "app_storage"}}
+<div class="space-y-4">
+    <div class="rounded-md border border-border bg-card p-4">
+        <div class="mb-4 flex items-center justify-between gap-3">
+            <h3 class="text-sm font-semibold text-text-primary">Storage Mounts</h3>
+            <div class="flex items-center space-x-2">
+                <button @click="fetchData('storage')"
+                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
+                <button @click="showMountModal = true"
+                        class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                    Add Mount
+                </button>
+            </div>
+        </div>
+
+        <!-- Disk Usage Card -->
+        <div class="mb-4 rounded-md border border-border bg-surface p-3">
+            <div class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                <div>
+                    <p class="text-xs font-medium text-text-primary">Total Storage Usage</p>
+                    <p class="font-mono text-[13px] text-text-secondary" x-text="info?.disk_usage || '0B'"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Storage Mounts Table -->
+        <div class="overflow-hidden rounded-md border border-border">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">
+                            Host Path
+                        </th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">
+                            Container Path
+                        </th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">
+                            Size
+                        </th>
+                        <th class="w-12 px-4 py-2.5"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-border-subtle bg-card">
+                    <template x-if="info?.mounts && info.mounts.length > 0">
+                        <template x-for="mount in info.mounts" :key="mount.source">
+                            <tr class="group transition-colors duration-100 hover:bg-surface">
+                                <td class="px-4 py-2.5 font-mono text-[13px] text-text-primary" x-text="mount.source"></td>
+                                <td class="px-4 py-2.5 font-mono text-[13px] text-text-primary" x-text="mount.destination"></td>
+                                <td class="px-4 py-2.5 font-mono text-[13px] text-text-secondary" x-text="mount.size"></td>
+                                <td class="px-4 py-2.5 text-right">
+                                    <button @click="$dispatch('confirm-unmount', {
+                                        source: mount.source,
+                                        destination: mount.destination
+                                    })" class="inline-flex h-7 w-7 items-center justify-center rounded text-status-danger/70 transition-colors duration-150 hover:bg-status-danger-bg hover:text-status-danger">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                    </template>
+                    <template x-if="!info?.mounts || info.mounts.length === 0">
+                        <tr>
+                            <td colspan="4" class="px-4 py-8 text-center text-sm text-text-secondary">
+                                No storage mounts configured
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Add Mount Modal -->
+        <div x-show="showMountModal"
+             class="fixed inset-0 z-50 flex h-full w-full items-center justify-center overflow-y-auto bg-[#1A2B3C]/30 p-4 backdrop-blur-sm"
+             x-cloak
+             x-data="{ isProcessing: false, newMount: { source: '', destination: '', chmod: '755' }, error: '' }">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="space-y-4 px-5 py-4">
+                    <div class="flex items-center justify-between border-b border-border-subtle pb-2">
+                        <h3 class="text-sm font-semibold text-text-primary">Add New Mount</h3>
+                        <button @click="showMountModal = false"
+                                :disabled="isProcessing"
+                                class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-text-secondary mb-1">Source Path</label>
+                            <div class="mt-1 relative flex items-center">
+                                <span class="absolute left-2 text-xs text-text-tertiary">/var/lib/dokku/data/storage/{{.Name}}/</span>
+                                <input type="text"
+                                       x-model="newMount.source"
+                                       class="block h-8 w-full rounded border border-border bg-card pl-[260px] pr-3 text-sm text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                       placeholder="path">
+                            </div>
+                            <p class="mt-1 text-xs text-text-tertiary">Directory will be created if it does not exist.</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium text-text-secondary mb-1">Destination Path</label>
+                            <input type="text"
+                                   x-model="newMount.destination"
+                                   class="block h-8 w-full rounded border border-border bg-card px-3 text-sm text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                   placeholder="/app/public">
+                            <p class="mt-1 text-xs text-text-tertiary">Full path inside the container, for example `/app/public`.</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium text-text-secondary mb-1">Directory Permissions</label>
+                            <input type="text"
+                                   x-model="newMount.chmod"
+                                   class="block h-8 w-full rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                   placeholder="755">
+                            <p class="mt-1 text-xs text-text-tertiary">Directory permissions in octal format. Default is `755`.</p>
+                        </div>
+
+                        <p x-show="error" x-text="error" class="text-xs text-status-danger"></p>
+                    </div>
+
+                    <div class="flex justify-end gap-2 border-t border-border-subtle pt-3">
+                        <button @click="showMountModal = false"
+                                :disabled="isProcessing"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                            Cancel
+                        </button>
+                        <button @click="if (!newMount.source || !newMount.destination) {
+                                    error = 'Both source and destination paths are required';
+                                    return;
+                                }
+                                isProcessing = true;
+                                error = '';
+                                fetch(`/api/apps/{{.Name}}/storage/mount`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(newMount)
+                                }).then(async response => {
+                                    if (!response.ok) {
+                                        const data = await response.json();
+                                        throw new Error(data.error || 'Failed to add mount');
+                                    }
+                                    showMountModal = false;
+                                    newMount.source = '';
+                                    newMount.destination = '';
+                                    fetchData('storage');
+                                }).catch(err => {
+                                    error = err.message;
+                                }).finally(() => {
+                                    isProcessing = false;
+                                })"
+                                :disabled="isProcessing"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                            <span x-show="!isProcessing">Add Mount</span>
+                            <span x-show="isProcessing" class="flex items-center space-x-1.5">
+                                <svg class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>Processing...</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unmount Confirmation Modal -->
+    <div x-data="{
+        showUnmountModal: false,
+        unmountSource: '',
+        unmountDestination: '',
+        isProcessing: false
+    }"
+    @confirm-unmount.window="
+        showUnmountModal = true;
+        unmountSource = $event.detail.source;
+        unmountDestination = $event.detail.destination;
+    ">
+        <div x-show="showUnmountModal"
+             class="fixed inset-0 z-50 flex h-full w-full items-center justify-center overflow-y-auto bg-[#1A2B3C]/30 p-4 backdrop-blur-sm"
+             x-cloak>
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="space-y-6 px-5 py-4">
+                    <div class="flex items-center justify-between border-b border-border-subtle pb-3">
+                        <h3 class="text-sm font-semibold text-text-primary">Confirm Unmount</h3>
+                        <button @click="showUnmountModal = false"
+                                :disabled="isProcessing"
+                                class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="text-sm text-text-secondary">
+                        Are you sure you want to unmount the following storage?<br><br>
+                        <strong class="text-text-primary">Host Path:</strong> <span x-text="unmountSource" class="font-mono text-[13px] text-text-primary"></span><br>
+                        <strong class="text-text-primary">Container Path:</strong> <span x-text="unmountDestination" class="font-mono text-[13px] text-text-primary"></span>
+                    </div>
+
+                    <div class="flex justify-end gap-2 border-t border-border-subtle pt-4">
+                        <button @click="showUnmountModal = false"
+                                :disabled="isProcessing"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                            Cancel
+                        </button>
+                        <button @click="isProcessing = true;
+                                     fetch(`/api/apps/{{.Name}}/storage/unmount`, {
+                                         method: 'POST',
+                                         headers: { 'Content-Type': 'application/json' },
+                                         body: JSON.stringify({
+                                             source: unmountSource,
+                                             destination: unmountDestination
+                                         })
+                                     }).then(async (response) => {
+                                         if (!response.ok) {
+                                             throw new Error('Unmount failed');
+                                         }
+                                         showUnmountModal = false;
+                                         await fetchData('storage');
+                                     }).catch(error => {
+                                         console.error('Error:', error);
+                                     }).finally(() => {
+                                         isProcessing = false;
+                                     })"
+                                :disabled="isProcessing"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
+                            <span x-show="!isProcessing">Unmount</span>
+                            <span x-show="isProcessing" class="flex items-center space-x-2">
+                                <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>Processing...</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

@@ -1,0 +1,637 @@
+{{define "app_processes"}}
+<div class="space-y-6" x-data="{
+    showScaleModal: false,
+    scaleCounts: {},
+    isScaling: false,
+    processTypes: [],
+    restartAfterScale: true,
+    localFlashMessage: null,
+    showLocalFlash: false,
+    showRestartPolicyModal: false,
+    restartPolicy: '',
+    currentRestartPolicy: '',
+    isUpdatingRestartPolicy: false,
+    showLocalFlashMessage(message, type = 'success') {
+        this.localFlashMessage = { text: message, type: type };
+        this.showLocalFlash = true;
+        setTimeout(() => { this.showLocalFlash = false; }, 5000);
+    },
+    initializeScaleCounts() {
+        this.processTypes = [...new Set((info || []).filter(i => i.name.startsWith('Status ')).map(i => {
+            const match = i.name.match(/Status\s+(\w+)/);
+            return match ? match[1] : null;
+        }).filter(Boolean))];
+
+        this.processTypes.forEach(type => {
+            const statusInfo = (info || []).find(i => i.name === `Status ${type}`);
+            if (statusInfo) {
+                const match = statusInfo.value.match(/\((\d+)\)/);
+                this.scaleCounts[type] = match ? parseInt(match[1]) : 0;
+            } else {
+                this.scaleCounts[type] = 0;
+            }
+        });
+    },
+    initializeRestartPolicy() {
+        fetch(`/api/apps/{{.Name}}/restart-policy`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.policy) {
+                    this.currentRestartPolicy = data.policy;
+                    this.restartPolicy = data.policy;
+                } else {
+                    this.currentRestartPolicy = 'no';
+                    this.restartPolicy = 'no';
+                }
+            })
+            .catch(() => {
+                this.currentRestartPolicy = 'no';
+                this.restartPolicy = 'no';
+            });
+    }
+}">
+    <div x-show="showLocalFlash"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 translate-y-1"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-1"
+         class="fixed top-4 right-4 z-[9999] max-w-sm"
+         x-cloak>
+        <div class="rounded-md border bg-card px-4 py-3 shadow-dropdown"
+             :class="{
+                 'border-status-success text-status-success': localFlashMessage?.type === 'success',
+                 'border-status-danger text-status-danger': localFlashMessage?.type === 'error',
+                 'border-status-warning text-status-warning': localFlashMessage?.type === 'warning',
+                 'border-border text-text-primary': localFlashMessage?.type === 'info'
+             }">
+            <div class="flex items-start justify-between gap-3">
+                <p class="text-sm" x-text="localFlashMessage?.text"></p>
+                <button class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary"
+                        @click="showLocalFlash = false">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <section class="py-4">
+        <div class="mb-4 flex items-start justify-between gap-3">
+            <div>
+                <h3 class="text-sm font-semibold text-text-primary">Running Containers</h3>
+                <p class="mt-0.5 text-xs text-text-secondary">Inspect process counts, container state, and deployment metadata.</p>
+            </div>
+            <button x-show="appDetails.deployed"
+                    @click="showScaleModal = true; initializeScaleCounts(); restartAfterScale = true;"
+                    class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Scale Processes
+            </button>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <template x-for="type in Object.entries((info || []).reduce((acc, item) => {
+                if (item.name.startsWith('Status ')) {
+                    const processType = item.name.replace('Status ', '').split(' ')[0];
+                    const isRunning = item.value.includes('running');
+                    let count = 0;
+
+                    const match = item.value.match(/\((\d+)\)/);
+                    if (match) {
+                        count = parseInt(match[1], 10);
+                    }
+
+                    if (count === 0 && isRunning) {
+                        count = 1;
+                    }
+
+                    acc[processType] = {
+                        count: count,
+                        running: isRunning
+                    };
+                }
+                return acc;
+            }, {})).sort((a, b) => a[0].localeCompare(b[0]))" :key="type[0]">
+                <div class="rounded-md border border-border bg-card p-4">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <div class="text-sm font-semibold text-text-primary" x-text="type[0]"></div>
+                            <div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium"
+                                 :class="type[1].running ? 'bg-status-success-bg text-status-success' : 'bg-status-danger-bg text-status-danger'">
+                                <span class="h-1.5 w-1.5 rounded-full"
+                                      :class="type[1].running ? 'bg-status-success' : 'bg-status-danger'"></span>
+                                <span x-text="type[1].running ? 'Running' : 'Stopped'"></span>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-mono text-[13px] text-text-primary" x-text="type[1].count"></div>
+                            <div class="text-2xs text-text-tertiary uppercase tracking-wide">instances</div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </section>
+
+    <div class="border-t border-border-subtle"></div>
+
+    <section class="py-4" x-init="initializeRestartPolicy()">
+        <div class="mb-4 flex items-start justify-between gap-3">
+            <div>
+                <h3 class="text-sm font-semibold text-text-primary">Container Settings</h3>
+                <p class="mt-0.5 text-xs text-text-secondary">Manage the Docker restart policy applied to app containers.</p>
+            </div>
+            <button @click="showRestartPolicyModal = true; restartPolicy = currentRestartPolicy;"
+                    class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                Configure
+            </button>
+        </div>
+        <div class="rounded-md border border-border bg-card p-4">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <div class="text-xs font-medium uppercase tracking-wide text-text-secondary">Restart Policy</div>
+                    <div class="mt-1 font-mono text-[13px] text-text-primary" x-text="currentRestartPolicy || 'no'"></div>
+                </div>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium bg-status-neutral-bg text-status-neutral">
+                    <span class="h-1.5 w-1.5 rounded-full bg-status-neutral"></span>
+                    Container Default
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <div class="border-t border-border-subtle"></div>
+
+    <section class="py-4" x-show="appDetails.deployed">
+        <div class="mb-4">
+            <h3 class="text-sm font-semibold text-text-primary">Container Details</h3>
+            <p class="mt-0.5 text-xs text-text-secondary">Live runtime details for containers created by the current deployment.</p>
+        </div>
+        <div class="grid gap-3 md:grid-cols-2">
+            <template x-for="container in (containers || [])" :key="container.id">
+                <div class="rounded-md border border-border bg-card p-4">
+                    <div class="mb-4 flex items-start justify-between gap-3">
+                        <div>
+                            <div class="text-sm font-semibold text-text-primary" x-text="container.name"></div>
+                            <div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium"
+                                 :class="container.state === 'running' ? 'bg-status-success-bg text-status-success' : 'bg-status-danger-bg text-status-danger'">
+                                <span class="h-1.5 w-1.5 rounded-full"
+                                      :class="container.state === 'running' ? 'bg-status-success' : 'bg-status-danger'"></span>
+                                <span x-text="container.state"></span>
+                            </div>
+                        </div>
+                        <div class="text-right text-xs text-text-secondary">
+                            <div>Type</div>
+                            <div class="font-mono text-[13px] text-text-primary" x-text="container.type"></div>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <div class="mb-1 text-xs font-medium text-text-secondary">Container ID</div>
+                            <div class="flex items-center gap-2 rounded border border-border bg-surface px-3 py-1.5 font-mono text-[13px] text-text-primary">
+                                <span class="flex-1 truncate" x-text="container.id ? container.id.substring(0, 12) : ''"></span>
+                            </div>
+                        </div>
+                        <div x-show="container.ip">
+                            <div class="mb-1 text-xs font-medium text-text-secondary">IP Address</div>
+                            <div class="flex items-center gap-2 rounded border border-border bg-surface px-3 py-1.5 font-mono text-[13px] text-text-primary">
+                                <span class="flex-1 truncate" x-text="container.ip"></span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <div class="mb-1 text-xs font-medium text-text-secondary">CPU</div>
+                                <div class="font-mono text-[13px] text-text-primary" x-text="container.cpu"></div>
+                            </div>
+                            <div>
+                                <div class="mb-1 text-xs font-medium text-text-secondary">Memory</div>
+                                <div class="font-mono text-[13px] text-text-primary" x-text="container.memory"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+        <div x-show="!containers || containers.length === 0"
+             class="rounded-md border border-dashed border-border bg-card px-4 py-6 text-center text-sm text-text-secondary">
+            No container details available. Ensure your application is deployed and running.
+        </div>
+    </section>
+
+    <div class="border-t border-border-subtle"></div>
+
+    <section class="py-4">
+        <div class="mb-4">
+            <h3 class="text-sm font-semibold text-text-primary">Configuration Files</h3>
+            <p class="mt-0.5 text-xs text-text-secondary">Review the detected `Procfile` and `app.json`, and override their relative paths if needed.</p>
+        </div>
+        <div class="grid gap-4 md:grid-cols-2">
+            <div x-data="{
+                procfileContent: '',
+                showProcfilePathModal: false,
+                procfilePath: '',
+                currentProcfilePath: '',
+                isUpdatingProcfilePath: false,
+                procfilePathError: '',
+                validateProcfilePath() {
+                    this.procfilePathError = '';
+                    if (this.procfilePath.startsWith('/')) {
+                        this.procfilePathError = 'Path must be relative and should not start with a slash (/)';
+                        return false;
+                    }
+                    return true;
+                }
+            }" x-init="fetch(`/api/apps/{{.Name}}/procfile`)
+                .then(response => response.json())
+                .then(data => { procfileContent = data.content || 'Procfile not found' })
+                .catch(() => { procfileContent = 'Error reading Procfile' });
+
+                fetch(`/api/apps/{{.Name}}/procfile-path`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.path) {
+                            currentProcfilePath = data.path;
+                            procfilePath = data.path;
+                        } else {
+                            currentProcfilePath = 'Procfile';
+                            procfilePath = 'Procfile';
+                        }
+                    })
+                    .catch(() => {
+                        currentProcfilePath = 'Procfile';
+                        procfilePath = 'Procfile';
+                    })">
+                <div class="rounded-md border border-border bg-card p-4">
+                    <div class="mb-4 flex items-start justify-between gap-3">
+                        <div>
+                            <h4 class="text-sm font-semibold text-text-primary">Procfile</h4>
+                            <p class="mt-0.5 text-xs text-text-secondary">Current path: <span class="font-mono text-[13px]" x-text="currentProcfilePath"></span></p>
+                        </div>
+                        <button @click="showProcfilePathModal = true"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                            Configure
+                        </button>
+                    </div>
+                    <div class="max-h-48 overflow-auto rounded-md border border-border bg-surface p-3">
+                        <pre class="whitespace-pre-wrap font-mono text-[13px] text-text-primary" x-text="procfileContent"></pre>
+                    </div>
+                </div>
+
+                <div x-show="showProcfilePathModal" class="fixed inset-0 z-40" x-cloak>
+                    <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+                    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                            <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                                <h3 class="text-sm font-semibold text-text-primary">Configure Procfile Path</h3>
+                                <button @click="showProcfilePathModal = false"
+                                        :disabled="isUpdatingProcfilePath"
+                                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="space-y-4 px-5 py-4">
+                                <div class="flex flex-col gap-1.5">
+                                    <label for="procfile-path" class="text-xs font-medium text-text-secondary">Procfile Path</label>
+                                    <input type="text"
+                                           id="procfile-path"
+                                           x-model="procfilePath"
+                                           @input="validateProcfilePath()"
+                                           class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                           placeholder="e.g., Procfile">
+                                    <p class="text-xs text-status-danger" x-show="procfilePathError" x-text="procfilePathError"></p>
+                                    <p class="text-xs text-text-secondary">Leave empty to reset to the default path.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                                <button @click="showProcfilePathModal = false"
+                                        :disabled="isUpdatingProcfilePath"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                                    Cancel
+                                </button>
+                                <button @click="if (validateProcfilePath()) {
+                                             isUpdatingProcfilePath = true;
+                                             fetch(`/api/apps/{{.Name}}/procfile-path`, {
+                                                 method: 'POST',
+                                                 headers: { 'Content-Type': 'application/json' },
+                                                 body: JSON.stringify({ path: procfilePath })
+                                             }).then(response => response.json())
+                                             .then(data => {
+                                                 showProcfilePathModal = false;
+                                                 currentProcfilePath = procfilePath;
+
+                                                 if (data.message) {
+                                                     showLocalFlashMessage(data.message, data.flash_type || 'success');
+                                                 }
+
+                                                 fetchData('process');
+                                             })
+                                             .finally(() => {
+                                                 isUpdatingProcfilePath = false;
+                                             })
+                                }"
+                                        :disabled="isUpdatingProcfilePath"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                                    <svg x-show="isUpdatingProcfilePath" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span x-text="isUpdatingProcfilePath ? 'Saving...' : 'Save'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div x-data="{
+                appJson: '',
+                showAppJsonPathModal: false,
+                appJsonPath: '',
+                currentAppJsonPath: '',
+                isUpdatingAppJsonPath: false,
+                appJsonPathError: '',
+                validateAppJsonPath() {
+                    this.appJsonPathError = '';
+                    if (this.appJsonPath.startsWith('/')) {
+                        this.appJsonPathError = 'Path must be relative and should not start with a slash (/)';
+                        return false;
+                    }
+                    return true;
+                }
+            }" x-init="fetch(`/api/apps/{{.Name}}/app-json`)
+                .then(response => response.json())
+                .then(data => { appJson = data.content || 'app.json not found' })
+                .catch(() => { appJson = 'Error reading app.json' });
+
+                fetch(`/api/apps/{{.Name}}/appjson-path`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.path) {
+                            currentAppJsonPath = data.path;
+                            appJsonPath = data.path;
+                        } else {
+                            currentAppJsonPath = 'app.json';
+                            appJsonPath = 'app.json';
+                        }
+                    })
+                    .catch(() => {
+                        currentAppJsonPath = 'app.json';
+                        appJsonPath = 'app.json';
+                    })">
+                <div class="rounded-md border border-border bg-card p-4">
+                    <div class="mb-4 flex items-start justify-between gap-3">
+                        <div>
+                            <h4 class="text-sm font-semibold text-text-primary">app.json</h4>
+                            <p class="mt-0.5 text-xs text-text-secondary">Current path: <span class="font-mono text-[13px]" x-text="currentAppJsonPath"></span></p>
+                        </div>
+                        <button @click="showAppJsonPathModal = true"
+                                class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                            Configure
+                        </button>
+                    </div>
+                    <div class="max-h-48 overflow-auto rounded-md border border-border bg-surface p-3">
+                        <pre class="whitespace-pre-wrap font-mono text-[13px] text-text-primary" x-text="appJson"></pre>
+                    </div>
+                </div>
+
+                <div x-show="showAppJsonPathModal" class="fixed inset-0 z-40" x-cloak>
+                    <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+                    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                            <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                                <h3 class="text-sm font-semibold text-text-primary">Configure app.json Path</h3>
+                                <button @click="showAppJsonPathModal = false"
+                                        :disabled="isUpdatingAppJsonPath"
+                                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="space-y-4 px-5 py-4">
+                                <div class="flex flex-col gap-1.5">
+                                    <label for="app-json-path" class="text-xs font-medium text-text-secondary">app.json Path</label>
+                                    <input type="text"
+                                           id="app-json-path"
+                                           x-model="appJsonPath"
+                                           @input="validateAppJsonPath()"
+                                           class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                           placeholder="e.g., app.json">
+                                    <p class="text-xs text-status-danger" x-show="appJsonPathError" x-text="appJsonPathError"></p>
+                                    <p class="text-xs text-text-secondary">Leave empty to reset to the default path.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                                <button @click="showAppJsonPathModal = false"
+                                        :disabled="isUpdatingAppJsonPath"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                                    Cancel
+                                </button>
+                                <button @click="if (validateAppJsonPath()) {
+                                             isUpdatingAppJsonPath = true;
+                                             fetch(`/api/apps/{{.Name}}/appjson-path`, {
+                                                 method: 'POST',
+                                                 headers: { 'Content-Type': 'application/json' },
+                                                 body: JSON.stringify({ path: appJsonPath })
+                                             }).then(response => response.json())
+                                             .then(data => {
+                                                 showAppJsonPathModal = false;
+                                                 currentAppJsonPath = appJsonPath;
+
+                                                 if (data.message) {
+                                                     showLocalFlashMessage(data.message, data.flash_type || 'success');
+                                                 }
+
+                                                 fetchData('process');
+                                             })
+                                             .finally(() => {
+                                                 isUpdatingAppJsonPath = false;
+                                             })
+                                }"
+                                        :disabled="isUpdatingAppJsonPath"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                                    <svg x-show="isUpdatingAppJsonPath" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span x-text="isUpdatingAppJsonPath ? 'Saving...' : 'Save'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div x-show="showScaleModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Scale Processes</h3>
+                    <button @click="showScaleModal = false"
+                            :disabled="isScaling"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="space-y-4 px-5 py-4">
+                    <template x-for="type in processTypes" :key="type">
+                        <div class="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-3">
+                            <label :for="'scale-' + type" class="text-sm font-medium text-text-primary" x-text="type"></label>
+                            <div class="flex items-center gap-2">
+                                <button @click="scaleCounts[type] = Math.max(0, scaleCounts[type] - 1)"
+                                        class="inline-flex h-7 w-7 items-center justify-center rounded border border-border bg-card text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+                                    </svg>
+                                </button>
+                                <input type="number"
+                                       :id="'scale-' + type"
+                                       x-model.number="scaleCounts[type]"
+                                       class="h-8 w-16 rounded border border-border bg-card px-2 text-center font-mono text-[13px] text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                       min="0">
+                                <button @click="scaleCounts[type]++"
+                                        class="inline-flex h-7 w-7 items-center justify-center rounded border border-border bg-card text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m6-6H6"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <label for="restart-after-scale" class="flex items-start gap-3 rounded-md border border-border bg-surface px-3 py-3">
+                        <input id="restart-after-scale"
+                               type="checkbox"
+                               x-model="restartAfterScale"
+                               class="mt-0.5 h-4 w-4 rounded border-border text-brand-primary focus:ring-brand-primary">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">Restart after scaling</span>
+                            <span class="block text-xs text-text-secondary">Disable this to update process counts without triggering an immediate deploy restart.</span>
+                        </span>
+                    </label>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showScaleModal = false"
+                            :disabled="isScaling"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="isScaling = true;
+                                 const scaleCmd = Object.entries(scaleCounts)
+                                     .map(([type, count]) => `${type}=${count}`)
+                                     .join(' ');
+                                 fetch(`/api/apps/{{.Name}}/scale`, {
+                                     method: 'POST',
+                                     headers: { 'Content-Type': 'application/json' },
+                                     body: JSON.stringify({
+                                         scale: scaleCmd,
+                                         skipDeploy: !restartAfterScale
+                                     })
+                                 }).then(() => {
+                                     fetchData('process');
+                                     showScaleModal = false;
+                                 }).finally(() => {
+                                     isScaling = false;
+                                 })"
+                            :disabled="isScaling"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                        <svg x-show="isScaling" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isScaling ? 'Scaling...' : 'Scale Processes'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showRestartPolicyModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Configure Restart Policy</h3>
+                    <button @click="showRestartPolicyModal = false"
+                            :disabled="isUpdatingRestartPolicy"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="space-y-4 px-5 py-4" x-data="{
+                    isValidPolicy() {
+                        const validPolicies = ['no', 'always', 'unless-stopped', 'on-failure', 'on-failure:10', 'on-failure:20'];
+                        return validPolicies.includes(restartPolicy);
+                    }
+                }">
+                    <div class="flex flex-col gap-1.5">
+                        <label for="restart-policy" class="text-xs font-medium text-text-secondary">Restart Policy</label>
+                        <input type="text"
+                               id="restart-policy"
+                               x-model="restartPolicy"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                               placeholder="e.g., always">
+                        <p class="text-xs text-text-secondary">Accepted values: `no`, `always`, `unless-stopped`, `on-failure`, `on-failure:10`, `on-failure:20`.</p>
+                        <p x-show="!isValidPolicy() && restartPolicy.length > 0" class="text-xs text-status-danger">Invalid policy format. Please use one of the supported options.</p>
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showRestartPolicyModal = false"
+                            :disabled="isUpdatingRestartPolicy"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                        Cancel
+                    </button>
+                    <button @click="isUpdatingRestartPolicy = true;
+                                    fetch(`/api/apps/{{.Name}}/restart-policy`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ policy: restartPolicy })
+                                    }).then(response => response.json())
+                                    .then(data => {
+                                        if (data.success) {
+                                            currentRestartPolicy = restartPolicy;
+                                            showRestartPolicyModal = false;
+                                            showLocalFlashMessage(data.message || 'Restart policy updated successfully');
+                                        } else {
+                                            showLocalFlashMessage(data.message || data.error || 'Failed to update restart policy', 'error');
+                                        }
+                                        fetchData('process');
+                                    })
+                                    .catch(() => {
+                                        showLocalFlashMessage('Failed to update restart policy', 'error');
+                                    })
+                                    .finally(() => {
+                                        isUpdatingRestartPolicy = false;
+                                    })"
+                            x-show="(function() {
+                                const validPolicies = ['no', 'always', 'unless-stopped', 'on-failure', 'on-failure:10', 'on-failure:20'];
+                                return validPolicies.includes(restartPolicy);
+                            })()"
+                            :disabled="isUpdatingRestartPolicy"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
+                        <svg x-show="isUpdatingRestartPolicy" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isUpdatingRestartPolicy ? 'Updating...' : 'Save'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

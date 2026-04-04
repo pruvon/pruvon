@@ -1,0 +1,1138 @@
+{{define "content"}}
+<div class="mb-6 flex items-start justify-between gap-4">
+    <div>
+        <h1 class="text-lg font-semibold text-text-primary">{{.Name}}</h1>
+        {{if .Description}}
+        <p class="mt-0.5 text-xs text-text-secondary">{{.Description}}</p>
+        {{else}}
+        <p class="mt-0.5 text-xs text-text-secondary">Application detail and operational controls.</p>
+        {{end}}
+    </div>
+</div>
+
+<script>
+// Initialize Alpine.js store for flash messages
+function registerAppDetailFlashStore() {
+    if (!window.Alpine) {
+        return false;
+    }
+
+    window.Alpine.store('flash', {
+        text: '',
+        type: 'success',
+        visible: false,
+        show(message, type = 'success') {
+            this.text = message;
+            this.type = type;
+            this.visible = true;
+
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                this.visible = false;
+            }, 3000);
+        }
+    });
+
+    return true;
+}
+
+if (!registerAppDetailFlashStore()) {
+    document.addEventListener('alpine:init', registerAppDetailFlashStore, { once: true });
+}
+</script>
+
+<div
+    x-data="{
+    activeTab: 'overview',
+    currentSubTab: 'process',
+    showingLogs: false,
+    logType: 'app',
+    selectedContainerId: '',
+    socket: null,
+    logData: [],
+    appName: '{{.Name}}',
+    envs: {},
+    envVars: [],
+    configData: '',
+    domainsData: [],
+    cron: {
+        jobs: []
+    },
+    redirects: [],
+    ports: [],
+    storageInfo: {
+        mounts: []
+    },
+    containers: [],
+    containerStats: [],
+    sslInfo: {
+        hasLetsencrypt: false
+    },
+    hasRedirectPlugin: false,
+    isLoading: false,
+    showEnvModal: false,
+    showEnvFileModal: false,
+    showDeleteEnvModal: false,
+    newEnvName: '',
+    newEnvValue: '',
+    restartApp: false,
+    restartAppFromFile: false,
+    restartOnDelete: false,
+    deleteEnvVar: '',
+    envFileError: '',
+    fileContent: '',
+    parsedEnvVars: [],
+    appName: '{{.Name}}',
+    activeTab: 'summary',
+    summaryData: '',
+    processData: '',
+    configData: '',
+    portsData: '',
+    domainsData: '',
+    logsData: [],
+    wsConnection: null,
+    showLogs: false,
+    domains: [],
+    envVars: [],
+    showEnvModal: false,
+    newEnvName: '',
+    newEnvValue: '',
+    restartApp: false,
+    ports: [],
+    info: [],
+    storageData: '',
+    terminal: null,
+    terminalConnected: false,
+    terminalWs: null,
+    containers: [],
+    updateInterval: null,
+    nginxConfigs: [],
+    editingConfig: null,
+    newConfigValue: '',
+    showNginxModal: false,
+    cronJobs: [],
+    dockerOptions: { build: [], deploy: [], run: [] },
+    fitAddon: null,
+    isRunning: false,
+    stats: { cpu_usage: 0, memory_usage: 0, disk_usage: 0, disk_usage_text: '' },
+    statsInterval: null,
+    linkedServices: [],
+    servicesLoaded: false,
+    loadingServices: false,
+    pendingRequests: {},
+    allTabs: ['summary', 'process', 'env', 'nginx', 'services', 'docker-options'],
+    previousTab() {
+        const currentIndex = this.allTabs.indexOf(this.activeTab);
+        if (currentIndex > 0) {
+            const prevTab = this.allTabs[currentIndex - 1];
+            this.fetchData(prevTab);
+        }
+    },
+    nextTab() {
+        const currentIndex = this.allTabs.indexOf(this.activeTab);
+        if (currentIndex < this.allTabs.length - 1) {
+            const nextTab = this.allTabs[currentIndex + 1];
+            this.fetchData(nextTab);
+        }
+    },
+    serverDomain: '',
+    summaryLoading: true,
+    appDetails: {
+        deployed: false,
+        running: false,
+        createdAt: '',
+        lastDeployAt: '',
+        processes: {}
+    },
+    loadingSummary: false,
+    errors: {
+        newEnvName: '',
+        newEnvValue: ''
+    },
+    nginxSubTab: 'settings',
+    showNginxLogs: false,
+    nginxLogsData: [],
+    nginxWsConnection: null,
+    showDomainModal: false,
+    newDomain: '',
+    enableSSL: false,
+    domainError: '',
+    showMountModal: false,
+    showLetsEncryptModal: false,
+    isProcessingLetsEncrypt: false,
+    flashMessage: null,
+    showFlash: false,
+    showFlashMessage(message, type = 'success') {
+        this.flashMessage = { text: message, type: type };
+        this.showFlash = true;
+        setTimeout(() => this.showFlash = false, 10000);
+    },
+    validateEnvForm() {
+        let isValid = true;
+        this.errors.newEnvName = '';
+        this.errors.newEnvValue = '';
+
+        if (!this.newEnvName.trim()) {
+            this.errors.newEnvName = 'Variable name is required';
+            isValid = false;
+        }
+
+        if (!this.newEnvValue.trim()) {
+            this.errors.newEnvValue = 'Value is required';
+            isValid = false;
+        }
+
+        return isValid;
+    },
+    async cachedFetch(url, forceRefresh = false, options = {}) {
+        const cacheKey = url + JSON.stringify(options);
+
+        if (!forceRefresh && this.pendingRequests[cacheKey]) {
+            return this.pendingRequests[cacheKey].then(response => response.clone());
+        }
+
+        const promise = fetch(url, options).then(response => {
+            delete this.pendingRequests[cacheKey];
+            return response;
+        }).catch(error => {
+            delete this.pendingRequests[cacheKey];
+            throw error;
+        });
+
+        this.pendingRequests[cacheKey] = promise;
+        return promise;
+    },
+    async fetchStats() {
+        try {
+            const response = await this.cachedFetch(`/api/apps/{{.Name}}/stats`);
+            this.stats = await response.json();
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+        }
+    },
+    initStatsUpdate() {
+        this.fetchStats();
+        this.statsInterval = setInterval(() => this.fetchStats(), 5000);
+    },
+    stopStatsUpdate() {
+        if (this.statsInterval) {
+            clearInterval(this.statsInterval);
+        }
+    },
+    async fetchData(tab, forceRefresh = false) {
+        this.activeTab = tab;
+        if (tab === 'summary') {
+            if (this.summaryLoading && !this.loadingSummary) {
+                await this.loadAppDetails();
+            }
+            return;
+        }
+        if (tab === 'process') {
+            try {
+                const response = await this.cachedFetch(`/api/apps/{{.Name}}/${tab}`);
+                const data = await response.json();
+                this.processData = data.output;
+                this.info = data.info;
+                this.containers = data.containers;
+            } catch (error) {
+                console.error('Error:', error);
+            }
+            return;
+        }
+        if (tab === 'nginx' && this.nginxSubTab === 'domains') {
+            try {
+                const response = await this.cachedFetch(`/api/apps/{{.Name}}/domains`);
+                const data = await response.json();
+                this.domains = data.domains;
+                this.redirects = data.redirects || [];
+            } catch (error) {
+                console.error('Error:', error);
+                this.domains = [];
+                this.redirects = [];
+            }
+            return;
+        }
+        if (tab === 'nginx') {
+            try {
+                const response = await this.cachedFetch(`/api/apps/{{.Name}}/nginx`);
+                const data = await response.json();
+                this.nginxConfigs = data.configs;
+
+                try {
+                    const sslResponse = await this.cachedFetch(`/api/apps/{{.Name}}/ssl`);
+                    const sslData = await sslResponse.json();
+                    this.sslInfo = {
+                        active: sslData.active || false,
+                        autorenew: sslData.autorenew || false,
+                        email: sslData.email || '',
+                        expiration: sslData.expiration || null
+                    };
+                } catch (sslError) {
+                    console.error('Error fetching SSL info:', sslError);
+                    this.sslInfo = { active: false, autorenew: false, email: '', expiration: null };
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+            return;
+        }
+        if (tab === 'services') {
+            if (!this.servicesLoaded && !this.loadingServices) {
+                await this.loadServices();
+            }
+            return;
+        }
+        if (tab === 'cron') {
+            try {
+                const response = await this.cachedFetch(`/api/apps/{{.Name}}/cron`);
+                const data = await response.json();
+                this.cronJobs = data.jobs;
+            } catch (error) {
+                console.error('Error:', error);
+            }
+            return;
+        }
+        if (tab === 'resource') {
+            return;
+        }
+        if (tab === 'docker-options') {
+            const url = `/api/apps/{{.Name}}/docker-options`;
+            const forceRefreshDockerOptions = this._shouldRefreshDockerOptions;
+
+            if (forceRefreshDockerOptions) {
+                this.clearCache(url);
+                this._shouldRefreshDockerOptions = false;
+            }
+
+            const response = await this.cachedFetch(url, forceRefreshDockerOptions);
+            const data = await response.json();
+            this.dockerOptions = {
+                build: data.build || [],
+                deploy: data.deploy || [],
+                run: data.run || []
+            };
+            return;
+        }
+        if (tab === 'ssl') {
+            try {
+                const response = await this.cachedFetch(`/api/apps/{{.Name}}/ssl-info`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.sslInfo = {
+                        active: data.active || false,
+                        autorenew: data.autorenew || false,
+                        email: data.email || '',
+                        expiration: data.expiration || null
+                    };
+                }
+            } catch (error) {
+                console.error('Error fetching SSL info:', error);
+                this.sslInfo = { active: false, autorenew: false, email: '', expiration: null };
+            }
+            return;
+        }
+        if (this[tab + 'Data']) return;
+
+        try {
+            const response = await this.cachedFetch(`/api/apps/{{.Name}}/${tab}`);
+            const data = await response.json();
+            this[tab + 'Data'] = data.output;
+            if (tab === 'ports') {
+                this.ports = data.ports;
+            }
+            if (tab === 'domains') {
+                this.domains = data.domains;
+            }
+            if (tab === 'config') {
+                this.envVars = data.vars;
+            }
+            if (tab === 'process') {
+                this.info = data.info;
+            }
+            if (tab === 'storage') {
+                this.info = data.info;
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            this[tab + 'Data'] = 'Veri yüklenirken hata oluştu.';
+        }
+    },
+    setupProcessUpdates() {
+        this.updateInterval = setInterval(() => {
+            if (this.activeTab === 'process') {
+                this.fetchData('process');
+            }
+        }, 5000);
+    },
+    handleTerminalResize() {
+        if (!this.terminalConnected || !this.fitAddon) {
+            return;
+        }
+
+        this.fitAddon.fit();
+        const dimensions = this.fitAddon.proposeDimensions();
+        if (dimensions && this.terminalWs) {
+            this.terminalWs.send(JSON.stringify({
+                type: 'resize',
+                data: {
+                    cols: dimensions.cols,
+                    rows: dimensions.rows
+                }
+            }));
+        }
+    },
+    async init() {
+        await Promise.all([
+            (async () => {
+                try {
+                    const appJsonResponse = await this.cachedFetch(`/api/apps/{{.Name}}/app-json`);
+                    const appJsonData = await appJsonResponse.json();
+                } catch (error) {
+                    console.error('Error fetching app.json:', error);
+                }
+            })(),
+
+            this.loadServerDomain(),
+
+            this.loadAppDetails(),
+
+            this.loadDomains(),
+
+            this.loadServices(),
+        ]);
+
+        this.setupProcessUpdates();
+
+        this.statsInterval = setInterval(() => {
+            if (this.activeTab === 'summary' && this.appDetails.deployed) {
+                this.fetchStats().catch(console.error);
+            }
+        }, 5000);
+
+        window.addEventListener('resize', () => this.handleTerminalResize());
+
+        window.addEventListener('beforeunload', () => {
+            if (this.updateInterval) clearInterval(this.updateInterval);
+            if (this.statsInterval) clearInterval(this.statsInterval);
+        });
+    },
+    startLogging() {
+        this.showLogs = true;
+        this.logsData = [];
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.wsConnection = new WebSocket(`${wsProtocol}//${window.location.host}/ws/apps/{{.Name}}/logs`);
+
+        this.wsConnection.onmessage = (event) => {
+            this.logsData.push(event.data);
+            if (this.logsData.length > 1000) {
+                this.logsData.shift();
+            }
+            const logContainer = document.getElementById('logContainer');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        };
+
+        this.wsConnection.onclose = () => {
+            this.showLogs = false;
+        };
+    },
+    stopLogging() {
+        if (this.wsConnection) {
+            this.wsConnection.close();
+        }
+        this.showLogs = false;
+    },
+    async addEnvVar() {
+        if (!this.validateEnvForm()) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/config`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: this.newEnvName,
+                    value: this.newEnvValue,
+                    restart: this.restartApp
+                })
+            });
+            if (response.ok) {
+                this.showEnvModal = false;
+                this.newEnvName = '';
+                this.newEnvValue = '';
+                this.restartApp = false;
+                this.errors.newEnvName = '';
+                this.errors.newEnvValue = '';
+                this.configData = '';
+                await this.fetchData('config');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    },
+    connectTerminal() {
+        this.disconnectTerminal();
+
+        this.terminal = new Terminal({
+            cursorBlink: true,
+            fontSize: 14,
+            theme: {
+                background: '#000000',
+                foreground: '#ffffff'
+            },
+            allowProposedApi: true,
+            cols: 100,
+            rows: 30,
+            convertEol: true,
+            scrollback: 5000
+        });
+
+        this.fitAddon = new FitAddon.FitAddon();
+        this.terminal.loadAddon(this.fitAddon);
+
+        this.terminal.open(document.getElementById('terminal'));
+        this.fitAddon.fit();
+
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.terminalWs = new WebSocket(`${wsProtocol}//${window.location.host}/ws/apps/{{.Name}}/terminal`);
+        this.terminalWs.binaryType = 'arraybuffer';
+
+        this.terminalWs.onopen = () => {
+            this.terminalConnected = true;
+
+            this.terminalWs.send(JSON.stringify({
+                type: 'set_env',
+                data: {
+                    TERM: 'xterm-256color'
+                }
+            }));
+
+            const dimensions = this.fitAddon.proposeDimensions();
+            if (dimensions) {
+                this.terminalWs.send(JSON.stringify({
+                    type: 'resize',
+                    data: {
+                        cols: dimensions.cols,
+                        rows: dimensions.rows
+                    }
+                }));
+            }
+
+            const resizeObserver = new ResizeObserver(() => {
+                if (this.fitAddon) {
+                    this.fitAddon.fit();
+                    const dimensions = this.fitAddon.proposeDimensions();
+                    if (dimensions) {
+                        this.terminalWs.send(JSON.stringify({
+                            type: 'resize',
+                            data: {
+                                cols: dimensions.cols,
+                                rows: dimensions.rows
+                            }
+                        }));
+                    }
+                }
+            });
+
+            resizeObserver.observe(document.getElementById('terminal'));
+
+            this.terminal.onData(data => {
+                this.terminalWs.send(data);
+            });
+        };
+
+        this.terminalWs.onmessage = (event) => {
+            const data = new Uint8Array(event.data);
+            this.terminal.write(data);
+        };
+
+        this.terminalWs.onclose = () => {
+            this.disconnectTerminal();
+        };
+
+        this.terminalWs.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            this.disconnectTerminal();
+        };
+    },
+    disconnectTerminal() {
+        const terminalWs = this.terminalWs;
+        this.terminalWs = null;
+
+        if (terminalWs) {
+            terminalWs.onclose = null;
+            terminalWs.onerror = null;
+            if (terminalWs.readyState === WebSocket.OPEN || terminalWs.readyState === WebSocket.CONNECTING) {
+                terminalWs.close();
+            }
+        }
+
+        if (this.terminal) {
+            try {
+                this.terminal.dispose();
+            } catch (e) {
+                console.log('Terminal disposal failed:', e);
+            }
+            this.terminal = null;
+        }
+
+        this.fitAddon = null;
+
+        this.terminalConnected = false;
+    },
+    startNginxLogs(type) {
+        this.showNginxLogs = true;
+        this.nginxLogsData = [];
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.nginxWsConnection = new WebSocket(`${wsProtocol}//${window.location.host}/ws/apps/{{.Name}}/nginx-logs/${type}`);
+
+        this.nginxWsConnection.onmessage = (event) => {
+            this.nginxLogsData.push(event.data);
+            if (this.nginxLogsData.length > 1000) {
+                this.nginxLogsData.shift();
+            }
+            const logContainer = document.getElementById('nginxLogContainer');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        };
+
+        this.nginxWsConnection.onclose = () => {
+            this.showNginxLogs = false;
+        };
+    },
+    stopNginxLogs() {
+        if (this.nginxWsConnection) {
+            this.nginxWsConnection.close();
+        }
+        this.showNginxLogs = false;
+    },
+    async addDomain() {
+        this.domainError = '';
+        const domain = this.newDomain.trim();
+
+        if (!domain) {
+            this.domainError = 'Domain name is required';
+            return;
+        }
+
+        const domainRegex = /^((?!-))(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]{0,1}\.(xn--)?([a-z0-9\-]{1,61}|[a-z0-9-]{1,30}\.[a-z]{2,})$/;
+        if (!domainRegex.test(domain)) {
+            this.domainError = 'Please enter a valid domain name (e.g., example.com)';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/domains`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    domain: domain
+                })
+            });
+
+            if (response.ok) {
+                if (this.enableSSL) {
+                    await fetch(`/api/apps/{{.Name}}/ssl`, { method: 'POST' });
+                }
+
+                this.showDomainModal = false;
+                this.newDomain = '';
+                this.enableSSL = false;
+                this.domainError = '';
+
+                this.domainsData = '';
+                await this.fetchData('domains');
+
+                await this.fetchData(this.activeTab);
+            } else {
+                this.domainError = 'Failed to add domain';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            this.domainError = 'Failed to add domain';
+        }
+    },
+    async fetchNginxPorts() {
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/ports`);
+            const data = await response.json();
+            this.ports = data.ports;
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    },
+    showScaleModal: false,
+    scaleCounts: {},
+    isScaling: false,
+    processTypes: [],
+    initializeScaleCounts() {
+        this.processTypes = [...new Set(info.filter(i => i.name.startsWith('Status ')).map(i => {
+            const match = i.name.match(/Status\s+(\w+)/);
+            return match ? match[1] : null;
+        }).filter(Boolean))];
+
+        this.processTypes.forEach(type => {
+            const statusInfo = info.find(i => i.name === `Status ${type}`);
+            if (statusInfo) {
+                const match = statusInfo.value.match(/\((\d+)\)/);
+                this.scaleCounts[type] = match ? parseInt(match[1]) : 0;
+            } else {
+                this.scaleCounts[type] = 0;
+            }
+        });
+    },
+    showDeleteEnvModal: false,
+    deleteEnvVar: null,
+    restartOnDelete: false,
+    async deleteEnvVarConfirm() {
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/config/${this.deleteEnvVar}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    restart: this.restartOnDelete
+                })
+            });
+
+            if (response.ok) {
+                this.showDeleteEnvModal = false;
+                this.deleteEnvVar = null;
+                this.restartOnDelete = false;
+                this.configData = '';
+                await this.fetchData('config');
+                this.showFlashMessage('Environment variable deleted successfully');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    },
+    showDeleteModal: false,
+    deleteData: false,
+    deleteDb: false,
+    confirmationName: '',
+    isDeleting: false,
+    async deleteApplication() {
+        this.isDeleting = true;
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    deleteData: this.deleteData,
+                    deleteDb: this.deleteDb
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    localStorage.setItem('flashMessage', data.message);
+                    localStorage.setItem('flashType', data.type);
+                }
+                window.location.href = '/apps';
+            } else {
+                const data = await response.json();
+                this.showFlashMessage(data.error || 'Failed to delete application', 'error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            this.showFlashMessage('Failed to delete application', 'error');
+        } finally {
+            this.isDeleting = false;
+            this.showDeleteModal = false;
+        }
+    },
+    async loadServices() {
+        if (this.loadingServices || this.servicesLoaded) return;
+
+        this.loadingServices = true;
+        try {
+            const response = await this.cachedFetch(`/api/apps/{{.Name}}/services`);
+            const data = await response.json();
+            this.linkedServices = data.services || [];
+            this.servicesLoaded = true;
+        } catch (error) {
+            console.error('Error loading linked services:', error);
+        } finally {
+            this.loadingServices = false;
+        }
+    },
+    async loadServerDomain() {
+        try {
+            const response = await this.cachedFetch('/api/server/domain');
+            const data = await response.json();
+            this.serverDomain = data.domain;
+        } catch (error) {
+            console.error('Error loading server domain:', error);
+        }
+    },
+    async loadAppDetails() {
+        this.loadingSummary = true;
+        try {
+            const response = await this.cachedFetch(`/api/apps/{{.Name}}/details`);
+            const detailsData = await response.json();
+
+            this.appDetails.deployed = detailsData.deployed;
+            this.appDetails.running = detailsData.running;
+            this.appDetails.createdAt = detailsData.createdAt;
+            this.appDetails.lastDeployAt = detailsData.lastDeployAt;
+            this.appDetails.processes = detailsData.processes || {};
+
+            if (detailsData.deployed) {
+                await this.fetchStats();
+            }
+        } catch (error) {
+            console.error('Error loading app details:', error);
+        } finally {
+            this.summaryLoading = false;
+            this.loadingSummary = false;
+        }
+    },
+    async loadDomains() {
+        try {
+            const response = await this.cachedFetch(`/api/apps/{{.Name}}/domains`);
+            const data = await response.json();
+            this.domains = Array.isArray(data.domains) ? data.domains : [];
+        } catch (error) {
+            console.error('Error loading domains:', error);
+            this.domains = [];
+        }
+    },
+    async performAppAction(action, processType = '') {
+        try {
+            let url = `/api/apps/{{.Name}}/${action}`;
+            if (processType) {
+                url += `?process_type=${processType}`;
+            }
+
+            const response = await fetch(url, {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                await this.loadAppDetails();
+                this.showFlashMessage(`Application ${action} operation successful`, 'success');
+            } else {
+                this.showFlashMessage(`Failed to ${action} application`, 'error');
+            }
+        } catch (error) {
+            console.error(`Error performing ${action}:`, error);
+            this.showFlashMessage(`Failed to ${action} application`, 'error');
+        }
+    },
+    sslInfo: {
+        active: false,
+        autorenew: false,
+        email: '',
+        expiration: null
+    },
+    containers: [],
+    deploymentLoading: false,
+    newEnvSecret: false,
+    _shouldRefreshDockerOptions: false,
+    clearCache(url, options = {}) {
+        const cacheKey = url + JSON.stringify(options);
+        delete this.pendingRequests[cacheKey];
+    },
+    handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            this.envFileError = 'No file selected';
+            return;
+        }
+
+        if (file.size > 1024 * 1024) {
+            this.envFileError = 'File size should be less than 1MB';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.fileContent = e.target.result;
+            this.parseEnvFile(this.fileContent);
+        };
+        reader.onerror = () => {
+            this.envFileError = 'Error reading file';
+        };
+        reader.readAsText(file);
+    },
+    parseEnvFile(content) {
+        this.parsedEnvVars = [];
+        this.envFileError = '';
+
+        if (!content.trim()) {
+            this.envFileError = 'File is empty';
+            return;
+        }
+
+        const lines = content.split('\n');
+
+        lines.forEach((line, index) => {
+            line = line.trim();
+
+            if (!line || line.startsWith('#')) {
+                return;
+            }
+
+            const match = line.match(/^([^=]+)=(.*)$/);
+            if (!match) {
+                this.envFileError = `Line ${index + 1} is not in key=value format`;
+                return;
+            }
+
+            const [_, key, value] = match;
+            if (!key.trim()) {
+                this.envFileError = `Line ${index + 1} has an empty key`;
+                return;
+            }
+
+            this.parsedEnvVars.push({
+                key: key.trim(),
+                value: value
+            });
+        });
+
+        if (this.parsedEnvVars.length === 0 && !this.envFileError) {
+            this.envFileError = 'No valid environment variables found in file';
+        }
+    },
+    async applyEnvVarsFromFile() {
+        if (this.parsedEnvVars.length === 0) {
+            this.envFileError = 'No valid environment variables to apply';
+            return;
+        }
+
+        const validVars = this.parsedEnvVars.filter(env => env.key.trim() !== '');
+
+        if (validVars.length === 0) {
+            this.envFileError = 'No valid environment variables to apply';
+            return;
+        }
+
+        try {
+            let hasError = false;
+
+            for (const env of validVars) {
+                const response = await fetch(`/api/apps/{{.Name}}/config`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        key: env.key,
+                        value: env.value,
+                        restart: false
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    console.error('Error:', error);
+                    this.envFileError = `Failed to set ${env.key}: ${error.error || 'Unknown error'}`;
+                    hasError = true;
+                    break;
+                }
+            }
+
+            if (!hasError && this.restartAppFromFile) {
+                await fetch(`/api/apps/{{.Name}}/restart`, {
+                    method: 'POST'
+                });
+            }
+
+            if (!hasError) {
+                // Reset form and close modal
+                this.showEnvFileModal = false;
+                this.envFileError = '';
+                this.fileContent = '';
+                this.parsedEnvVars = [];
+                this.restartAppFromFile = false;
+
+                // Reset the file input element
+                const fileInput = document.getElementById('env-file-upload');
+                if (fileInput) fileInput.value = '';
+
+                // Fetch fresh data and update table
+                const configResponse = await fetch(`/api/apps/{{.Name}}/config`);
+                const configData = await configResponse.json();
+                this.envVars = configData.vars;
+
+                Alpine.store('flash').show('Environment variables added successfully', 'success');
+            }
+        } catch (err) {
+            console.error('Error:', err);
+            this.envFileError = 'Network error occurred';
+        }
+    }
+}"
+    x-init="$nextTick(() => {
+        init().catch(console.error);
+    })"
+    class="mb-4 lg:flex lg:flex-row lg:items-start lg:gap-x-8 xl:gap-x-10">
+
+    <!-- Flash Message Display -->
+    <div
+        x-data
+        x-show="$store.flash.visible"
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0 transform -translate-y-2"
+        x-transition:enter-end="opacity-100 transform translate-y-0"
+        x-transition:leave="transition ease-in duration-200"
+        x-transition:leave-start="opacity-100 transform translate-y-0"
+        x-transition:leave-end="opacity-0 transform -translate-y-2"
+        class="fixed right-4 top-4 z-50"
+        @click="$store.flash.visible = false">
+        <div :class="{
+            'border-status-success/30 bg-status-success-bg text-status-success': $store.flash.type === 'success',
+            'border-status-danger/30 bg-status-danger-bg text-status-danger': $store.flash.type === 'error'
+        }" class="flex items-start gap-3 rounded-md border px-4 py-3 text-sm shadow-dropdown">
+            <div class="flex items-center">
+                <p x-text="$store.flash.text" class="flex-1"></p>
+                <button class="ml-3 text-text-tertiary transition-colors duration-150 hover:text-text-primary" @click="$store.flash.visible = false">
+                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Left Sidebar for Tab Navigation -->
+    <aside class="mt-4 lg:w-[9.5rem] lg:flex-shrink-0 lg:mt-0">
+        <div class="sticky top-5">
+            <nav class="flex flex-col">
+                <!-- Summary -->
+                <button @click="fetchData('summary')"
+                        :class="activeTab === 'summary' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                        class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                    <span>Summary</span>
+                </button>
+
+                <!-- Processes -->
+                <button @click="fetchData('process')"
+                        :class="activeTab === 'process' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                        class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                    <span>Processes</span>
+                </button>
+
+                <!-- Config Section -->
+                <div class="pt-3">
+                    <p class="px-2.5 pb-1 text-[10px] uppercase tracking-wider font-medium text-text-tertiary">Configuration</p>
+                    <button @click="fetchData('config')" :class="activeTab === 'config' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Env Vars</span>
+                    </button>
+                    <button @click="fetchData('resource')" :class="activeTab === 'resource' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Resource Limits</span>
+                    </button>
+                    <button @click="fetchData('docker-options')" :class="activeTab === 'docker-options' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Docker Options</span>
+                    </button>
+                </div>
+
+                <!-- Storage Section -->
+                <div class="pt-3">
+                    <p class="px-2.5 pb-1 text-[10px] uppercase tracking-wider font-medium text-text-tertiary">Storage & Services</p>
+                    <button @click="fetchData('services')" :class="activeTab === 'services' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Services</span>
+                    </button>
+                    <button @click="fetchData('storage')" :class="activeTab === 'storage' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Storage</span>
+                    </button>
+                </div>
+
+                <!-- Nginx -->
+                <button @click="fetchData('nginx')"
+                        :class="activeTab === 'nginx' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
+                        class="mt-3 flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                    <span>Nginx</span>
+                </button>
+
+                <!-- Operations Section -->
+                <div class="pt-3">
+                    <p class="px-2.5 pb-1 text-[10px] uppercase tracking-wider font-medium text-text-tertiary">Operations</p>
+                    <button @click="fetchData('logs')" :class="activeTab === 'logs' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Logs</span>
+                    </button>
+                    <button @click="fetchData('terminal')" :class="activeTab === 'terminal' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Terminal</span>
+                    </button>
+                    <button @click="fetchData('cron')" :class="activeTab === 'cron' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Cron</span>
+                    </button>
+                </div>
+
+                <!-- Danger Zone -->
+                <button @click="fetchData('danger')"
+                        :class="activeTab === 'danger' ? 'border-l-2 border-status-danger bg-status-danger-bg text-status-danger font-medium' : 'border-l-2 border-transparent text-status-danger/70 hover:text-status-danger'"
+                        class="mt-3 flex w-full items-center px-2 py-1 text-left text-[13px] transition-colors duration-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mr-1.5 h-[13px] w-[13px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>Danger Zone</span>
+                </button>
+            </nav>
+        </div>
+    </aside>
+
+    <!-- Main Content Area (Right Column on LG screens) -->
+    <main class="min-w-0 lg:flex-1">
+        <div class="bg-transparent">
+            <template x-if="activeTab === 'summary'">
+                {{template "app_summary" .}}
+            </template>
+
+            <template x-if="activeTab === 'process'">
+                {{template "app_processes" .}}
+            </template>
+
+            <template x-if="activeTab === 'config'">
+                {{template "app_env_vars" .}}
+            </template>
+
+            <template x-if="activeTab === 'services'">
+                {{template "app_services" .}}
+            </template>
+
+            <template x-if="activeTab === 'storage'">
+                {{template "app_storage" .}}
+            </template>
+
+            <template x-if="activeTab === 'resource'">
+                {{template "app_resource" .}}
+            </template>
+
+            <template x-if="activeTab === 'docker-options'">
+                {{template "app_docker_options" .}}
+            </template>
+
+            <template x-if="activeTab === 'nginx'">
+                {{template "app_nginx" .}}
+            </template>
+
+            <template x-if="activeTab === 'cron'">
+                {{template "app_cron" .}}
+            </template>
+
+            <template x-if="activeTab === 'logs'">
+                {{template "app_logs" .}}
+            </template>
+
+            <template x-if="activeTab === 'terminal'">
+                {{template "app_terminal" .}}
+            </template>
+
+            <template x-if="activeTab === 'danger'">
+                {{template "app_danger_zone" .}}
+            </template>
+        </div>
+    </main>
+</div>
+
+{{end}}
