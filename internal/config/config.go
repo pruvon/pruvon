@@ -23,7 +23,7 @@ var (
 	configPath    string
 )
 
-// Config represents the main configuration structure loaded from config.yaml
+// Config represents the main configuration structure loaded from pruvon.yml
 // We use yaml tags for reading from the file and json tags for API responses
 type Config struct {
 	Admin struct {

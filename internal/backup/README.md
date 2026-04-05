@@ -4,7 +4,7 @@ The backup utility provides functionality for backing up Dokku databases. It's d
 
 ## Configuration
 
-The backup configuration is specified in the `config.yaml` file under the `backup` section:
+The backup configuration is specified in the `pruvon.yml` file under the `backup` section:
 
 ```yaml
 backup:
@@ -27,17 +27,19 @@ Run the backup utility using the command-line flag:
 
 ```bash
 # Run automatic backup (daily, weekly, or monthly based on the current date)
-pruvon --backup auto
+pruvon -backup auto
 
 # Run a specific backup type
-pruvon --backup daily
-pruvon --backup weekly
-pruvon --backup monthly
+pruvon -backup daily
+pruvon -backup weekly
+pruvon -backup monthly
 ```
 
 ## Automatic Daily Backups
 
-Pruvon does not install cron jobs at runtime. Install the provided cron script during provisioning or package installation so the application does not need permission to write into `/etc/cron.daily`.
+Pruvon does not create cron jobs from inside the running application. Install the provided cron script during provisioning or package installation so the application does not need permission to write into `/etc/cron.daily`.
+
+The repository `install.sh` already installs this script to `/etc/cron.daily/pruvon-backup` as part of the standard Linux setup.
 
 To manually install the daily cron job:
 
@@ -105,7 +107,7 @@ The backup utility will automatically check if the required Dokku plugin for a d
 - **Weekly backups**: Only the last `keep_weekly_num` (default: 6) weekly backups are kept
 - **Monthly backups**: Only the last `keep_monthly_num` (default: 3) monthly backups are kept
 
-These values can be configured in the config.yaml file. If not specified, default values will be used.
+These values can be configured in `pruvon.yml`. If not specified, default values will be used.
 
 ## Requirements
 

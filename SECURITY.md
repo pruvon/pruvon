@@ -37,7 +37,7 @@ When using Pruvon:
 
 - Keep your installation updated to the latest version
 - Use strong passwords for admin accounts
-- Protect your `config.yaml` file (contains sensitive credentials)
+- Protect your `pruvon.yml` or `/etc/pruvon.yml` file (contains sensitive credentials)
 - Use HTTPS in production
 - Regularly rotate API keys and secrets
 - Follow the principle of least privilege for server access

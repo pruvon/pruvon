@@ -2,25 +2,24 @@
 
 ## Scope
 
-- Pruvon is a Dokku-focused server management app. Treat Dokku, Docker, Linux filesystem paths, and PTY/WebSocket terminal support as core product assumptions.
+- Pruvon is a Dokku-focused web UI and control plane, not a general-purpose server management app. Treat Dokku, Docker, Linux filesystem paths, and PTY/WebSocket terminal support as core product assumptions.
 - Optimize for small, safe changes that preserve current routes, config shape, and template names unless the task explicitly requires broader refactoring.
 - Use English for code, comments, docs, and user-facing strings unless the task explicitly asks for another language.
 - Target Go 1.26+.
 
 ## Verified Commands
 
-- Build locally: `make build` or `go build -o pruvon ./cmd/app`
-- Build Linux artifacts: `make build-linux`
+- Build Linux artifacts: `make build`
 - Format: `make fmt` or `gofmt -w <files>`
 - Vet: `make vet` or `go vet ./...`
 - Test: `make test` or `go test ./...`
 - CI-equivalent test pass: `go test -v -race -coverprofile=coverage.out ./...`
 - Local lint: `make lint` or `golangci-lint run --timeout=5m`
-- Run server: `go run ./cmd/app -server -config config.yaml` or `./pruvon -server -config config.yaml`
-- Run backup: `go run ./cmd/app -backup auto -config config.yaml`
+- Run server: `go run ./cmd/app -server -config pruvon.yml` or `./pruvon -server -config pruvon.yml`
+- Run backup: `go run ./cmd/app -backup auto -config pruvon.yml`
 - Show version: `go run ./cmd/app -version`
 - Release build pattern: `go build -trimpath -ldflags="-s -w -X main.PruvonVersion=<version>" -o dist/pruvon-linux-<arch> ./cmd/app`
-- Start local config from `config.yaml.example`.
+- Start local config from `pruvon.yml.example`.
 - A root `Makefile` exists for common build and verification tasks; direct Go commands remain valid.
 - A checked-in `.golangci.yml` mirrors the GitHub Action lint timeout; keep local and CI lint expectations aligned.
 - If local lint fails with Go or analyzer version errors, treat that as an environment/tooling mismatch first and compare against CI.

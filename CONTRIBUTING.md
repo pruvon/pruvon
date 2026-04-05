@@ -7,8 +7,7 @@ Thank you for considering contributing to Pruvon!
 ### Prerequisites
 
 - Go 1.26 or later
-- Linux server (amd64/arm64) for deployment
-- Dokku (optional, for server management features)
+- Dokku (optional, for runtime or integration testing)
 
 ### Development Setup
 
@@ -27,9 +26,11 @@ Thank you for considering contributing to Pruvon!
    make build
    ```
 
-   For Linux `amd64` and `arm64` build artifacts in `builds/`:
+   This produces Linux `amd64` and `arm64` artifacts in `builds/` for Dokku hosts.
+
+   For a host-native development binary instead:
    ```bash
-   make build-linux
+   go build -o pruvon ./cmd/app
    ```
 
 5. Run the standard local checks:

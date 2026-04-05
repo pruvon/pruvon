@@ -107,8 +107,7 @@ detect_config_template() {
     fi
 
     for candidate in \
-        "${SCRIPT_DIR}/pruvon.yml.example" \
-        "${SCRIPT_DIR}/config.yaml.example"
+        "${SCRIPT_DIR}/pruvon.yml.example"
     do
         if [[ -f "${candidate}" ]]; then
             printf '%s\n' "${candidate}"
@@ -116,7 +115,7 @@ detect_config_template() {
         fi
     done
 
-    die "could not find a config example file. Expected pruvon.yml.example or config.yaml.example"
+    die "could not find a config example file. Expected pruvon.yml.example"
 }
 
 generate_admin_password() {

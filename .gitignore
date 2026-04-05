@@ -11,7 +11,7 @@ dokkum-backup
 builds/
 
 # Config (contains secrets)
-config.yaml
+pruvon.yml
 *.local.yaml
 
 # Environment

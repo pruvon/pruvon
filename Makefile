@@ -4,13 +4,12 @@ BUILD_DIR := builds
 LDFLAGS := -s -w
 GOFMT_FILES := $(shell git ls-files '*.go')
 
-.PHONY: help build build-linux build-linux-amd64 build-linux-arm64 fmt test test-race vet lint changelog clean
+.PHONY: help build build-linux-amd64 build-linux-arm64 fmt test test-race vet lint changelog clean
 
 help:
 	@printf '%s\n' \
 		'Available targets:' \
-		'  make build        Build local ./pruvon binary' \
-		'  make build-linux  Build Linux amd64/arm64 binaries into builds/' \
+		'  make build        Build Linux amd64/arm64 binaries into builds/' \
 		'  make fmt          Run gofmt on tracked Go files' \
 		'  make test         Run go test ./...' \
 		'  make test-race    Run go test -race ./...' \
@@ -19,10 +18,7 @@ help:
 		'  make changelog VERSION=x.y.z [PREVIOUS_TAG=vx.y.z]  Regenerate CHANGELOG.md from commit subjects' \
 		'  make clean        Remove generated binaries and build artifacts'
 
-build:
-	go build -o $(APP_NAME) $(PKG)
-
-build-linux: build-linux-amd64 build-linux-arm64
+build: build-linux-amd64 build-linux-arm64
 
 build-linux-amd64:
 	mkdir -p $(BUILD_DIR)
@@ -54,7 +50,6 @@ changelog:
 	bash scripts/changelog/generate.sh "$(VERSION)" "$(PREVIOUS_TAG)"
 
 clean:
-	rm -f $(APP_NAME)
 	rm -f $(BUILD_DIR)/$(APP_NAME)-linux-amd64
 	rm -f $(BUILD_DIR)/$(APP_NAME)-linux-arm64
 	rmdir $(BUILD_DIR) 2>/dev/null || true
