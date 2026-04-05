@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -91,6 +92,7 @@ func TestMainFlags(t *testing.T) {
 
 	// Test default flag values
 	backupCmd := flag.String("backup", "", "Run backup operation")
+	checkListen := flag.Bool("check-listen", false, "Validate the configured listen address is available")
 	configPath := flag.String("config", "/etc/pruvon.yml", "Path to the configuration file")
 	serverMode := flag.Bool("server", false, "Run in server mode")
 	versionFlag := flag.Bool("version", false, "Show version information")
@@ -100,6 +102,9 @@ func TestMainFlags(t *testing.T) {
 	flag.Parse()
 	if *backupCmd != "" {
 		t.Errorf("Expected backupCmd to be empty, got %q", *backupCmd)
+	}
+	if *checkListen != false {
+		t.Errorf("Expected checkListen to be false, got %t", *checkListen)
 	}
 	if *configPath != "/etc/pruvon.yml" {
 		t.Errorf("Expected configPath to be '/etc/pruvon.yml', got %q", *configPath)
@@ -114,15 +119,19 @@ func TestMainFlags(t *testing.T) {
 	// Reset flags
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	backupCmd2 := flag.String("backup", "", "Run backup operation")
+	checkListen2 := flag.Bool("check-listen", false, "Validate the configured listen address is available")
 	configPath2 := flag.String("config", "/etc/pruvon.yml", "Path to the configuration file")
 	serverMode2 := flag.Bool("server", false, "Run in server mode")
 	versionFlag2 := flag.Bool("version", false, "Show version information")
 
 	// Test with custom args
-	os.Args = []string{"main", "-backup", "auto", "-config", "/tmp/config.yml", "-server", "-version"}
+	os.Args = []string{"main", "-backup", "auto", "-check-listen", "-config", "/tmp/config.yml", "-server", "-version"}
 	flag.Parse()
 	if *backupCmd2 != "auto" {
 		t.Errorf("Expected backupCmd to be 'auto', got %q", *backupCmd2)
+	}
+	if *checkListen2 != true {
+		t.Errorf("Expected checkListen to be true, got %t", *checkListen2)
 	}
 	if *configPath2 != "/tmp/config.yml" {
 		t.Errorf("Expected configPath to be '/tmp/config.yml', got %q", *configPath2)
@@ -133,6 +142,47 @@ func TestMainFlags(t *testing.T) {
 	if *versionFlag2 != true {
 		t.Errorf("Expected versionFlag to be true, got %t", *versionFlag2)
 	}
+}
+
+func TestResolveListenAddr(t *testing.T) {
+	t.Run("uses configured listen address", func(t *testing.T) {
+		cfg := &config.Config{}
+		cfg.Pruvon.Listen = "127.0.0.1:9090"
+
+		if got := resolveListenAddr(cfg); got != "127.0.0.1:9090" {
+			t.Fatalf("resolveListenAddr() = %q, want %q", got, "127.0.0.1:9090")
+		}
+	})
+
+	t.Run("falls back to default listen address", func(t *testing.T) {
+		if got := resolveListenAddr(&config.Config{}); got != defaultListenAddr {
+			t.Fatalf("resolveListenAddr() = %q, want %q", got, defaultListenAddr)
+		}
+
+		if got := resolveListenAddr(nil); got != defaultListenAddr {
+			t.Fatalf("resolveListenAddr(nil) = %q, want %q", got, defaultListenAddr)
+		}
+	})
+}
+
+func TestCheckListenAddress(t *testing.T) {
+	t.Run("accepts available address", func(t *testing.T) {
+		if err := checkListenAddress("127.0.0.1:0"); err != nil {
+			t.Fatalf("checkListenAddress returned error for available address: %v", err)
+		}
+	})
+
+	t.Run("rejects occupied address", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("failed to reserve test port: %v", err)
+		}
+		defer listener.Close()
+
+		if err := checkListenAddress(listener.Addr().String()); err == nil {
+			t.Fatal("expected error for occupied address")
+		}
+	})
 }
 
 func TestMainComposition_StaticRoutesRequireAuthentication(t *testing.T) {

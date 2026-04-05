@@ -11,6 +11,10 @@ Pruvon is a web UI for Dokku. It runs alongside a Dokku host and gives you a bro
 
 It is not a general-purpose server management panel. The product is built around Dokku workflows and Linux hosts where Dokku is already installed.
 
+> [!WARNING]
+> Pruvon is under active development and should be considered early-stage software.
+> If you choose to run it in environments where breakage, rough edges, or incomplete features are a problem, that risk is yours to take.
+
 ## Features
 
 - **Dokku Web UI** - Manage Dokku apps, services, and operational workflows from the browser
@@ -41,6 +45,12 @@ Install a specific release tag:
 
 ```bash
 curl -fsSL https://pruvon.dev/install.sh | sudo PRUVON_VERSION=v0.1.0 bash
+```
+
+Install with a custom bind address for a fresh config:
+
+```bash
+curl -fsSL https://pruvon.dev/install.sh | sudo PRUVON_LISTEN=127.0.0.1:9090 bash
 ```
 
 `install.sh` downloads the matching Linux release archive from GitHub Releases, verifies it against `checksums.txt`, and fetches the tagged `pruvon.yml.example` and backup cron script from the same versioned source tree.
@@ -77,8 +87,10 @@ The generated admin password is printed once at the end of installation.
 Installer notes:
 
 - `PRUVON_BINARY` can point to any built binary if you want to install a local artifact instead of a release download.
+- `PRUVON_LISTEN` overrides `pruvon.listen` only when the installer creates a new `/etc/pruvon.yml`.
 - `PRUVON_VERSION` accepts a tag such as `v0.1.0`; if omitted, the installer resolves the latest release.
 - If `/etc/pruvon.yml` already exists, the installer keeps it and does not rotate the admin password.
+- Before starting the service, the installer checks whether the configured listen address can be bound by the `pruvon` service user and fails fast if the port is already in use or the address is not permitted.
 - Dokku, nginx, sudo, and systemd are expected to already be present on the host.
 
 ## Operate The Installed Service

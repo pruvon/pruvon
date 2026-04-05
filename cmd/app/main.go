@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 
 	"github.com/pruvon/pruvon/internal/backup"
@@ -18,9 +19,29 @@ import (
 // PruvonVersion defines the current version of Pruvon.
 var PruvonVersion = "0.1.0"
 
+const defaultListenAddr = "127.0.0.1:8080"
+
+func resolveListenAddr(cfg *config.Config) string {
+	if cfg != nil && cfg.Pruvon.Listen != "" {
+		return cfg.Pruvon.Listen
+	}
+
+	return defaultListenAddr
+}
+
+func checkListenAddress(addr string) error {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen address %s is not available: %w", addr, err)
+	}
+
+	return listener.Close()
+}
+
 func main() {
 	// Define command-line flags
 	backupCmd := flag.String("backup", "", "Run backup operation: auto, daily, weekly, or monthly")
+	checkListen := flag.Bool("check-listen", false, "Validate the configured listen address is available")
 	configPath := flag.String("config", "/etc/pruvon.yml", "Path to the configuration file")
 	serverMode := flag.Bool("server", false, "Run in server mode")
 	versionFlag := flag.Bool("version", false, "Show version information")
@@ -43,12 +64,23 @@ func main() {
 	// Load configuration
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
-		if !*serverMode {
+		if !*serverMode && !*checkListen {
 			fmt.Printf("Warning: Error loading config: %v. Proceeding without server mode.\\n", err)
 		} else {
 			fmt.Printf("Error loading config: %v\\n", err)
 			os.Exit(1)
 		}
+	}
+
+	if *checkListen {
+		listenAddr := resolveListenAddr(cfg)
+		if err := checkListenAddress(listenAddr); err != nil {
+			fmt.Printf("Listen check failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Listen check succeeded for %s\n", listenAddr)
+		return
 	}
 
 	// Process backup command if specified
@@ -106,10 +138,7 @@ func main() {
 	fmt.Println("Static files are being served from embedded binary")
 
 	// Start server
-	listenAddr := cfg.Pruvon.Listen
-	if listenAddr == "" {
-		listenAddr = "127.0.0.1:8080"
-	}
+	listenAddr := resolveListenAddr(cfg)
 
 	fmt.Printf("Server running on %s\n", listenAddr)
 	if err := app.Listen(listenAddr); err != nil {

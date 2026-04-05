@@ -18,6 +18,7 @@ CRON_PATH="${CRON_PATH:-/etc/cron.daily/pruvon-backup}"
 
 PRUVON_REPOSITORY="${PRUVON_REPOSITORY:-pruvon/pruvon}"
 PRUVON_VERSION="${PRUVON_VERSION:-latest}"
+PRUVON_LISTEN="${PRUVON_LISTEN:-}"
 GITHUB_API_BASE="https://api.github.com/repos/${PRUVON_REPOSITORY}"
 GITHUB_RELEASES_BASE="https://github.com/${PRUVON_REPOSITORY}/releases/download"
 GITHUB_RAW_BASE="https://raw.githubusercontent.com/${PRUVON_REPOSITORY}"
@@ -428,9 +429,13 @@ create_config_if_missing() {
     local admin_hash
     local temp_file
     local replaced_password=0
+    local replaced_listen=0
 
     if [[ -f "${CONFIG_PATH}" ]]; then
         log "keeping existing config at ${CONFIG_PATH}"
+        if [[ -n "${PRUVON_LISTEN}" ]]; then
+            log "ignoring PRUVON_LISTEN because ${CONFIG_PATH} already exists"
+        fi
         chown root:"${APP_GROUP}" "${CONFIG_PATH}"
         chmod 0640 "${CONFIG_PATH}"
         return
@@ -448,6 +453,12 @@ create_config_if_missing() {
             continue
         fi
 
+        if [[ -n "${PRUVON_LISTEN}" && ${replaced_listen} -eq 0 && "${line}" =~ ^[[:space:]]*listen:[[:space:]] ]]; then
+            printf '  listen: "%s"\n' "${PRUVON_LISTEN}" >>"${temp_file}"
+            replaced_listen=1
+            continue
+        fi
+
         printf '%s\n' "${line}" >>"${temp_file}"
     done <"${template_path}"
 
@@ -456,9 +467,24 @@ create_config_if_missing() {
         die "could not locate admin password field in ${template_path}"
     fi
 
+    if [[ -n "${PRUVON_LISTEN}" && ${replaced_listen} -ne 1 ]]; then
+        rm -f "${temp_file}"
+        die "could not locate pruvon.listen field in ${template_path}"
+    fi
+
     install -o root -g "${APP_GROUP}" -m 0640 "${temp_file}" "${CONFIG_PATH}"
     rm -f "${temp_file}"
     GENERATED_ADMIN_PASSWORD="${admin_password}"
+}
+
+check_listen_address() {
+    if systemctl is-active --quiet pruvon; then
+        log "skipping listen availability check because pruvon service is already running"
+        return
+    fi
+
+    log "checking configured listen address"
+    sudo -u "${APP_USER}" "${APP_BINARY_DEST}" -config "${CONFIG_PATH}" -check-listen
 }
 
 install_systemd_unit() {
@@ -630,6 +656,8 @@ main() {
 
     log "installing logrotate config"
     install_logrotate_config
+
+    check_listen_address
 
     log "reloading systemd and starting service"
     reload_and_start_service
