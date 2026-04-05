@@ -18,9 +18,37 @@ type CommandRunner interface {
 // RealCommandRunner is the CommandRunner implementation that runs actual commands
 type RealCommandRunner struct{}
 
+var sudoEligibleCommands = map[string]struct{}{
+	"chmod": {},
+	"chown": {},
+	"dokku": {},
+}
+
+func shouldUseSudo(command string) bool {
+	if os.Geteuid() == 0 {
+		return false
+	}
+
+	if os.Getenv("PRUVON_DISABLE_SUDO") == "1" {
+		return false
+	}
+
+	_, ok := sudoEligibleCommands[command]
+	return ok
+}
+
+func buildCommand(command string, args ...string) *exec.Cmd {
+	if shouldUseSudo(command) {
+		sudoArgs := append([]string{"-n", command}, args...)
+		return exec.Command("sudo", sudoArgs...)
+	}
+
+	return exec.Command(command, args...)
+}
+
 // RunCommand executes the specified command with arguments and returns the output
 func (r *RealCommandRunner) RunCommand(command string, args ...string) (string, error) {
-	cmd := exec.Command(command, args...)
+	cmd := buildCommand(command, args...)
 	var out bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &out
@@ -42,7 +70,7 @@ func (r *RealCommandRunner) RunCommand(command string, args ...string) (string, 
 
 // StartPTY executes the specified command with arguments using PTY
 func (r *RealCommandRunner) StartPTY(command string, args ...string) (*os.File, error) {
-	cmd := exec.Command(command, args...)
+	cmd := buildCommand(command, args...)
 	return pty.Start(cmd)
 }
 

@@ -4,7 +4,7 @@ BUILD_DIR := builds
 LDFLAGS := -s -w
 GOFMT_FILES := $(shell git ls-files '*.go')
 
-.PHONY: help build build-linux build-linux-amd64 build-linux-arm64 fmt test test-race vet lint clean
+.PHONY: help build build-linux build-linux-amd64 build-linux-arm64 fmt test test-race vet lint changelog clean
 
 help:
 	@printf '%s\n' \
@@ -16,6 +16,7 @@ help:
 		'  make test-race    Run go test -race ./...' \
 		'  make vet          Run go vet ./...' \
 		'  make lint         Run golangci-lint using repo config' \
+		'  make changelog VERSION=x.y.z [PREVIOUS_TAG=vx.y.z]  Regenerate CHANGELOG.md from commit subjects' \
 		'  make clean        Remove generated binaries and build artifacts'
 
 build:
@@ -47,6 +48,10 @@ lint:
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint is not installed"; exit 1; }
 	@printf '%s\n' "Using $(shell golangci-lint version | head -1)"
 	golangci-lint run --timeout=5m
+
+changelog:
+	@test -n "$(VERSION)" || { echo "VERSION is required, e.g. make changelog VERSION=0.1.1"; exit 1; }
+	bash scripts/changelog/generate.sh "$(VERSION)" "$(PREVIOUS_TAG)"
 
 clean:
 	rm -f $(APP_NAME)

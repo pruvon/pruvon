@@ -194,7 +194,7 @@ func GetServices(runner CommandRunner, svcType string) ([]models.Service, error)
 	if err != nil {
 		log.Printf("Error getting services for type %s: %v", svcType, err)
 		// Try with a direct command as fallback
-		directOutput, directErr := exec.Command("dokku", cmd).Output()
+		directOutput, directErr := exec.Command("sudo", "-n", "dokku", cmd).Output()
 		if directErr != nil {
 			log.Printf("Direct command also failed: %v", directErr)
 			return nil, fmt.Errorf("service list could not be retrieved: %v (dokku plugin may not be installed)", err)

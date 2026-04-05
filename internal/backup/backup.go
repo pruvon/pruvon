@@ -251,7 +251,7 @@ func listDatabases(dbType string) ([]string, error) {
 		dokkuDbType = "mongo"
 	}
 
-	cmd := exec.Command("dokku", dokkuDbType+":list")
+	cmd := exec.Command("sudo", "-n", "dokku", dokkuDbType+":list")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list %s databases: %v", dbType, err)
@@ -275,7 +275,7 @@ func listDatabases(dbType string) ([]string, error) {
 
 // isPluginInstalled checks if a specific dokku plugin is installed
 func isPluginInstalled(pluginName string) (bool, error) {
-	cmd := exec.Command("dokku", "plugin:list")
+	cmd := exec.Command("sudo", "-n", "dokku", "plugin:list")
 	output, err := cmd.Output()
 	if err != nil {
 		// If dokku or plugin:list command fails, assume plugin is not installed
@@ -306,7 +306,7 @@ func exportDatabase(dbType, db, filename string) error {
 	}
 
 	// Run dokku export command directly without script wrapper
-	cmd := exec.Command("dokku", dokkuDbType+":export", db)
+	cmd := exec.Command("sudo", "-n", "dokku", dokkuDbType+":export", db)
 
 	// Set environment variables to prevent tty errors and ensure clean output
 	cmd.Env = append(os.Environ(),

@@ -7,6 +7,18 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-05
+
+### Changed
+- init
+
+### Documentation
+- rewrite AGENTS.md with verified commands, architecture map, and project conventions
+
+### Maintenance
+- upgrade Go toolchain to 1.26 and update all dependencies
+
+
 ## [0.1.0] - 2026-04-03
 
 ### Added

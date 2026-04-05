@@ -1,0 +1,30 @@
+admin:
+  username: admin
+  # Replace with a bcrypt hash before production use.
+  password: "$2a$10$Pm8hoUAYMIgL9PWb..KzOeveml0.48arbqds4Qr.r7B38IjJjPQNa"
+
+github:
+  client_id: ""
+  client_secret: ""
+  users: []
+
+pruvon:
+  listen: 127.0.0.1:8080
+
+dokku: {}
+
+server: null
+
+# Backup configuration
+backup:
+  backup_dir: "/var/lib/dokku/data/pruvon-backup"
+  do_weekly: 0
+  do_monthly: 1
+  db_types:
+    - "postgres"
+    - "mariadb"
+    - "mongo"
+    - "redis"
+  keep_daily_days: 7
+  keep_weekly_num: 6
+  keep_monthly_num: 3

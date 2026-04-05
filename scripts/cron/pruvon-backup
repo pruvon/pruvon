@@ -7,7 +7,7 @@ set -e
 
 PRUVON_PATH="${PRUVON_PATH:-/opt/pruvon/pruvon}"
 CONFIG_PATH="${CONFIG_PATH:-/etc/pruvon.yml}"
-LOG_FILE="${LOG_FILE:-/var/log/pruvon-backup.log}"
+LOG_FILE="${LOG_FILE:-/var/log/pruvon/backup.log}"
 
 if [ ! -f "$CONFIG_PATH" ]; then
     echo "$(date): Error - Configuration file $CONFIG_PATH not found" >> "$LOG_FILE"
