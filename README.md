@@ -25,20 +25,38 @@ It is not a general-purpose server management panel. The product is built around
 
 ## Install On A Dokku Host
 
-Build the Linux artifacts, then run the installer as root on the target Dokku host:
+Install the latest release on the target Dokku host:
+
+```bash
+curl -fsSL https://pruvon.dev/install.sh | sudo bash
+```
+
+If `curl` is not available, use `wget` instead:
+
+```bash
+wget -qO- https://pruvon.dev/install.sh | sudo bash
+```
+
+Install a specific release tag:
+
+```bash
+curl -fsSL https://pruvon.dev/install.sh | sudo PRUVON_VERSION=v0.1.0 bash
+```
+
+`install.sh` downloads the matching Linux release archive from GitHub Releases, verifies it against `checksums.txt`, and fetches the tagged `pruvon.yml.example` and backup cron script from the same versioned source tree.
+
+For local development or advanced manual installs, you can still run the repository copy directly. Without overrides it behaves the same as the remote installer and pulls from GitHub Releases:
 
 ```bash
 git clone https://github.com/pruvon/pruvon.git
 cd pruvon
-make build
 sudo ./install.sh
 ```
 
-`make build` produces Linux `amd64` and `arm64` binaries in `builds/`.
-
-If you want to force a specific artifact, set `PRUVON_BINARY` explicitly:
+To install a locally built binary instead, set `PRUVON_BINARY` explicitly:
 
 ```bash
+make build
 sudo PRUVON_BINARY=builds/pruvon-linux-amd64 ./install.sh
 ```
 
@@ -58,7 +76,8 @@ The generated admin password is printed once at the end of installation.
 
 Installer notes:
 
-- `PRUVON_BINARY` can point to any built binary if you do not want auto-detection.
+- `PRUVON_BINARY` can point to any built binary if you want to install a local artifact instead of a release download.
+- `PRUVON_VERSION` accepts a tag such as `v0.1.0`; if omitted, the installer resolves the latest release.
 - If `/etc/pruvon.yml` already exists, the installer keeps it and does not rotate the admin password.
 - Dokku, nginx, sudo, and systemd are expected to already be present on the host.
 
@@ -158,20 +177,22 @@ make lint
 Remove the installed service files but keep config, logs, backups, and the service user:
 
 ```bash
-sudo ./uninstall.sh
+curl -fsSL https://pruvon.dev/uninstall.sh | sudo bash
 ```
 
 Remove persistent data too:
 
 ```bash
-sudo ./uninstall.sh --purge
+curl -fsSL https://pruvon.dev/uninstall.sh | sudo bash -s -- --purge
 ```
 
 Also remove the `pruvon` system user and group:
 
 ```bash
-sudo ./uninstall.sh --purge --remove-user
+curl -fsSL https://pruvon.dev/uninstall.sh | sudo bash -s -- --purge --remove-user
 ```
+
+If you already have a local checkout, running `sudo ./uninstall.sh` is equivalent.
 
 Default uninstall keeps `/etc/pruvon.yml`, `/var/log/pruvon`, and `/var/lib/dokku/data/pruvon-backup` so an accidental package removal does not destroy operational data.
 

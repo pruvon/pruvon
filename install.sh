@@ -16,8 +16,19 @@ SUDOERS_PATH="${SUDOERS_PATH:-/etc/sudoers.d/pruvon}"
 LOGROTATE_PATH="${LOGROTATE_PATH:-/etc/logrotate.d/pruvon}"
 CRON_PATH="${CRON_PATH:-/etc/cron.daily/pruvon-backup}"
 
-SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PRUVON_REPOSITORY="${PRUVON_REPOSITORY:-pruvon/pruvon}"
+PRUVON_VERSION="${PRUVON_VERSION:-latest}"
+GITHUB_API_BASE="https://api.github.com/repos/${PRUVON_REPOSITORY}"
+GITHUB_RELEASES_BASE="https://github.com/${PRUVON_REPOSITORY}/releases/download"
+GITHUB_RAW_BASE="https://raw.githubusercontent.com/${PRUVON_REPOSITORY}"
+
 GENERATED_ADMIN_PASSWORD=""
+WORK_DIR=""
+RESOLVED_VERSION=""
+DOWNLOADED_BINARY_SOURCE=""
+DOWNLOADED_CONFIG_TEMPLATE=""
+DOWNLOADED_CRON_SOURCE=""
+DOWNLOADED_CHECKSUMS=""
 
 log() {
     printf '[install] %s\n' "$*"
@@ -30,6 +41,37 @@ die() {
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+cleanup() {
+    if [[ -n "${WORK_DIR}" && -d "${WORK_DIR}" ]]; then
+        rm -rf "${WORK_DIR}"
+    fi
+}
+
+ensure_work_dir() {
+    if [[ -n "${WORK_DIR}" ]]; then
+        return
+    fi
+
+    WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pruvon-install.XXXXXX")"
+}
+
+download_file() {
+    local url="$1"
+    local destination="$2"
+
+    if command_exists curl; then
+        curl -fsSL "$url" -o "$destination"
+        return
+    fi
+
+    if command_exists wget; then
+        wget -qO "$destination" "$url"
+        return
+    fi
+
+    die "curl or wget is required to download installation assets"
 }
 
 require_root() {
@@ -71,51 +113,179 @@ detect_arch() {
     esac
 }
 
-detect_binary_source() {
-    local arch
+normalize_version() {
+    local version="$1"
 
+    if [[ -z "${version}" || "${version}" == "latest" ]]; then
+        printf '%s\n' latest
+        return
+    fi
+
+    if [[ "${version}" == v* ]]; then
+        printf '%s\n' "${version}"
+        return
+    fi
+
+    printf 'v%s\n' "${version}"
+}
+
+resolve_version() {
+    local normalized_version
+    local metadata_path
+
+    if [[ -n "${RESOLVED_VERSION}" ]]; then
+        printf '%s\n' "${RESOLVED_VERSION}"
+        return
+    fi
+
+    normalized_version="$(normalize_version "${PRUVON_VERSION}")"
+    if [[ "${normalized_version}" != latest ]]; then
+        RESOLVED_VERSION="${normalized_version}"
+        printf '%s\n' "${RESOLVED_VERSION}"
+        return
+    fi
+
+    ensure_work_dir
+    metadata_path="${WORK_DIR}/release-latest.json"
+    download_file "${GITHUB_API_BASE}/releases/latest" "${metadata_path}"
+    RESOLVED_VERSION="$(grep -m1 '"tag_name"' "${metadata_path}" | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+
+    [[ -n "${RESOLVED_VERSION}" ]] || die "could not resolve the latest Pruvon release version"
+    printf '%s\n' "${RESOLVED_VERSION}"
+}
+
+download_release_asset() {
+    local asset_name="$1"
+    local destination="$2"
+    local version
+
+    version="$(resolve_version)"
+    download_file "${GITHUB_RELEASES_BASE}/${version}/${asset_name}" "${destination}"
+}
+
+download_versioned_source_file() {
+    local relative_path="$1"
+    local destination="$2"
+    local version
+
+    version="$(resolve_version)"
+    download_file "${GITHUB_RAW_BASE}/${version}/${relative_path}" "${destination}"
+}
+
+ensure_checksums_file() {
+    if [[ -n "${DOWNLOADED_CHECKSUMS}" && -f "${DOWNLOADED_CHECKSUMS}" ]]; then
+        printf '%s\n' "${DOWNLOADED_CHECKSUMS}"
+        return
+    fi
+
+    ensure_work_dir
+    DOWNLOADED_CHECKSUMS="${WORK_DIR}/checksums.txt"
+    download_release_asset "checksums.txt" "${DOWNLOADED_CHECKSUMS}"
+    printf '%s\n' "${DOWNLOADED_CHECKSUMS}"
+}
+
+verify_release_asset() {
+    local asset_name="$1"
+    local asset_path="$2"
+    local checksums_path
+    local expected_checksum=""
+    local actual_checksum=""
+    local checksum=""
+    local name=""
+
+    command_exists sha256sum || die "sha256sum is required to verify downloaded release assets"
+
+    checksums_path="$(ensure_checksums_file)"
+    while read -r checksum name; do
+        if [[ "${name}" == "${asset_name}" ]]; then
+            expected_checksum="${checksum}"
+            break
+        fi
+    done < "${checksums_path}"
+
+    [[ -n "${expected_checksum}" ]] || die "could not find ${asset_name} in release checksums"
+
+    read -r actual_checksum _ < <(sha256sum "${asset_path}")
+    [[ "${actual_checksum}" == "${expected_checksum}" ]] || die "checksum verification failed for ${asset_name}"
+}
+
+download_release_binary() {
+    local arch
+    local archive_name
+    local archive_path
+    local extract_dir
+    local extracted_binary
+
+    if [[ -n "${DOWNLOADED_BINARY_SOURCE}" && -f "${DOWNLOADED_BINARY_SOURCE}" ]]; then
+        printf '%s\n' "${DOWNLOADED_BINARY_SOURCE}"
+        return
+    fi
+
+    arch="$(detect_arch)"
+    [[ -n "${arch}" ]] || die "unsupported architecture: $(uname -m)"
+
+    ensure_work_dir
+    archive_name="pruvon-linux-${arch}.tar.gz"
+    archive_path="${WORK_DIR}/${archive_name}"
+    extract_dir="${WORK_DIR}/extract-${arch}"
+
+    download_release_asset "${archive_name}" "${archive_path}"
+    verify_release_asset "${archive_name}" "${archive_path}"
+
+    mkdir -p "${extract_dir}"
+    tar -xzf "${archive_path}" -C "${extract_dir}"
+
+    extracted_binary="${extract_dir}/pruvon-linux-${arch}"
+    [[ -f "${extracted_binary}" ]] || die "downloaded archive did not contain ${extracted_binary##*/}"
+
+    DOWNLOADED_BINARY_SOURCE="${extracted_binary}"
+    printf '%s\n' "${DOWNLOADED_BINARY_SOURCE}"
+}
+
+detect_binary_source() {
     if [[ -n "${PRUVON_BINARY:-}" ]]; then
         [[ -f "${PRUVON_BINARY}" ]] || die "PRUVON_BINARY points to a missing file: ${PRUVON_BINARY}"
         printf '%s\n' "${PRUVON_BINARY}"
         return
     fi
 
-    arch="$(detect_arch)"
-
-    for candidate in \
-        "${SCRIPT_DIR}/pruvon" \
-        "${SCRIPT_DIR}/pruvon-linux-${arch}" \
-        "${SCRIPT_DIR}/dist/pruvon-linux-${arch}" \
-        "${SCRIPT_DIR}/builds/pruvon-linux-${arch}"
-    do
-        if [[ -n "${candidate}" && -f "${candidate}" ]]; then
-            printf '%s\n' "${candidate}"
-            return
-        fi
-    done
-
-    die "could not find a pruvon binary. Set PRUVON_BINARY or place a built binary next to install.sh"
+    download_release_binary
 }
 
 detect_config_template() {
-    local candidate
-
     if [[ -n "${PRUVON_CONFIG_TEMPLATE:-}" ]]; then
         [[ -f "${PRUVON_CONFIG_TEMPLATE}" ]] || die "PRUVON_CONFIG_TEMPLATE points to a missing file: ${PRUVON_CONFIG_TEMPLATE}"
         printf '%s\n' "${PRUVON_CONFIG_TEMPLATE}"
         return
     fi
 
-    for candidate in \
-        "${SCRIPT_DIR}/pruvon.yml.example"
-    do
-        if [[ -f "${candidate}" ]]; then
-            printf '%s\n' "${candidate}"
-            return
-        fi
-    done
+    if [[ -n "${DOWNLOADED_CONFIG_TEMPLATE}" && -f "${DOWNLOADED_CONFIG_TEMPLATE}" ]]; then
+        printf '%s\n' "${DOWNLOADED_CONFIG_TEMPLATE}"
+        return
+    fi
 
-    die "could not find a config example file. Expected pruvon.yml.example"
+    ensure_work_dir
+    DOWNLOADED_CONFIG_TEMPLATE="${WORK_DIR}/pruvon.yml.example"
+    download_versioned_source_file "pruvon.yml.example" "${DOWNLOADED_CONFIG_TEMPLATE}"
+    printf '%s\n' "${DOWNLOADED_CONFIG_TEMPLATE}"
+}
+
+detect_cron_source() {
+    if [[ -n "${PRUVON_CRON_SOURCE:-}" ]]; then
+        [[ -f "${PRUVON_CRON_SOURCE}" ]] || die "PRUVON_CRON_SOURCE points to a missing file: ${PRUVON_CRON_SOURCE}"
+        printf '%s\n' "${PRUVON_CRON_SOURCE}"
+        return
+    fi
+
+    if [[ -n "${DOWNLOADED_CRON_SOURCE}" && -f "${DOWNLOADED_CRON_SOURCE}" ]]; then
+        printf '%s\n' "${DOWNLOADED_CRON_SOURCE}"
+        return
+    fi
+
+    ensure_work_dir
+    DOWNLOADED_CRON_SOURCE="${WORK_DIR}/pruvon-backup"
+    download_versioned_source_file "scripts/cron/pruvon-backup" "${DOWNLOADED_CRON_SOURCE}"
+    printf '%s\n' "${DOWNLOADED_CRON_SOURCE}"
 }
 
 generate_admin_password() {
@@ -130,9 +300,6 @@ hash_looks_like_bcrypt() {
 generate_bcrypt_hash() {
     local plain="$1"
     local hash=""
-    local temp_dir=""
-    local go_dir=""
-
     if command_exists htpasswd; then
         hash="$(htpasswd -bnBC 10 '' "${plain}" | tr -d ':\n' || true)"
         if hash_looks_like_bcrypt "${hash}"; then
@@ -188,43 +355,7 @@ PY
         fi
     fi
 
-    if command_exists go && [[ -f "${SCRIPT_DIR}/go.mod" && -w "${SCRIPT_DIR}" ]]; then
-        go_dir="$(mktemp -d "${SCRIPT_DIR}/.pruvon-install-go.XXXXXX")"
-        cat >"${go_dir}/main.go" <<'EOF'
-package main
-
-import (
-    "fmt"
-    "os"
-
-    "golang.org/x/crypto/bcrypt"
-)
-
-func main() {
-    password := os.Getenv("PRUVON_ADMIN_PASSWORD")
-    if password == "" {
-        fmt.Fprintln(os.Stderr, "missing PRUVON_ADMIN_PASSWORD")
-        os.Exit(1)
-    }
-
-    hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-    if err != nil {
-        fmt.Fprintln(os.Stderr, err)
-        os.Exit(1)
-    }
-
-    fmt.Println(string(hash))
-}
-EOF
-        hash="$(cd "${SCRIPT_DIR}" && PRUVON_ADMIN_PASSWORD="${plain}" go run "${go_dir}/main.go" 2>/dev/null || true)"
-        rm -rf "${go_dir}"
-        if hash_looks_like_bcrypt "${hash}"; then
-            printf '%s\n' "${hash}"
-            return
-        fi
-    fi
-
-    die "unable to generate a bcrypt password hash. Install apache2-utils, whois, php, or provide Go in the source checkout"
+    die "unable to generate a bcrypt password hash. Install apache2-utils, whois, openssl with bcrypt support, php, or python3"
 }
 
 ensure_group() {
@@ -401,8 +532,7 @@ EOF
 install_cron_script() {
     local cron_source
 
-    cron_source="${SCRIPT_DIR}/scripts/cron/pruvon-backup"
-    [[ -f "${cron_source}" ]] || die "missing cron script at ${cron_source}"
+    cron_source="$(detect_cron_source)"
     install -o root -g root -m 0755 "${cron_source}" "${CRON_PATH}"
 }
 
@@ -439,6 +569,9 @@ reload_and_start_service() {
 print_summary() {
     printf '\n'
     printf 'Pruvon installation completed.\n'
+    if [[ -n "${RESOLVED_VERSION}" ]]; then
+        printf 'Version: %s\n' "${RESOLVED_VERSION}"
+    fi
     printf 'Binary: %s\n' "${APP_BINARY_DEST}"
     printf 'Config: %s\n' "${CONFIG_PATH}"
     printf 'Systemd unit: %s\n' "${SYSTEMD_UNIT_PATH}"
@@ -453,12 +586,26 @@ print_summary() {
 }
 
 main() {
+    local needs_remote_assets=0
+
     require_root
+    trap cleanup EXIT
 
     command_exists install || die "install command is required"
     command_exists systemctl || die "systemctl is required"
     command_exists base64 || die "base64 is required"
     command_exists dd || die "dd is required"
+    command_exists mktemp || die "mktemp is required"
+    command_exists tar || die "tar is required"
+
+    if [[ -z "${PRUVON_BINARY:-}" || -z "${PRUVON_CONFIG_TEMPLATE:-}" || -z "${PRUVON_CRON_SOURCE:-}" ]]; then
+        needs_remote_assets=1
+    fi
+
+    if [[ ${needs_remote_assets} -eq 1 ]]; then
+        ensure_work_dir
+        resolve_version >/dev/null
+    fi
 
     log "creating service user and group memberships"
     ensure_user
