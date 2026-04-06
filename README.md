@@ -233,6 +233,7 @@ These prefixes are grouped into changelog sections like `Added`, `Fixed`, `Chang
 
 ## Documentation
 
+- [Documentation](https://docs.pruvon.dev) - Full documentation and guides
 - [Makefile](Makefile) - Common build and verification commands
 - [CHANGELOG.md](CHANGELOG.md) - Release notes
 
