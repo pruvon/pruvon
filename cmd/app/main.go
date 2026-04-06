@@ -151,12 +151,12 @@ func processBackupCommand(cmd string, cfg *config.Config) error {
 	if cfg == nil {
 		return fmt.Errorf("configuration is not loaded for backup operation")
 	}
-	if err := backup.CheckBackupPrerequisites(cfg); err != nil {
-		return fmt.Errorf("backup prerequisites check failed: %v", err)
-	}
 	validCommands := map[string]bool{"auto": true, "daily": true, "weekly": true, "monthly": true}
 	if !validCommands[cmd] {
 		return fmt.Errorf("invalid backup command: %s (valid commands: auto, daily, weekly, monthly)", cmd)
+	}
+	if err := backup.CheckBackupPrerequisites(cfg); err != nil {
+		return fmt.Errorf("backup prerequisites check failed: %v", err)
 	}
 	fmt.Printf("Starting %s backup...\n", cmd)
 	if err := backup.Backup(cmd, cfg); err != nil {
