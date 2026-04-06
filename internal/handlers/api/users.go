@@ -621,12 +621,26 @@ func handleUpdateGithubUserRoutes(c *fiber.Ctx) error {
 		})
 	}
 
-	routesJSON, _ := json.Marshal(req.Routes)
-	oldRoutesJSON, _ := json.Marshal(oldRoutes)
-	appsJSON, _ := json.Marshal(req.Apps)
-	oldAppsJSON, _ := json.Marshal(oldApps)
-	servicesJSON, _ := json.Marshal(req.Services)
-	oldServicesJSON, _ := json.Marshal(oldServices)
+	paramsJSON, err := json.Marshal(struct {
+		Username    string              `json:"username"`
+		OldRoutes   []string            `json:"old_routes"`
+		NewRoutes   []string            `json:"new_routes"`
+		OldApps     []string            `json:"old_apps"`
+		NewApps     []string            `json:"new_apps"`
+		OldServices map[string][]string `json:"old_services"`
+		NewServices map[string][]string `json:"new_services"`
+	}{
+		Username:    username,
+		OldRoutes:   oldRoutes,
+		NewRoutes:   req.Routes,
+		OldApps:     oldApps,
+		NewApps:     req.Apps,
+		OldServices: oldServices,
+		NewServices: req.Services,
+	})
+	if err != nil {
+		paramsJSON = []byte(`{}`)
+	}
 
 	// Get the user from the session instead of Locals
 	sess, _ := middleware.GetStore().Get(c)
@@ -642,22 +656,14 @@ func handleUpdateGithubUserRoutes(c *fiber.Ctx) error {
 	}
 
 	_ = servicelogs.LogActivity(models.ActivityLog{
-		Time:      time.Now(),
-		RequestID: uuid.New().String(),
-		IP:        c.IP(),
-		User:      user,
-		Action:    "github_user_permissions_updated",
-		Method:    c.Method(),
-		Route:     c.Path(),
-		Parameters: json.RawMessage(fmt.Sprintf(`{
-			"username": "%s",
-			"old_routes": %s,
-			"new_routes": %s,
-			"old_apps": %s,
-			"new_apps": %s,
-			"old_services": %s,
-			"new_services": %s
-		}`, username, oldRoutesJSON, routesJSON, oldAppsJSON, appsJSON, oldServicesJSON, servicesJSON)),
+		Time:       time.Now(),
+		RequestID:  uuid.New().String(),
+		IP:         c.IP(),
+		User:       user,
+		Action:     "github_user_permissions_updated",
+		Method:     c.Method(),
+		Route:      c.Path(),
+		Parameters: paramsJSON,
 		StatusCode: 200,
 	})
 
