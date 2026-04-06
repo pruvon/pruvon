@@ -1,0 +1,11 @@
+{
+  "name": "pruvon",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix docs install && npm --prefix docs run build",
+    "docs:install": "npm --prefix docs install",
+    "docs:dev": "npm --prefix docs run dev",
+    "docs:build": "npm --prefix docs run build",
+    "docs:preview": "npm --prefix docs run preview"
+  }
+}

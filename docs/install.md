@@ -1,0 +1,85 @@
+# Install
+
+Pruvon is intended to run on a Linux host where Dokku is already installed.
+
+## Requirements
+
+- Dokku installed on the target host
+- `sudo` access on that host
+- `systemd`, `nginx`, and Dokku already available
+
+## Install The Latest Release
+
+```bash
+curl -fsSL https://pruvon.dev/install.sh | sudo bash
+```
+
+If `curl` is not available:
+
+```bash
+wget -qO- https://pruvon.dev/install.sh | sudo bash
+```
+
+## Install A Specific Version
+
+```bash
+curl -fsSL https://pruvon.dev/install.sh | sudo PRUVON_VERSION=v0.1.0 bash
+```
+
+## Install With A Custom Listen Address
+
+This only affects newly created configs.
+
+```bash
+curl -fsSL https://pruvon.dev/install.sh | sudo PRUVON_LISTEN=127.0.0.1:9090 bash
+```
+
+## Install From A Local Checkout
+
+```bash
+git clone https://github.com/pruvon/pruvon.git
+cd pruvon
+sudo ./install.sh
+```
+
+To install a locally built binary instead of downloading a release:
+
+```bash
+make build
+sudo PRUVON_BINARY=builds/pruvon-linux-amd64 ./install.sh
+```
+
+## What The Installer Does
+
+The installer will:
+
+- install the binary to `/opt/pruvon/pruvon`
+- create `/usr/local/bin/pruvon` as a symlink
+- create the `pruvon` service user
+- add `pruvon` to the required groups
+- create runtime, log, and backup directories
+- create `/etc/pruvon.yml` if it does not exist
+- generate a random admin password for a fresh install
+- install the systemd unit, sudoers policy, cron job, and logrotate config
+- enable and start the `pruvon` service
+
+The generated admin password is printed once at the end of installation.
+
+## Operate The Service
+
+```bash
+sudo systemctl status pruvon
+sudo systemctl restart pruvon
+sudo journalctl -u pruvon -f
+```
+
+Important paths:
+
+- Config: `/etc/pruvon.yml`
+- Binary: `/opt/pruvon/pruvon`
+- Logs: `/var/log/pruvon`
+- Backup directory: `/var/lib/dokku/data/pruvon-backup`
+
+## Next Step
+
+Continue with [Configuration](/configuration) before exposing the service to any other network.
