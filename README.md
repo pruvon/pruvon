@@ -184,6 +184,32 @@ make lint
 
 `make lint` expects a recent `golangci-lint` installation compatible with the Go toolchain in use.
 
+Local GitHub release flow:
+
+```bash
+make release VERSION=v0.1.1 PREVIOUS_TAG=v0.1.0
+```
+
+This local release command will:
+
+- regenerate `CHANGELOG.md` for the target version
+- create a release commit such as `release: v0.1.1`
+- build versioned Linux release archives in `dist/`
+- create and push the git tag
+- create the GitHub release and upload the archives plus `checksums.txt`
+
+Release prerequisites:
+
+- a clean git working tree
+- `gh auth login` completed for the target GitHub account
+- permission to push the current branch and the new tag to `origin`
+
+If you want custom GitHub release notes instead of the generated changelog section, pass a file path:
+
+```bash
+make release VERSION=v0.1.1 NOTES_FILE=/absolute/path/to/release-notes.md
+```
+
 ## Uninstall
 
 Remove the installed service files but keep config, logs, backups, and the service user:
