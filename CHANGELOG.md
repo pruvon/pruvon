@@ -7,6 +7,29 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-04-07
+
+### Fixed
+- validate backup command before checking prerequisites
+
+### Changed
+- replace CI-based release with local make release
+- fix(ci): use go install for golangci-lint to resolve Go version mismatch
+- feat(install): add PRUVON_LISTEN support and pre-start listen check
+- feat(installer): add remote GitHub release installation support
+- feat(install): add Linux install and uninstall scripts with changelog workflow
+- init
+
+### Documentation
+- add docs.pruvon.dev link to README
+- add VitePress documentation site
+- rewrite AGENTS.md with verified commands, architecture map, and project conventions
+
+### Maintenance
+- rename config.yaml to pruvon.yml and refresh project documentation
+- upgrade Go toolchain to 1.26 and update all dependencies
+
+
 ## [0.1.1] - 2026-04-05
 
 ### Changed
@@ -19,15 +42,3 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 - upgrade Go toolchain to 1.26 and update all dependencies
 
 
-## [0.1.0] - 2026-04-03
-
-### Added
-- Initial public release of Pruvon.
-- Dokku application management from the web UI.
-- Automated backups for PostgreSQL, MariaDB, MongoDB, and Redis.
-- Real-time terminal access over WebSocket.
-- Docker, SSH key, and system monitoring interfaces.
-- GitHub authentication support.
-
-### Security
-- Added a private vulnerability reporting channel via `security@pruvon.dev`.
