@@ -10,6 +10,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ## [0.1.1] - 2026-04-07
 
 ### Changed
+- docs(changelog): update for v0.1.1 release
 - fix(users): use json.Marshal for github_user_permissions_updated activity log
 
 

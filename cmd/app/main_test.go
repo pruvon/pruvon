@@ -28,7 +28,7 @@ func TestPruvonVersion(t *testing.T) {
 	}
 
 	// Verify it's the expected version
-	expectedVersion := "0.1.0"
+	expectedVersion := "0.1.1"
 	if PruvonVersion != expectedVersion {
 		t.Errorf("PruvonVersion = %q, expected %q", PruvonVersion, expectedVersion)
 	}
