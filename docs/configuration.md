@@ -54,18 +54,33 @@ backup:
 
 `admin.password` must be a bcrypt hash, not a plain-text password. Replace the example value before real use.
 
-Example hash generation with `htpasswd`:
+Avoid `htpasswd -b ...` for this because it exposes the plain-text password in shell history and process listings.
+
+Generate a hash interactively:
 
 ```bash
-htpasswd -bnBC 10 "" "replace-this-password" | tr -d ':\n'
+htpasswd -nBC 10 "" | tr -d ':\n'
+```
+
+Or read the password from a file through stdin:
+
+```bash
+htpasswd -niBC 10 "" < password.txt | tr -d ':\n'
 ```
 
 ## Reset A Forgotten Admin Password
 
-1. Generate a new bcrypt hash:
+1. Generate a new bcrypt hash interactively:
 
 ```bash
-NEW_HASH="$(htpasswd -bnBC 10 '' 'replace-this-password' | tr -d ':\n')"
+NEW_HASH="$(htpasswd -nBC 10 '' | tr -d ':\n')"
+printf '%s\n' "$NEW_HASH"
+```
+
+Or generate it from a file via stdin:
+
+```bash
+NEW_HASH="$(htpasswd -niBC 10 '' < password.txt | tr -d ':\n')"
 printf '%s\n' "$NEW_HASH"
 ```
 

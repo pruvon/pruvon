@@ -127,10 +127,21 @@ Operational notes:
 
 ## Reset Admin Password
 
-If you no longer know the local admin password, generate a new bcrypt hash:
+If you no longer know the local admin password, generate a new bcrypt hash.
+
+Prefer an interactive prompt or stdin from a file instead of `htpasswd -b ...`, which exposes the password in shell history and process listings.
+
+Interactive:
 
 ```bash
-NEW_HASH="$(htpasswd -bnBC 10 '' 'replace-this-password' | tr -d ':\n')"
+NEW_HASH="$(htpasswd -nBC 10 '' | tr -d ':\n')"
+printf '%s\n' "$NEW_HASH"
+```
+
+From a file via stdin:
+
+```bash
+NEW_HASH="$(htpasswd -niBC 10 '' < password.txt | tr -d ':\n')"
 printf '%s\n' "$NEW_HASH"
 ```
 
