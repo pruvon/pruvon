@@ -22,6 +22,7 @@ PRUVON_LISTEN="${PRUVON_LISTEN:-}"
 GITHUB_API_BASE="https://api.github.com/repos/${PRUVON_REPOSITORY}"
 GITHUB_RELEASES_BASE="https://github.com/${PRUVON_REPOSITORY}/releases/download"
 GITHUB_RAW_BASE="https://raw.githubusercontent.com/${PRUVON_REPOSITORY}"
+EXAMPLE_ADMIN_PASSWORD_HASH='$2a$10$Pm8hoUAYMIgL9PWb..KzOeveml0.48arbqds4Qr.r7B38IjJjPQNa'
 
 GENERATED_ADMIN_PASSWORD=""
 WORK_DIR=""
@@ -359,6 +360,43 @@ PY
     die "unable to generate a bcrypt password hash. Install apache2-utils, whois, openssl with bcrypt support, php, or python3"
 }
 
+config_contains_example_admin_hash() {
+    [[ -f "${CONFIG_PATH}" ]] || return 1
+
+    grep -Fq "${EXAMPLE_ADMIN_PASSWORD_HASH}" "${CONFIG_PATH}"
+}
+
+rotate_example_admin_password() {
+    local admin_password
+    local admin_hash
+    local temp_file
+    local replaced_password=0
+    local line
+
+    admin_password="$(generate_admin_password)"
+    admin_hash="$(generate_bcrypt_hash "${admin_password}")"
+    temp_file="$(mktemp)"
+
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        if [[ ${replaced_password} -eq 0 && "${line}" =~ ^[[:space:]]*password:[[:space:]] ]]; then
+            printf '  password: "%s"\n' "${admin_hash}" >>"${temp_file}"
+            replaced_password=1
+            continue
+        fi
+
+        printf '%s\n' "${line}" >>"${temp_file}"
+    done <"${CONFIG_PATH}"
+
+    if [[ ${replaced_password} -ne 1 ]]; then
+        rm -f "${temp_file}"
+        die "could not locate admin password field in ${CONFIG_PATH}"
+    fi
+
+    install -o root -g "${APP_GROUP}" -m 0640 "${temp_file}" "${CONFIG_PATH}"
+    rm -f "${temp_file}"
+    GENERATED_ADMIN_PASSWORD="${admin_password}"
+}
+
 ensure_group() {
     local group_name="$1"
 
@@ -432,6 +470,15 @@ create_config_if_missing() {
     local replaced_listen=0
 
     if [[ -f "${CONFIG_PATH}" ]]; then
+        if config_contains_example_admin_hash; then
+            log "rotating bundled example admin password in ${CONFIG_PATH}"
+            if [[ -n "${PRUVON_LISTEN}" ]]; then
+                log "ignoring PRUVON_LISTEN because ${CONFIG_PATH} already exists"
+            fi
+            rotate_example_admin_password
+            return
+        fi
+
         log "keeping existing config at ${CONFIG_PATH}"
         if [[ -n "${PRUVON_LISTEN}" ]]; then
             log "ignoring PRUVON_LISTEN because ${CONFIG_PATH} already exists"

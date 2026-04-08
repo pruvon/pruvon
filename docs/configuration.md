@@ -60,6 +60,31 @@ Example hash generation with `htpasswd`:
 htpasswd -bnBC 10 "" "replace-this-password" | tr -d ':\n'
 ```
 
+## Reset A Forgotten Admin Password
+
+1. Generate a new bcrypt hash:
+
+```bash
+NEW_HASH="$(htpasswd -bnBC 10 '' 'replace-this-password' | tr -d ':\n')"
+printf '%s\n' "$NEW_HASH"
+```
+
+2. Open `/etc/pruvon.yml` and replace `admin.password` with the generated hash.
+
+Example:
+
+```yaml
+admin:
+  username: admin
+  password: "$2a$10$...your-new-hash..."
+```
+
+3. Restart the service:
+
+```bash
+sudo systemctl restart pruvon
+```
+
 ## GitHub Authentication
 
 If you want GitHub login, set these values:
