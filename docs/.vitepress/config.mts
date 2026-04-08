@@ -8,8 +8,9 @@ export default defineConfig({
     nav: [
       { text: 'Install', link: '/install' },
       { text: 'Configuration', link: '/configuration' },
+      { text: 'Operations', link: '/operations' },
       { text: 'Security', link: '/security' },
-      { text: 'Behind Proxy', link: '/behind-proxy' },
+      { text: 'Behind a Reverse Proxy', link: '/behind-proxy' },
     ],
     sidebar: [
       {
@@ -18,8 +19,9 @@ export default defineConfig({
           { text: 'Overview', link: '/' },
           { text: 'Install', link: '/install' },
           { text: 'Configuration', link: '/configuration' },
+          { text: 'Operations', link: '/operations' },
           { text: 'Security', link: '/security' },
-          { text: 'Behind Proxy', link: '/behind-proxy' },
+          { text: 'Behind a Reverse Proxy', link: '/behind-proxy' },
         ],
       },
     ],

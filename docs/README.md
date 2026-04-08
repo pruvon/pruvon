@@ -111,5 +111,6 @@ Then publish the generated files from `docs/.vitepress/dist`.
 
 - `install.md`
 - `configuration.md`
+- `operations.md`
 - `security.md`
 - `behind-proxy.md`

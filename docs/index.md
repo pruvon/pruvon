@@ -2,9 +2,9 @@
 layout: home
 
 hero:
-  name: Pruvon Docs
-  text: Operate Pruvon safely on a Dokku host.
-  tagline: Installation, configuration, and secure network exposure guidance.
+  name: Pruvon
+  text: A web interface for Dokku.
+  tagline: Manage apps, services, backups, logs, and terminals from your browser.
   actions:
     - theme: brand
       text: Get Started
@@ -15,20 +15,29 @@ hero:
 
 features:
   - title: Install
-    details: Install Pruvon on a Dokku host using the official installer or a local binary.
+    details: One command sets up the binary, systemd service, backup schedule, and log rotation on your Dokku host.
   - title: Configure
-    details: Start from the example YAML config and adjust the bind address, auth, and backup settings.
+    details: A single YAML file at /etc/pruvon.yml controls the admin account, GitHub OAuth, listen address, and backup policy.
+  - title: Operate
+    details: Manage the service with systemctl, read logs with journalctl, and trigger backups on demand.
   - title: Secure
-    details: Keep Pruvon private, prefer Tailscale, and only publish it behind a tightly controlled reverse proxy.
+    details: Keep Pruvon on localhost behind a VPN or reverse proxy. Control access with local credentials or GitHub OAuth.
 ---
 
-# Overview
+## What is Pruvon?
 
-Pruvon is a web UI for Dokku. It is designed to run on the same Linux host as Dokku and expose app, service, backup, log, and terminal operations through a browser.
+Pruvon is a web UI that runs alongside Dokku on a Linux host. It gives you browser-based access to app management, linked services, database backups, live logs, Docker resource views, and interactive terminals.
 
-Start with these pages:
+It is designed for operators who manage one or more Dokku hosts and want a visual interface without giving up direct SSH access.
 
-- [Install](/install)
-- [Configuration](/configuration)
-- [Security](/security)
-- [Behind Proxy](/behind-proxy)
+## Documentation
+
+Follow these pages in order if you are setting up Pruvon for the first time:
+
+| Page | What it covers |
+| --- | --- |
+| [Install](/install) | Running the installer, first login, and what gets placed on the system |
+| [Configuration](/configuration) | Editing `/etc/pruvon.yml`: admin credentials, GitHub OAuth, listen address, and backup settings |
+| [Operations](/operations) | Starting, stopping, and updating Pruvon; reading logs; running backups |
+| [Security](/security) | Recommended access controls and credential practices |
+| [Behind a Reverse Proxy](/behind-proxy) | Nginx configuration for proxying Pruvon with IP restrictions |

@@ -1,118 +1,130 @@
 # Pruvon Backup Utility
 
-The backup utility provides functionality for backing up Dokku databases. It's designed to create daily, weekly, and monthly backups of PostgreSQL, MariaDB, MongoDB, and Redis databases managed by Dokku.
+Pruvon can create Dokku database backups for PostgreSQL, MariaDB, MongoDB, and Redis services.
+
+On a standard installation, `install.sh` also installs `/etc/cron.daily/pruvon-backup`, so backups run as part of the host's normal daily cron flow instead of being created dynamically by the application.
+
+## How Scheduling Works
+
+The installed cron script runs this once per day:
+
+```bash
+pruvon -backup auto -config /etc/pruvon.yml
+```
+
+`-backup auto` chooses exactly one rotation type for that day:
+
+- monthly if today matches `backup.do_monthly`
+- otherwise weekly if today matches `backup.do_weekly`
+- otherwise daily
+
+That means `do_weekly` and `do_monthly` do not create extra cron entries. They tell the daily automatic run when to write weekly or monthly rotations.
 
 ## Configuration
 
-The backup configuration is specified in the `pruvon.yml` file under the `backup` section:
+Backup settings live under `backup` in `pruvon.yml` or `/etc/pruvon.yml`:
 
 ```yaml
 backup:
-  backup_dir: "/var/lib/dokku/data/pruvon-backup"  # Directory to store backups
-  do_weekly: 7                                     # Day of week for weekly backups (1-7, where 1 is Monday)
-  do_monthly: 1                                    # Day of month for monthly backups (1-31)
-  db_types:                                        # Database types to backup
+  backup_dir: "/var/lib/dokku/data/pruvon-backup"
+  do_weekly: 0
+  do_monthly: 1
+  db_types:
     - "postgres"
     - "mariadb"
-    - "mongo"                                      # MongoDB support
-    - "redis"                                      # Redis support
-  keep_daily_days: 7                               # Number of days to keep daily backups
-  keep_weekly_num: 6                               # Number of weekly backups to keep
-  keep_monthly_num: 3                              # Number of monthly backups to keep
+    - "mongo"
+    - "redis"
+  keep_daily_days: 7
+  keep_weekly_num: 6
+  keep_monthly_num: 3
 ```
 
-## Usage
+## Field Reference
 
-Run the backup utility using the command-line flag:
+| Field | Meaning |
+| --- | --- |
+| `backup_dir` | Where archives are written |
+| `do_weekly` | Weekly rotation day. Use `1-6` for Monday-Saturday, and `0` or `7` for Sunday. |
+| `do_monthly` | Day of month for monthly rotation |
+| `db_types` | Dokku service types to include |
+| `keep_daily_days` | How many days of daily backups to keep |
+| `keep_weekly_num` | How many weekly backups to keep |
+| `keep_monthly_num` | How many monthly backups to keep |
+
+## Installed Paths
+
+On a standard install:
+
+- binary: `/opt/pruvon/pruvon`
+- config: `/etc/pruvon.yml`
+- daily cron trigger: `/etc/cron.daily/pruvon-backup`
+- backup log: `/var/log/pruvon/backup.log`
+- backup storage: `/var/lib/dokku/data/pruvon-backup`
+
+If your installation uses different paths, adjust `PRUVON_PATH`, `CONFIG_PATH`, and `LOG_FILE` in `scripts/cron/pruvon-backup` before installing it manually.
+
+## Manual Usage
+
+Run the automatic selection logic:
 
 ```bash
-# Run automatic backup (daily, weekly, or monthly based on the current date)
-pruvon -backup auto
-
-# Run a specific backup type
-pruvon -backup daily
-pruvon -backup weekly
-pruvon -backup monthly
+pruvon -backup auto -config /etc/pruvon.yml
 ```
 
-## Automatic Daily Backups
-
-Pruvon does not create cron jobs from inside the running application. Install the provided cron script during provisioning or package installation so the application does not need permission to write into `/etc/cron.daily`.
-
-The repository `install.sh` already installs this script to `/etc/cron.daily/pruvon-backup` as part of the standard Linux setup.
-
-To manually install the daily cron job:
+Run a specific rotation explicitly:
 
 ```bash
-sudo install -m 0755 scripts/cron/pruvon-backup /etc/cron.daily/pruvon-backup
+pruvon -backup daily -config /etc/pruvon.yml
+pruvon -backup weekly -config /etc/pruvon.yml
+pruvon -backup monthly -config /etc/pruvon.yml
 ```
 
-The script defaults to `/opt/pruvon/pruvon` for the binary and `/etc/pruvon.yml` for the config file. If your installation uses different paths, update `PRUVON_PATH` and `CONFIG_PATH` in `scripts/cron/pruvon-backup` before installing it.
+## Rotation And Retention
+
+- daily backups are rotated by day and retained for `keep_daily_days`
+- weekly backups keep the latest `keep_weekly_num` rotations
+- monthly backups keep the latest `keep_monthly_num` rotations
 
 ## Backup Structure
 
-Backups are organized in the following directory structure:
+Backups are organized under the configured `backup_dir` by database type and rotation:
 
 ```text
 backup_dir/
 ├── postgres/
 │   ├── daily/
-│   │   └── database_name/
-│   │       └── database_name_2023-04-01_10h30m.Monday.dump.gz
 │   ├── weekly/
-│   │   └── database_name/
-│   │       └── database_name_weekly.14.2023-04-01_10h30m.dump.gz
 │   └── monthly/
-│       └── database_name/
-│           └── database_name_monthly.April.2023-04-01_10h30m.dump.gz
 ├── mariadb/
 │   ├── daily/
-│   │   └── ...
 │   ├── weekly/
-│   │   └── ...
 │   └── monthly/
-│       └── ...
 ├── mongo/
 │   ├── daily/
-│   │   └── database_name/
-│   │       └── database_name_2023-04-01_10h30m.Monday.archive.gz
 │   ├── weekly/
-│   │   └── ...
 │   └── monthly/
-│       └── ...
 └── redis/
     ├── daily/
-    │   └── database_name/
-    │       └── database_name_2023-04-01_10h30m.Monday.rdb.gz
     ├── weekly/
-    │   └── ...
     └── monthly/
-        └── ...
 ```
+
+Each database gets its own subdirectory inside the selected rotation.
 
 ## Backup Methods
 
-Backups are performed using the relevant Dokku plugin's `export` command:
+Backups are performed through the relevant Dokku plugin export command:
 
-- **PostgreSQL**: Uses `dokku postgres:export`
-- **MariaDB**: Uses `dokku mariadb:export`
-- **MongoDB**: Uses `dokku mongo:export`
-- **Redis**: Uses `dokku redis:export`
+- PostgreSQL: `dokku postgres:export`
+- MariaDB: `dokku mariadb:export`
+- MongoDB: `dokku mongo:export`
+- Redis: `dokku redis:export`
 
-The backup utility will automatically check if the required Dokku plugin for a database type is installed before attempting to back it up. If a plugin is not installed, backups for that database type will be skipped.
-
-## Rotation Policy
-
-- **Daily backups**: Daily backups older than `keep_daily_days` (default: 7 days) are automatically deleted
-- **Weekly backups**: Only the last `keep_weekly_num` (default: 6) weekly backups are kept
-- **Monthly backups**: Only the last `keep_monthly_num` (default: 3) monthly backups are kept
-
-These values can be configured in `pruvon.yml`. If not specified, default values will be used.
+If a required plugin is not installed, that database type is skipped.
 
 ## Requirements
 
 - Dokku installed and accessible
-- The corresponding Dokku plugin installed for each database type you want to back up (e.g., `dokku-postgres`, `dokku-mongo`, `dokku-redis`).
-- gzip utility available
-- Proper permissions to access Dokku databases and run Dokku commands
-- Write access to the backup directory
+- the corresponding Dokku plugin installed for each database type you want to back up
+- `gzip` available on the host
+- permission to access Dokku and write to the backup directory

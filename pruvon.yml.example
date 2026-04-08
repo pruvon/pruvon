@@ -1,30 +1,43 @@
+# Local fallback login.
+# `install.sh` replaces the bundled example hash with a random password on first install.
 admin:
   username: admin
-  # Replace with a bcrypt hash before production use.
+  # Must be a bcrypt hash, not a plain-text password.
   password: "$2a$10$Pm8hoUAYMIgL9PWb..KzOeveml0.48arbqds4Qr.r7B38IjJjPQNa"
 
+# Optional GitHub OAuth login.
+# `users` is a list of objects with `username`, optional `routes`, optional `apps`, and optional `services`.
 github:
   client_id: ""
   client_secret: ""
   users: []
 
+# Keep this on localhost unless you are intentionally putting Pruvon behind a proxy or private network overlay.
 pruvon:
   listen: 127.0.0.1:8080
 
+# Reserved for future Dokku-specific settings.
 dokku: {}
 
+# Legacy or reserved section. Leave as null unless you know you need it.
 server: null
 
-# Backup configuration
+# Backup settings used by `pruvon -backup auto`.
+# The standard install runs that command once per day from `/etc/cron.daily/pruvon-backup`.
 backup:
+  # Backup archive destination.
   backup_dir: "/var/lib/dokku/data/pruvon-backup"
+  # Weekly rotation day: 1-6 for Monday-Saturday, 0 or 7 for Sunday.
   do_weekly: 0
+  # Monthly rotation day.
   do_monthly: 1
+  # Dokku service types to include.
   db_types:
     - "postgres"
     - "mariadb"
     - "mongo"
     - "redis"
+  # Retention settings.
   keep_daily_days: 7
   keep_weekly_num: 6
   keep_monthly_num: 3

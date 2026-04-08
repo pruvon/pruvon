@@ -1,55 +1,66 @@
 # Security
 
-Pruvon is an administrative interface for Dokku. Treat it like root-adjacent infrastructure.
+Pruvon is an administrative interface for Dokku. It can manage apps, services, backups, and open terminals on the host. Treat it as privileged infrastructure.
 
-## Strong Recommendation
+## Recommended defaults
 
-Do not expose Pruvon directly to the public internet.
+- Bind to `127.0.0.1:8080` (the installer default)
+- Access Pruvon through a VPN, overlay network (e.g., Tailscale), or a reverse proxy with IP restrictions
+- Use a strong, unique local admin password
+- Enable GitHub OAuth only with a tightly controlled user list
+- Replace the example admin password hash immediately if the installer did not do it for you
 
-Recommended baseline:
+## Keep Pruvon off the public internet
 
-- keep `pruvon.listen` on `127.0.0.1:8080`
-- access it through a private network overlay such as Tailscale
-- if a reverse proxy is required, restrict it to known source IP ranges
-- use strong admin credentials or GitHub auth with a tightly controlled allowlist
+The safest setup:
 
-## Preferred Access Model: Tailscale
+1. Leave `pruvon.listen` set to `127.0.0.1:8080`.
+2. Reach it through a private network: Tailscale, WireGuard, an SSH tunnel, or a reverse proxy that only allows known source IPs.
+3. Terminate TLS at the proxy if traffic leaves localhost.
 
-Tailscale is the simplest recommended option because it avoids making Pruvon publicly reachable.
+This keeps the entire UI and API surface out of public reach.
 
-Typical approach:
+See [Behind a Reverse Proxy](/behind-proxy) for an Nginx example with IP allowlists.
 
-1. Install Tailscale on the Dokku host.
-2. Keep Pruvon bound to `127.0.0.1:8080`.
-3. Expose it only through a reverse proxy that listens on the Tailscale interface, or by tunneling from your private network.
-4. Limit access to specific users or groups in your Tailscale policy.
+## What to avoid
 
-This keeps the UI off the public internet and reduces attack surface significantly.
+- Binding to `0.0.0.0` without additional network controls
+- Publishing Pruvon on a public domain with no source IP restrictions
+- Keeping the bundled example password hash in production
+- Sharing the local admin password across multiple people
+- Leaving GitHub users in the config after they should no longer have access
 
-## What To Avoid
+## Credential practices
 
-- binding Pruvon directly to `0.0.0.0:8080`
-- publishing it with an open public DNS record
-- allowing unrestricted access through a proxy
-- keeping the example bcrypt hash in production
-- sharing a single weak admin password among multiple operators
+### Local admin
 
-## Credential Hygiene
+- The password in `/etc/pruvon.yml` is stored as a bcrypt hash, never in plain text
+- Rotate the password when operators change or if the credential has been shared too widely
+- See [Configuration - Change the admin password](/configuration#change-the-admin-password) for the procedure
 
-- replace the example admin password hash before first real use
-- rotate credentials when operators leave or credentials are shared too widely
-- if using GitHub auth, keep `github.users` limited to explicit usernames
-- remove access immediately when a user should no longer operate the host
+### GitHub users
 
-## Network Controls
+- Keep `github.users` limited to people who actively need access
+- Remove users as soon as they no longer manage the host
+- GitHub users are revalidated against the config on every request -- removing a user and restarting the service revokes access immediately
 
-Even behind a proxy, restrict by source network whenever possible.
+### Applying credential changes
 
-Examples of acceptable controls:
+After editing credentials in `/etc/pruvon.yml`:
 
-- Tailscale-only reachability
-- office VPN IP ranges
-- jump-host or bastion IPs
-- internal RFC1918 networks that are already access-controlled
+```bash
+sudo systemctl restart pruvon
+sudo systemctl status pruvon
+```
 
-See [Behind Proxy](/behind-proxy) for an Nginx example that only permits specific IP blocks.
+## After changing the listen address
+
+If you change `pruvon.listen` or modify the proxy configuration, verify the service afterwards:
+
+```bash
+sudo systemctl restart pruvon
+sudo systemctl status pruvon
+sudo journalctl -u pruvon -n 50
+```
+
+Test that the UI loads from the expected network path and that unintended sources are blocked.

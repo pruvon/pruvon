@@ -1,26 +1,30 @@
 # Configuration
 
-Pruvon uses a YAML configuration file. In production the default path is `/etc/pruvon.yml`.
+Pruvon reads its configuration from `/etc/pruvon.yml`. The installer creates this file on first install with a randomly generated admin password.
 
-Start from the example file:
-
-```bash
-cp pruvon.yml.example pruvon.yml
-go run ./cmd/app -server -config pruvon.yml
-```
-
-After changing `/etc/pruvon.yml` on an installed system, restart the service:
+After any change to the config file, restart the service:
 
 ```bash
 sudo systemctl restart pruvon
 ```
 
-## Example Configuration
+## Config file sections
+
+| Section | Purpose |
+| --- | --- |
+| `admin` | Local admin login credentials |
+| `github` | GitHub OAuth settings and authorized users |
+| `pruvon` | Runtime settings (listen address) |
+| `backup` | Backup schedule, included database types, and retention policy |
+| `dokku` | Reserved for future use |
+| `server` | Reserved |
+
+## Full example
 
 ```yaml
 admin:
   username: admin
-  password: "$2a$10$Pm8hoUAYMIgL9PWb..KzOeveml0.48arbqds4Qr.r7B38IjJjPQNa"
+  password: "$2a$10$...your-bcrypt-hash..."
 
 github:
   client_id: ""
@@ -48,87 +52,136 @@ backup:
   keep_monthly_num: 3
 ```
 
-## Admin Credentials
+## Admin login
 
-`admin.username` is the local login name.
+`admin.username` is the local admin username. Default is `admin`.
 
-`admin.password` must be a bcrypt hash, not a plain-text password. Replace the example value before real use.
+`admin.password` must be a bcrypt hash, not a plain-text password.
 
-Avoid `htpasswd -b ...` for this because it exposes the plain-text password in shell history and process listings.
+### Change the admin password
 
-Generate a hash interactively:
-
-```bash
-htpasswd -nBC 10 "" | tr -d ':\n'
-```
-
-Or read the password from a file through stdin:
-
-```bash
-htpasswd -niBC 10 "" < password.txt | tr -d ':\n'
-```
-
-## Reset A Forgotten Admin Password
-
-1. Generate a new bcrypt hash interactively:
+Generate a new bcrypt hash:
 
 ```bash
 NEW_HASH="$(htpasswd -nBC 10 '' | tr -d ':\n')"
 printf '%s\n' "$NEW_HASH"
 ```
 
-Or generate it from a file via stdin:
+Open the config file:
 
 ```bash
-NEW_HASH="$(htpasswd -niBC 10 '' < password.txt | tr -d ':\n')"
-printf '%s\n' "$NEW_HASH"
+sudoedit /etc/pruvon.yml
 ```
 
-2. Open `/etc/pruvon.yml` and replace `admin.password` with the generated hash.
-
-Example:
-
-```yaml
-admin:
-  username: admin
-  password: "$2a$10$...your-new-hash..."
-```
-
-3. Restart the service:
+Replace the value under `admin.password` with the new hash, then restart:
 
 ```bash
 sudo systemctl restart pruvon
 ```
 
-## GitHub Authentication
+::: tip
+Avoid `htpasswd -b` -- it exposes the plain-text password in shell history and process listings.
+:::
 
-If you want GitHub login, set these values:
+### Reset a forgotten password
+
+If you can no longer log in:
+
+1. Generate a new bcrypt hash with the command above.
+2. Replace `admin.password` in `/etc/pruvon.yml` with the new hash.
+3. Restart the service with `sudo systemctl restart pruvon`.
+
+## GitHub authentication
+
+GitHub login is optional. To enable it, register a GitHub OAuth App and add the credentials to the config.
+
+```yaml
+github:
+  client_id: "your-github-oauth-client-id"
+  client_secret: "your-github-oauth-client-secret"
+  users: []
+```
+
+### Managing GitHub users
+
+`github.users` is a list of user objects with granular access controls:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `username` | string | GitHub username (required) |
+| `routes` | string list | Allowed URL route patterns |
+| `apps` | string list | Allowed Dokku app names |
+| `services` | map of string lists | Allowed services, grouped by type |
+
+Example with full access:
 
 ```yaml
 github:
   client_id: "your-github-oauth-client-id"
   client_secret: "your-github-oauth-client-secret"
   users:
-    - "alice"
-    - "bob"
+    - username: "alice"
+      routes:
+        - "/*"
+      apps:
+        - "*"
+      services:
+        postgres:
+          - "*"
+        redis:
+          - "*"
 ```
 
-Only the GitHub usernames listed in `github.users` are allowed to log in.
+For most setups, the simpler path is to sign in as the local admin, enable GitHub OAuth in the Pruvon UI, and manage GitHub user permissions from there.
 
-## Listen Address
+### Access enforcement
 
-Recommended default:
+GitHub users are revalidated against the config on every request. Removing a user from `github.users` and restarting the service revokes their access immediately.
+
+## Listen address
 
 ```yaml
 pruvon:
   listen: 127.0.0.1:8080
 ```
 
-Bind to localhost and put Pruvon behind a private-access proxy or VPN. Do not bind directly to a public interface unless you fully understand the risk and have additional network controls in place.
+The default binds Pruvon to localhost only. This is the recommended setting -- reach it through a VPN, overlay network, or reverse proxy instead of binding to a public interface.
 
-## Backup Settings
+If you change the listen address, restart the service:
 
-Example with weekly and monthly retention:
+```bash
+sudo systemctl restart pruvon
+```
+
+See [Security](/security) before binding to anything other than `127.0.0.1`.
+
+## Backup settings
+
+A daily cron job at `/etc/cron.daily/pruvon-backup` triggers automatic backups by running:
+
+```
+pruvon -backup auto -config /etc/pruvon.yml
+```
+
+Each run produces exactly one backup type based on the current date:
+
+1. **Monthly** -- if today's day-of-month matches `do_monthly`
+2. **Weekly** -- otherwise, if today's day-of-week matches `do_weekly`
+3. **Daily** -- otherwise
+
+### Backup fields
+
+| Field | Meaning |
+| --- | --- |
+| `backup_dir` | Directory where backup archives are stored |
+| `do_weekly` | Day of week for weekly backups: `1`-`6` for Monday-Saturday, `0` or `7` for Sunday |
+| `do_monthly` | Day of month for monthly backups (e.g., `1` for the first) |
+| `db_types` | Dokku service types to back up (e.g., `postgres`, `mariadb`, `mongo`, `redis`) |
+| `keep_daily_days` | Number of days to retain daily backups |
+| `keep_weekly_num` | Number of weekly backups to retain |
+| `keep_monthly_num` | Number of monthly backups to retain |
+
+### Example
 
 ```yaml
 backup:
@@ -143,44 +196,29 @@ backup:
   keep_monthly_num: 6
 ```
 
-Notes:
+This configuration:
 
-- `backup_dir` should remain on persistent storage
-- `db_types` controls which Dokku service types are included
-- `do_weekly` and `do_monthly` enable additional backup schedules
-- retention fields control how many old backups are kept
+- Stores backup archives under `/var/lib/dokku/data/pruvon-backup`
+- Backs up only PostgreSQL and Redis services
+- Creates the weekly backup on Mondays
+- Creates the monthly backup on the first of the month
+- Retains 7 daily, 8 weekly, and 6 monthly backups
 
-## Minimal Production Example
+Backups can also be managed and triggered through the Pruvon web interface. See [Operations](/operations) for manual backup commands.
 
-```yaml
-admin:
-  username: admin
-  password: "$2a$10$replace-with-your-own-bcrypt-hash"
+## Editing the config file
 
-github:
-  client_id: ""
-  client_secret: ""
-  users: []
+Always use `sudoedit` to edit the config:
 
-pruvon:
-  listen: 127.0.0.1:8080
-
-dokku: {}
-
-server: null
-
-backup:
-  backup_dir: "/var/lib/dokku/data/pruvon-backup"
-  do_weekly: 0
-  do_monthly: 1
-  db_types:
-    - "postgres"
-    - "mariadb"
-    - "mongo"
-    - "redis"
-  keep_daily_days: 7
-  keep_weekly_num: 6
-  keep_monthly_num: 3
+```bash
+sudoedit /etc/pruvon.yml
 ```
 
-Read [Security](/security) before making the UI reachable from anywhere except localhost.
+After saving, restart and verify:
+
+```bash
+sudo systemctl restart pruvon
+sudo systemctl status pruvon
+```
+
+Read [Security](/security) before making Pruvon reachable from outside localhost.
