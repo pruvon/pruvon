@@ -43,8 +43,8 @@ dist-linux-arm64:
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS) -X main.PruvonVersion=$(VERSION)" -o $(DIST_DIR)/$(APP_NAME)-linux-arm64 $(PKG)
 
 dist-archives:
-	tar -czf $(DIST_DIR)/$(APP_NAME)-linux-amd64.tar.gz -C $(DIST_DIR) $(APP_NAME)-linux-amd64
-	tar -czf $(DIST_DIR)/$(APP_NAME)-linux-arm64.tar.gz -C $(DIST_DIR) $(APP_NAME)-linux-arm64
+	COPYFILE_DISABLE=1 COPY_EXTENDED_ATTRIBUTES_DISABLE=1 tar -czf $(DIST_DIR)/$(APP_NAME)-linux-amd64.tar.gz -C $(DIST_DIR) $(APP_NAME)-linux-amd64
+	COPYFILE_DISABLE=1 COPY_EXTENDED_ATTRIBUTES_DISABLE=1 tar -czf $(DIST_DIR)/$(APP_NAME)-linux-arm64.tar.gz -C $(DIST_DIR) $(APP_NAME)-linux-arm64
 
 dist-checksums:
 	@if command -v sha256sum >/dev/null 2>&1; then \

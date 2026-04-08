@@ -19,6 +19,7 @@ CRON_PATH="${CRON_PATH:-/etc/cron.daily/pruvon-backup}"
 PRUVON_REPOSITORY="${PRUVON_REPOSITORY:-pruvon/pruvon}"
 PRUVON_VERSION="${PRUVON_VERSION:-latest}"
 PRUVON_LISTEN="${PRUVON_LISTEN:-}"
+DOCS_BASE_URL="${DOCS_BASE_URL:-https://docs.pruvon.dev}"
 GITHUB_API_BASE="https://api.github.com/repos/${PRUVON_REPOSITORY}"
 GITHUB_RELEASES_BASE="https://github.com/${PRUVON_REPOSITORY}/releases/download"
 GITHUB_RAW_BASE="https://raw.githubusercontent.com/${PRUVON_REPOSITORY}"
@@ -31,9 +32,14 @@ DOWNLOADED_BINARY_SOURCE=""
 DOWNLOADED_CONFIG_TEMPLATE=""
 DOWNLOADED_CRON_SOURCE=""
 DOWNLOADED_CHECKSUMS=""
+INSTALL_ACTION="installation"
 
 log() {
     printf '[install] %s\n' "$*"
+}
+
+warn() {
+    printf '[install] Warning: %s\n' "$*" >&2
 }
 
 die() {
@@ -48,6 +54,12 @@ command_exists() {
 cleanup() {
     if [[ -n "${WORK_DIR}" && -d "${WORK_DIR}" ]]; then
         rm -rf "${WORK_DIR}"
+    fi
+}
+
+detect_install_action() {
+    if [[ -f "${APP_BINARY_DEST}" || -L "${APP_SYMLINK}" || -f "${SYSTEMD_UNIT_PATH}" || -f "${CONFIG_PATH}" ]]; then
+        INSTALL_ACTION="update"
     fi
 }
 
@@ -473,7 +485,7 @@ create_config_if_missing() {
         if config_contains_example_admin_hash; then
             log "rotating bundled example admin password in ${CONFIG_PATH}"
             if [[ -n "${PRUVON_LISTEN}" ]]; then
-                log "ignoring PRUVON_LISTEN because ${CONFIG_PATH} already exists"
+                warn "ignoring PRUVON_LISTEN because ${CONFIG_PATH} already exists"
             fi
             rotate_example_admin_password
             return
@@ -481,7 +493,7 @@ create_config_if_missing() {
 
         log "keeping existing config at ${CONFIG_PATH}"
         if [[ -n "${PRUVON_LISTEN}" ]]; then
-            log "ignoring PRUVON_LISTEN because ${CONFIG_PATH} already exists"
+            warn "ignoring PRUVON_LISTEN because ${CONFIG_PATH} already exists"
         fi
         chown root:"${APP_GROUP}" "${CONFIG_PATH}"
         chmod 0640 "${CONFIG_PATH}"
@@ -526,12 +538,83 @@ create_config_if_missing() {
 
 check_listen_address() {
     if systemctl is-active --quiet pruvon; then
-        log "skipping listen availability check because pruvon service is already running"
+        warn "skipping bind check because an existing pruvon service is already running; the service will be restarted with the current config"
         return
     fi
 
     log "checking configured listen address"
     sudo -u "${APP_USER}" "${APP_BINARY_DEST}" -config "${CONFIG_PATH}" -check-listen
+}
+
+read_configured_listen() {
+    local listen_line=""
+    local listen_value=""
+    local first_char=""
+    local last_char=""
+
+    [[ -f "${CONFIG_PATH}" ]] || return 0
+
+    listen_line="$(grep -m1 '^[[:space:]]*listen:[[:space:]]' "${CONFIG_PATH}" || true)"
+    [[ -n "${listen_line}" ]] || return 0
+
+    listen_value="${listen_line#*:}"
+    listen_value="${listen_value%%#*}"
+    listen_value="${listen_value#"${listen_value%%[![:space:]]*}"}"
+    listen_value="${listen_value%"${listen_value##*[![:space:]]}"}"
+    first_char="${listen_value:0:1}"
+    last_char="${listen_value: -1}"
+
+    if [[ ( "${first_char}" == '"' && "${last_char}" == '"' ) || ( "${first_char}" == "'" && "${last_char}" == "'" ) ]]; then
+        listen_value="${listen_value:1:${#listen_value}-2}"
+    fi
+
+    printf '%s\n' "${listen_value}"
+}
+
+service_status() {
+    local status=""
+
+    status="$(systemctl is-active pruvon 2>/dev/null || true)"
+    case "${status}" in
+        active)
+            printf 'active (running)\n'
+            ;;
+        *)
+            printf '%s\n' "${status:-unknown}"
+            ;;
+    esac
+}
+
+is_local_listen() {
+    local listen_address="$1"
+
+    case "${listen_address}" in
+        127.0.0.1:*|localhost:*|\[::1\]:*|::1:*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+print_access_summary() {
+    local listen_address="$1"
+
+    case "${listen_address}" in
+        127.0.0.1:*|localhost:*|\[::1\]:*|::1:*)
+            printf 'Access: http://%s (localhost only)\n' "${listen_address}"
+            ;;
+        :*)
+            printf 'Access: http://<server-ip-or-hostname>:%s\n' "${listen_address#:}"
+            ;;
+        0.0.0.0:*)
+            printf 'Access: http://<server-ip-or-hostname>:%s\n' "${listen_address#*:}"
+            ;;
+        *)
+            printf 'Access: http://%s\n' "${listen_address}"
+            ;;
+    esac
 }
 
 install_systemd_unit() {
@@ -640,18 +723,47 @@ reload_and_start_service() {
 }
 
 print_summary() {
+    local listen_address=""
+    local current_service_status=""
+
+    listen_address="$(read_configured_listen)"
+    current_service_status="$(service_status)"
+
     printf '\n'
-    printf 'Pruvon installation completed.\n'
+    if [[ "${INSTALL_ACTION}" == update ]]; then
+        printf 'Pruvon update completed.\n'
+    else
+        printf 'Pruvon installation completed.\n'
+    fi
     if [[ -n "${RESOLVED_VERSION}" ]]; then
         printf 'Version: %s\n' "${RESOLVED_VERSION}"
     fi
+    printf 'Service: %s\n' "${current_service_status}"
     printf 'Binary: %s\n' "${APP_BINARY_DEST}"
     printf 'Config: %s\n' "${CONFIG_PATH}"
     printf 'Systemd unit: %s\n' "${SYSTEMD_UNIT_PATH}"
     printf 'Backup dir: %s\n' "${BACKUP_DIR}"
     printf 'Log dir: %s\n' "${LOG_DIR}"
 
+    if [[ -n "${listen_address}" ]]; then
+        printf 'Listen: %s\n' "${listen_address}"
+        print_access_summary "${listen_address}"
+    fi
+
+    printf '\n'
+    if is_local_listen "${listen_address}"; then
+        printf 'To expose Pruvon safely behind a reverse proxy:\n'
+        printf '%s/behind-proxy.html#example-nginx-configuration\n' "${DOCS_BASE_URL}"
+    fi
+    printf 'Security guidance:\n'
+    printf '%s/security.html\n' "${DOCS_BASE_URL}"
+
+    printf '\n'
+    printf 'Check status: sudo systemctl status pruvon\n'
+    printf 'View logs: sudo journalctl -u pruvon -f\n'
+
     if [[ -n "${GENERATED_ADMIN_PASSWORD}" ]]; then
+        printf '\n'
         printf 'Admin username: admin\n'
         printf 'Admin password: %s\n' "${GENERATED_ADMIN_PASSWORD}"
         printf 'Store this password now. It is not written anywhere in plaintext.\n'
@@ -663,6 +775,7 @@ main() {
 
     require_root
     trap cleanup EXIT
+    detect_install_action
 
     command_exists install || die "install command is required"
     command_exists systemctl || die "systemctl is required"
