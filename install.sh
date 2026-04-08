@@ -20,7 +20,6 @@ PRUVON_REPOSITORY="${PRUVON_REPOSITORY:-pruvon/pruvon}"
 PRUVON_VERSION="${PRUVON_VERSION:-latest}"
 PRUVON_LISTEN="${PRUVON_LISTEN:-}"
 DOCS_BASE_URL="${DOCS_BASE_URL:-https://docs.pruvon.dev}"
-GITHUB_API_BASE="https://api.github.com/repos/${PRUVON_REPOSITORY}"
 GITHUB_RELEASES_BASE="https://github.com/${PRUVON_REPOSITORY}/releases/download"
 GITHUB_RAW_BASE="https://raw.githubusercontent.com/${PRUVON_REPOSITORY}"
 EXAMPLE_ADMIN_PASSWORD_HASH='$2a$10$Pm8hoUAYMIgL9PWb..KzOeveml0.48arbqds4Qr.r7B38IjJjPQNa'
@@ -88,6 +87,46 @@ download_file() {
     die "curl or wget is required to download installation assets"
 }
 
+resolve_latest_version_from_redirect() {
+    local latest_url="https://github.com/${PRUVON_REPOSITORY}/releases/latest"
+    local effective_url=""
+    local location_header=""
+    local wget_output=""
+
+    if command_exists curl; then
+        effective_url="$(curl -fsSIL -o /dev/null -w '%{url_effective}' "${latest_url}")"
+    elif command_exists wget; then
+        wget_output="$(wget --server-response --spider --max-redirect=0 "${latest_url}" 2>&1 || true)"
+        while IFS= read -r line; do
+            line="${line%$'\r'}"
+            case "${line}" in
+                [Ll]ocation:*)
+                    location_header="${line#*: }"
+                    break
+                    ;;
+                *" Location:"*)
+                    location_header="${line##* Location: }"
+                    break
+                    ;;
+            esac
+        done <<< "${wget_output}"
+
+        [[ -n "${location_header}" ]] || die "could not resolve the latest Pruvon release redirect"
+
+        if [[ "${location_header}" == http* ]]; then
+            effective_url="${location_header}"
+        else
+            effective_url="https://github.com${location_header}"
+        fi
+    else
+        die "curl or wget is required to resolve the latest Pruvon release"
+    fi
+
+    RESOLVED_VERSION="${effective_url##*/}"
+    [[ -n "${RESOLVED_VERSION}" && "${RESOLVED_VERSION}" == v* ]] || die "could not resolve the latest Pruvon release version"
+    printf '%s\n' "${RESOLVED_VERSION}"
+}
+
 require_root() {
     if [[ "$(id -u)" -ne 0 ]]; then
         die "this script must run as root"
@@ -145,7 +184,6 @@ normalize_version() {
 
 resolve_version() {
     local normalized_version
-    local metadata_path
 
     if [[ -n "${RESOLVED_VERSION}" ]]; then
         printf '%s\n' "${RESOLVED_VERSION}"
@@ -159,13 +197,7 @@ resolve_version() {
         return
     fi
 
-    ensure_work_dir
-    metadata_path="${WORK_DIR}/release-latest.json"
-    download_file "${GITHUB_API_BASE}/releases/latest" "${metadata_path}"
-    RESOLVED_VERSION="$(grep -m1 '"tag_name"' "${metadata_path}" | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
-
-    [[ -n "${RESOLVED_VERSION}" ]] || die "could not resolve the latest Pruvon release version"
-    printf '%s\n' "${RESOLVED_VERSION}"
+    resolve_latest_version_from_redirect
 }
 
 download_release_asset() {
