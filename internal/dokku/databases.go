@@ -240,7 +240,7 @@ func ExportDatabase(runner CommandRunner, dbType string, dbName string) (string,
 	filepath := fmt.Sprintf("/tmp/%s", filename)
 
 	// Run export command
-	_, err := runner.RunCommand("sh", "-c", fmt.Sprintf("dokku %s:export %s > %s", dbType, dbName, filepath))
+	_, err := runner.RunCommand("sh", "-c", fmt.Sprintf("%s %s:export %s > %s", dokkuShellPrefix(), dbType, dbName, filepath))
 	if err != nil {
 		os.Remove(filepath)
 		return "", fmt.Errorf("command execution error: %v", err)

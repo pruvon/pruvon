@@ -17,3 +17,11 @@ type CommandRunner = execpkg.CommandRunner
 
 // DefaultCommandRunner is the default command runner instance
 var DefaultCommandRunner CommandRunner = execpkg.NewCommandRunner()
+
+func dokkuShellPrefix() string {
+	if os.Geteuid() == 0 || os.Getenv("PRUVON_DISABLE_SUDO") == "1" {
+		return "dokku"
+	}
+
+	return "sudo -n dokku"
+}

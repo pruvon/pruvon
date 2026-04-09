@@ -420,7 +420,7 @@ func ExportService(runner CommandRunner, svcType string, svcName string) (string
 	switch svcType {
 	case "postgres", "mariadb", "mongo", "redis":
 		// Use shell redirection to export the service data to a file
-		cmd = fmt.Sprintf("dokku %s:export %s > %s", svcType, svcName, origTempPath)
+		cmd = fmt.Sprintf("%s %s:export %s > %s", dokkuShellPrefix(), svcType, svcName, origTempPath)
 		_, err := runner.RunCommand("sh", "-c", cmd)
 		if err != nil {
 			return "", fmt.Errorf("service could not be exported: %v", err)
