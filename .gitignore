@@ -9,6 +9,7 @@ dokkum-backup
 
 # Build artifacts
 builds/
+Makefile.local
 
 # Config (contains secrets)
 pruvon.yml

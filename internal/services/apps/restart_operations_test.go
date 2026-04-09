@@ -50,24 +50,24 @@ func (r *sequenceCommandRunner) StartPTY(command string, args ...string) (*os.Fi
 	return nil, errors.New("PTY not supported in mock")
 }
 
-func TestIsRestartVerified(t *testing.T) {
+func TestIsActionVerified(t *testing.T) {
 	t.Run("returns false for nil status", func(t *testing.T) {
-		assert.False(t, isRestartVerified(nil, ""))
+		assert.False(t, isActionVerified(ActionRestart, nil, ""))
 	})
 
 	t.Run("returns false when app is not deployed", func(t *testing.T) {
 		status := &models.AppStatus{Deployed: false, Running: true}
-		assert.False(t, isRestartVerified(status, ""))
+		assert.False(t, isActionVerified(ActionRestart, status, ""))
 	})
 
 	t.Run("accepts running app for full restart", func(t *testing.T) {
 		status := &models.AppStatus{Deployed: true, Running: true}
-		assert.True(t, isRestartVerified(status, ""))
+		assert.True(t, isActionVerified(ActionRestart, status, ""))
 	})
 
 	t.Run("accepts mixed running status for full restart", func(t *testing.T) {
 		status := &models.AppStatus{Deployed: true, Running: "mixed"}
-		assert.True(t, isRestartVerified(status, ""))
+		assert.True(t, isActionVerified(ActionRestart, status, ""))
 	})
 
 	t.Run("requires process count for targeted restart", func(t *testing.T) {
@@ -77,8 +77,18 @@ func TestIsRestartVerified(t *testing.T) {
 			Processes: map[string]int{"web": 1, "worker": 0},
 		}
 
-		assert.True(t, isRestartVerified(status, "web"))
-		assert.False(t, isRestartVerified(status, "worker"))
+		assert.True(t, isActionVerified(ActionRestart, status, "web"))
+		assert.False(t, isActionVerified(ActionRestart, status, "worker"))
+	})
+
+	t.Run("confirms stop after app is no longer running", func(t *testing.T) {
+		status := &models.AppStatus{Deployed: true, Running: false}
+		assert.True(t, isActionVerified(ActionStop, status, ""))
+	})
+
+	t.Run("confirms process stop after process count reaches zero", func(t *testing.T) {
+		status := &models.AppStatus{Deployed: true, Running: "mixed", Processes: map[string]int{"web": 0}}
+		assert.True(t, isActionVerified(ActionStop, status, "web"))
 	})
 }
 
@@ -128,7 +138,7 @@ func TestRestartOperationStoreStartReusesActiveOperation(t *testing.T) {
 	store.operations[operation.ID] = operation
 	store.latestByApp[operation.AppName] = operation.ID
 
-	reused := store.start(nil, operation.AppName, "")
+	reused := store.start(nil, ActionRestart, operation.AppName, "")
 	assert.Equal(t, operation.ID, reused.ID)
 	assert.True(t, reused.Reused)
 	assert.False(t, store.operations[operation.ID].Reused)
@@ -152,7 +162,7 @@ func TestWaitForRestartVerificationFailsFastWhenAppIsDeleted(t *testing.T) {
 	store.verificationTimeout = 10 * time.Second
 	store.verificationInterval = time.Millisecond
 
-	err := store.waitForRestartVerification(service, "demo-app", "")
+	err := store.waitForActionVerification(service, ActionRestart, "demo-app", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no longer exists")
 }
@@ -176,7 +186,7 @@ func TestWaitForRestartVerificationSucceedsAfterTransientStatusError(t *testing.
 	store.verificationTimeout = 10 * time.Second
 	store.verificationInterval = time.Millisecond
 
-	err := store.waitForRestartVerification(service, "demo-app", "")
+	err := store.waitForActionVerification(service, ActionRestart, "demo-app", "")
 	assert.NoError(t, err)
 }
 

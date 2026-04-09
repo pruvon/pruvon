@@ -133,8 +133,8 @@ if (!registerAppDetailFlashStore()) {
         lastDeployAt: '',
         processes: {}
     },
-    restartOperation: null,
-    restartOperationPollTimeout: null,
+    appOperation: null,
+    appOperationPollTimeout: null,
     loadingSummary: false,
     errors: {
         newEnvName: '',
@@ -205,70 +205,68 @@ if (!registerAppDetailFlashStore()) {
         this.fetchStats();
         this.statsInterval = setInterval(() => this.fetchStats(), 5000);
     },
-    isRestartInProgress() {
-        return !!(this.restartOperation && ['pending', 'restarting', 'verifying'].includes(this.restartOperation.state));
+    isActionInProgress() {
+        return !!(this.appOperation && ['pending', 'restarting', 'stopping', 'rebuilding', 'verifying'].includes(this.appOperation.state));
     },
-    restartOperationTitle() {
-        if (!this.restartOperation) {
-            return '';
+    appOperationStatusLabel() {
+        if (!this.appOperation) {
+            return 'Running';
         }
 
-        switch (this.restartOperation.state) {
+        switch (this.appOperation.state) {
             case 'pending':
-                return 'Restart queued';
-            case 'restarting':
-                return 'Restarting';
+                return `${this.appOperation.action.charAt(0).toUpperCase() + this.appOperation.action.slice(1)} queued`;
+            case 'stopping':
+                return 'Stopping';
+            case 'rebuilding':
+                return 'Rebuilding';
             case 'verifying':
-                return 'Checking health';
-            case 'succeeded':
-                return 'Restart completed';
-            case 'failed':
-                return 'Restart failed';
+                return this.appOperation.action === 'stop' ? 'Checking stop status' : 'Checking health';
             default:
-                return 'Restart status';
+                return 'Restarting';
         }
     },
-    clearRestartOperationPolling() {
-        if (this.restartOperationPollTimeout) {
-            clearTimeout(this.restartOperationPollTimeout);
-            this.restartOperationPollTimeout = null;
+    clearAppOperationPolling() {
+        if (this.appOperationPollTimeout) {
+            clearTimeout(this.appOperationPollTimeout);
+            this.appOperationPollTimeout = null;
         }
     },
-    scheduleRestartOperationPoll(taskId) {
-        this.clearRestartOperationPolling();
-        this.restartOperationPollTimeout = setTimeout(() => {
-            this.loadRestartOperation(taskId, true);
+    scheduleAppOperationPoll(taskId) {
+        this.clearAppOperationPolling();
+        this.appOperationPollTimeout = setTimeout(() => {
+            this.loadAppOperation(taskId, true);
         }, 2000);
     },
-    async loadRestartOperation(taskId = '', announceCompletion = false) {
+    async loadAppOperation(taskId = '', announceCompletion = false) {
         const query = taskId ? `?task_id=${encodeURIComponent(taskId)}` : '';
 
         try {
-            const response = await fetch(`/api/apps/{{.Name}}/restart/operations${query}`);
+            const response = await fetch(`/api/apps/{{.Name}}/operations${query}`);
 
             if (response.status === 404) {
-                this.restartOperation = null;
-                this.clearRestartOperationPolling();
+                this.appOperation = null;
+                this.clearAppOperationPolling();
                 return;
             }
 
             if (!response.ok) {
-                throw new Error('Failed to load restart operation');
+                throw new Error('Failed to load app operation');
             }
 
-            const previousState = this.restartOperation ? this.restartOperation.state : '';
+            const previousState = this.appOperation ? this.appOperation.state : '';
             const operation = await response.json();
 
-            this.restartOperation = operation;
+            this.appOperation = operation;
 
-            if (this.isRestartInProgress()) {
-                this.scheduleRestartOperationPoll(operation.id);
+            if (this.isActionInProgress()) {
+                this.scheduleAppOperationPoll(operation.id);
                 return;
             }
 
-            this.clearRestartOperationPolling();
+            this.clearAppOperationPolling();
 
-            if (announceCompletion && previousState && previousState !== operation.state) {
+            if (announceCompletion && previousState && previousState !== operation.state && ['succeeded', 'failed'].includes(operation.state)) {
                 await this.loadAppDetails();
                 if (this.activeTab === 'process') {
                     await this.fetchData('process', true);
@@ -276,14 +274,14 @@ if (!registerAppDetailFlashStore()) {
                 this.showFlashMessage(operation.message, operation.state === 'failed' ? 'error' : 'success');
             }
         } catch (error) {
-            console.error('Error loading restart operation:', error);
+            console.error('Error loading app operation:', error);
             if (announceCompletion && taskId) {
-                this.showFlashMessage('Failed to track restart status', 'error');
+                this.showFlashMessage('Failed to track app action status', 'error');
             }
         }
     },
-    async startTrackedRestart(processType = '') {
-        let url = `/api/apps/{{.Name}}/restart/operations`;
+    async startTrackedAction(action, processType = '') {
+        let url = `/api/apps/{{.Name}}/operations/${action}`;
         if (processType) {
             url += `?process_type=${encodeURIComponent(processType)}`;
         }
@@ -293,22 +291,22 @@ if (!registerAppDetailFlashStore()) {
         });
 
         if (!response.ok) {
-            let message = 'Failed to restart application';
+            let message = `Failed to ${action} application`;
             try {
                 const data = await response.json();
                 message = data.error || message;
             } catch (error) {
-                console.error('Error parsing restart failure response:', error);
+                console.error('Error parsing app action failure response:', error);
             }
             throw new Error(message);
         }
 
         const operation = await response.json();
-        this.restartOperation = operation;
+        this.appOperation = operation;
         if (operation.reused) {
-            this.showFlashMessage('A restart is already in progress. Showing the current status.');
+            this.showFlashMessage('An app action is already in progress. Showing the current status.');
         }
-        this.scheduleRestartOperationPoll(operation.id);
+        this.scheduleAppOperationPoll(operation.id);
     },
     stopStatsUpdate() {
         if (this.statsInterval) {
@@ -492,7 +490,7 @@ if (!registerAppDetailFlashStore()) {
 
             this.loadAppDetails(),
 
-            this.loadRestartOperation(),
+            this.loadAppOperation(),
 
             this.loadDomains(),
 
@@ -512,7 +510,7 @@ if (!registerAppDetailFlashStore()) {
         window.addEventListener('beforeunload', () => {
             if (this.updateInterval) clearInterval(this.updateInterval);
             if (this.statsInterval) clearInterval(this.statsInterval);
-            this.clearRestartOperationPolling();
+            this.clearAppOperationPolling();
         });
     },
     startLogging() {
@@ -905,12 +903,12 @@ if (!registerAppDetailFlashStore()) {
         }
     },
     async performAppAction(action, processType = '') {
-        if (action === 'restart') {
+        if (['restart', 'stop', 'rebuild'].includes(action)) {
             try {
-                await this.startTrackedRestart(processType);
+                await this.startTrackedAction(action, processType);
             } catch (error) {
-                console.error('Error performing restart:', error);
-                this.showFlashMessage(error.message || 'Failed to restart application', 'error');
+                console.error(`Error performing ${action}:`, error);
+                this.showFlashMessage(error.message || `Failed to ${action} application`, 'error');
             }
             return;
         }

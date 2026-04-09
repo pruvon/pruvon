@@ -45,7 +45,7 @@
 }">
     <div class="flex items-center justify-between gap-3">
         <h3 class="text-sm font-semibold text-text-primary">Application Summary</h3>
-        <button @click="loadAppDetails(); loadRestartOperation()"
+        <button @click="loadAppDetails(); loadAppOperation()"
                 class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary"
                 :class="{'animate-spin': loadingSummary}"
                 :disabled="loadingSummary">
@@ -62,27 +62,27 @@
                 <template x-if="summaryLoading">
                     <div class="h-2.5 w-2.5 rounded-full bg-status-neutral animate-pulse"></div>
                 </template>
-                <template x-if="!summaryLoading && isRestartInProgress()">
+                <template x-if="!summaryLoading && isActionInProgress()">
                     <div class="h-2.5 w-2.5 rounded-full bg-status-warning animate-pulse"></div>
                 </template>
-                <template x-if="!summaryLoading && !isRestartInProgress() && appDetails.deployed">
+                <template x-if="!summaryLoading && !isActionInProgress() && appDetails.deployed">
                     <div class="h-2.5 w-2.5 rounded-full" :class="{
                         'bg-status-danger': !appDetails.running,
                         'bg-status-success': appDetails.running
                     }"></div>
                 </template>
-                <template x-if="!summaryLoading && !isRestartInProgress() && !appDetails.deployed">
+                <template x-if="!summaryLoading && !isActionInProgress() && !appDetails.deployed">
                     <div class="h-2.5 w-2.5 rounded-full bg-status-neutral"></div>
                 </template>
                 <div>
-                    <p class="text-sm font-medium text-text-primary" x-text="summaryLoading ? 'Loading status' : (isRestartInProgress() ? 'Restarting' : (!appDetails.deployed ? 'Not deployed' : (appDetails.running ? 'Running' : 'Stopped')))"></p>
-                    <p class="text-xs text-text-secondary" x-text="isRestartInProgress() && restartOperation ? restartOperation.message : 'Current deployment and runtime status.'"></p>
+                    <p class="text-sm font-medium text-text-primary" x-text="summaryLoading ? 'Loading status' : (isActionInProgress() ? appOperationStatusLabel() : (!appDetails.deployed ? 'Not deployed' : (appDetails.running ? 'Running' : 'Stopped')))"></p>
+                    <p class="text-xs text-text-secondary" x-text="isActionInProgress() && appOperation ? appOperation.message : 'Current deployment and runtime status.'"></p>
                 </div>
             </div>
 
             <div x-show="!summaryLoading && appDetails.deployed" class="flex flex-wrap items-center gap-2">
                 <button @click="openProcessModal(appDetails.running ? 'stop' : 'start')"
-                        :disabled="isRestartInProgress()"
+                        :disabled="isActionInProgress()"
                         :class="appDetails.running ? 'bg-card border-border text-text-primary hover:bg-surface' : 'border-brand-primary bg-brand-primary text-white hover:bg-brand-hover'"
                         class="inline-flex h-8 items-center gap-1.5 rounded border px-3 text-sm font-medium transition-colors duration-150 disabled:opacity-50">
                     <svg x-show="appDetails.running" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,7 +97,7 @@
                 </button>
 
                 <button @click="openProcessModal('restart')"
-                        :disabled="isRestartInProgress()"
+                        :disabled="isActionInProgress()"
                         class="inline-flex h-8 items-center gap-1.5 rounded border border-transparent bg-transparent px-3 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary disabled:opacity-50">
                     <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -106,39 +106,13 @@
                 </button>
 
                 <button @click="openProcessModal('rebuild')"
-                        :disabled="isRestartInProgress()"
+                        :disabled="isActionInProgress()"
                         class="inline-flex h-8 items-center gap-1.5 rounded border border-transparent bg-transparent px-3 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary disabled:opacity-50">
                     <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                     </svg>
                     Rebuild
                 </button>
-            </div>
-        </div>
-
-        <div x-show="restartOperation" class="mt-4 rounded-md border px-4 py-3"
-             :class="{
-                 'border-status-warning/30 bg-status-warning-bg': restartOperation && ['pending', 'restarting', 'verifying'].includes(restartOperation.state),
-                 'border-status-success/30 bg-status-success-bg': restartOperation && restartOperation.state === 'succeeded',
-                 'border-status-danger/30 bg-status-danger-bg': restartOperation && restartOperation.state === 'failed'
-             }">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex items-start gap-3">
-                    <span class="mt-1 h-2 w-2 rounded-full"
-                          :class="{
-                              'bg-status-warning animate-pulse': restartOperation && ['pending', 'restarting', 'verifying'].includes(restartOperation.state),
-                              'bg-status-success': restartOperation && restartOperation.state === 'succeeded',
-                              'bg-status-danger': restartOperation && restartOperation.state === 'failed'
-                          }"></span>
-                    <div>
-                        <p class="text-sm font-medium text-text-primary" x-text="restartOperationTitle()"></p>
-                        <p class="mt-0.5 text-xs text-text-secondary" x-text="restartOperation ? restartOperation.message : ''"></p>
-                    </div>
-                </div>
-
-                <span x-show="restartOperation && restartOperation.process_type"
-                      class="inline-flex items-center rounded-sm border border-border bg-card px-2 py-0.5 font-mono text-[13px] text-text-primary"
-                      x-text="restartOperation ? restartOperation.process_type : ''"></span>
             </div>
         </div>
 

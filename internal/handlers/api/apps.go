@@ -38,6 +38,8 @@ func SetupAppsRoutes(app *fiber.App) {
 	app.Get("/api/apps/:name/cron", handleAppCron)
 	app.Post("/api/apps/:name/start", handleAppStart)
 	app.Post("/api/apps/:name/stop", handleAppStop)
+	app.Post("/api/apps/:name/operations/:action", handleAppActionOperationStart)
+	app.Get("/api/apps/:name/operations", handleAppActionOperationStatus)
 	app.Post("/api/apps/:name/restart", handleAppRestart)
 	app.Post("/api/apps/:name/restart/operations", handleAppRestartOperationStart)
 	app.Get("/api/apps/:name/restart/operations", handleAppRestartOperationStatus)
@@ -329,10 +331,23 @@ func handleAppRestart(c *fiber.Ctx) error {
 }
 
 func handleAppRestartOperationStart(c *fiber.Ctx) error {
+	return handleTrackedAppActionStart(c, appsvc.ActionRestart)
+}
+
+func handleAppActionOperationStart(c *fiber.Ctx) error {
+	action := c.Params("action")
+	if !isTrackedAppAction(action) {
+		return common.ErrorResponse(c, fiber.StatusBadRequest, "Unsupported app action")
+	}
+
+	return handleTrackedAppActionStart(c, action)
+}
+
+func handleTrackedAppActionStart(c *fiber.Ctx, action string) error {
 	appName := c.Params("name")
 	processType := c.Query("process_type")
 
-	operation := appsvc.StartRestartOperation(appService, appName, processType)
+	operation := appsvc.StartAppActionOperation(appService, action, appName, processType)
 	statusCode := fiber.StatusAccepted
 	if operation.Reused {
 		statusCode = fiber.StatusOK
@@ -342,6 +357,14 @@ func handleAppRestartOperationStart(c *fiber.Ctx) error {
 }
 
 func handleAppRestartOperationStatus(c *fiber.Ctx) error {
+	return handleTrackedAppActionStatus(c)
+}
+
+func handleAppActionOperationStatus(c *fiber.Ctx) error {
+	return handleTrackedAppActionStatus(c)
+}
+
+func handleTrackedAppActionStatus(c *fiber.Ctx) error {
 	appName := c.Params("name")
 	taskID := c.Query("task_id")
 
@@ -351,16 +374,20 @@ func handleAppRestartOperationStatus(c *fiber.Ctx) error {
 	)
 
 	if taskID != "" {
-		operation, ok = appsvc.GetRestartOperation(taskID)
+		operation, ok = appsvc.GetAppActionOperation(taskID)
 	} else {
-		operation, ok = appsvc.GetLatestRestartOperation(appName)
+		operation, ok = appsvc.GetLatestAppActionOperation(appName)
 	}
 
 	if !ok || operation.AppName != appName {
-		return common.ErrorResponse(c, fiber.StatusNotFound, "No restart operation found")
+		return common.ErrorResponse(c, fiber.StatusNotFound, "No app operation found")
 	}
 
 	return c.JSON(operation)
+}
+
+func isTrackedAppAction(action string) bool {
+	return action == appsvc.ActionRestart || action == appsvc.ActionStop || action == appsvc.ActionRebuild
 }
 
 func handleAppRebuild(c *fiber.Ctx) error {

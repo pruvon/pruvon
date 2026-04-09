@@ -5,6 +5,8 @@ DIST_DIR := dist
 LDFLAGS := -s -w
 GOFMT_FILES := $(shell git ls-files '*.go')
 
+-include Makefile.local
+
 .PHONY: help build build-linux-amd64 build-linux-arm64 dist dist-linux-amd64 dist-linux-arm64 dist-archives dist-checksums fmt test test-race vet lint changelog release clean
 
 help:

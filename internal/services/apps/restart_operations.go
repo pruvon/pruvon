@@ -11,8 +11,14 @@ import (
 )
 
 const (
+	ActionRestart = "restart"
+	ActionStop    = "stop"
+	ActionRebuild = "rebuild"
+
 	RestartOperationStatePending    = "pending"
 	RestartOperationStateRestarting = "restarting"
+	RestartOperationStateStopping   = "stopping"
+	RestartOperationStateRebuilding = "rebuilding"
 	RestartOperationStateVerifying  = "verifying"
 	RestartOperationStateSucceeded  = "succeeded"
 	RestartOperationStateFailed     = "failed"
@@ -45,18 +51,30 @@ func newRestartOperationStore() *restartOperationStore {
 }
 
 func StartRestartOperation(service *Service, appName, processType string) models.AppRestartOperation {
-	return appRestartOperations.start(service, appName, processType)
+	return StartAppActionOperation(service, ActionRestart, appName, processType)
+}
+
+func StartAppActionOperation(service *Service, action, appName, processType string) models.AppRestartOperation {
+	return appRestartOperations.start(service, action, appName, processType)
 }
 
 func GetRestartOperation(id string) (models.AppRestartOperation, bool) {
+	return GetAppActionOperation(id)
+}
+
+func GetAppActionOperation(id string) (models.AppRestartOperation, bool) {
 	return appRestartOperations.get(id)
 }
 
 func GetLatestRestartOperation(appName string) (models.AppRestartOperation, bool) {
+	return GetLatestAppActionOperation(appName)
+}
+
+func GetLatestAppActionOperation(appName string) (models.AppRestartOperation, bool) {
 	return appRestartOperations.latest(appName)
 }
 
-func (s *restartOperationStore) start(service *Service, appName, processType string) models.AppRestartOperation {
+func (s *restartOperationStore) start(service *Service, action, appName, processType string) models.AppRestartOperation {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -71,10 +89,10 @@ func (s *restartOperationStore) start(service *Service, appName, processType str
 	operation := models.AppRestartOperation{
 		ID:          uuid.NewString(),
 		AppName:     appName,
-		Action:      "restart",
+		Action:      action,
 		ProcessType: processType,
 		State:       RestartOperationStatePending,
-		Message:     restartPendingMessage(processType),
+		Message:     actionPendingMessage(action, processType),
 		StartedAt:   now,
 	}
 
@@ -88,8 +106,8 @@ func (s *restartOperationStore) start(service *Service, appName, processType str
 
 func (s *restartOperationStore) run(service *Service, operationID string) {
 	s.update(operationID, func(operation *models.AppRestartOperation) {
-		operation.State = RestartOperationStateRestarting
-		operation.Message = restartRunningMessage(operation.ProcessType)
+		operation.State = actionRunningState(operation.Action)
+		operation.Message = actionRunningMessage(operation.Action, operation.ProcessType)
 	})
 
 	operation, ok := s.get(operationID)
@@ -97,30 +115,34 @@ func (s *restartOperationStore) run(service *Service, operationID string) {
 		return
 	}
 
-	if err := service.RestartApp(operation.AppName, operation.ProcessType); err != nil {
-		s.finish(operationID, RestartOperationStateFailed, fmt.Sprintf("Restart failed: %v", err))
+	if err := runAppAction(service, operation.Action, operation.AppName, operation.ProcessType); err != nil {
+		s.finish(operationID, RestartOperationStateFailed, fmt.Sprintf("%s failed: %v", actionLabel(operation.Action), err))
 		return
 	}
 
 	s.update(operationID, func(operation *models.AppRestartOperation) {
 		operation.State = RestartOperationStateVerifying
-		operation.Message = restartVerifyingMessage(operation.ProcessType)
+		operation.Message = actionVerifyingMessage(operation.Action, operation.ProcessType)
 	})
 
-	if err := s.waitForRestartVerification(service, operation.AppName, operation.ProcessType); err != nil {
-		s.finish(operationID, RestartOperationStateFailed, fmt.Sprintf("Restart command finished, but app status could not be confirmed: %v", err))
+	if err := s.waitForActionVerification(service, operation.Action, operation.AppName, operation.ProcessType); err != nil {
+		s.finish(operationID, RestartOperationStateFailed, fmt.Sprintf("%s command finished, but app status could not be confirmed: %v", actionLabel(operation.Action), err))
 		return
 	}
 
-	s.finish(operationID, RestartOperationStateSucceeded, restartSucceededMessage(operation.ProcessType))
+	s.finish(operationID, RestartOperationStateSucceeded, actionSucceededMessage(operation.Action, operation.ProcessType))
 }
 
 func (s *restartOperationStore) waitForRestartVerification(service *Service, appName, processType string) error {
+	return s.waitForActionVerification(service, ActionRestart, appName, processType)
+}
+
+func (s *restartOperationStore) waitForActionVerification(service *Service, action, appName, processType string) error {
 	deadline := s.now().Add(s.verificationTimeout)
 
 	for {
 		status, err := service.GetStatus(appName)
-		if err == nil && isRestartVerified(status, processType) {
+		if err == nil && isActionVerified(action, status, processType) {
 			return nil
 		}
 
@@ -142,6 +164,17 @@ func (s *restartOperationStore) waitForRestartVerification(service *Service, app
 	}
 }
 
+func isActionVerified(action string, status *models.AppStatus, processType string) bool {
+	switch action {
+	case ActionStop:
+		return isStopVerified(status, processType)
+	case ActionRestart, ActionRebuild:
+		return isRestartVerified(status, processType)
+	default:
+		return false
+	}
+}
+
 func isRestartVerified(status *models.AppStatus, processType string) bool {
 	if status == nil || !status.Deployed {
 		return false
@@ -156,6 +189,25 @@ func isRestartVerified(status *models.AppStatus, processType string) bool {
 		return running
 	case string:
 		return running == "true" || running == "mixed"
+	default:
+		return false
+	}
+}
+
+func isStopVerified(status *models.AppStatus, processType string) bool {
+	if status == nil {
+		return false
+	}
+
+	if processType != "" {
+		return status.Processes[processType] == 0
+	}
+
+	switch running := status.Running.(type) {
+	case bool:
+		return !running
+	case string:
+		return running == "false"
 	default:
 		return false
 	}
@@ -257,30 +309,86 @@ func isRestartTerminalState(state string) bool {
 	return state == RestartOperationStateSucceeded || state == RestartOperationStateFailed
 }
 
-func restartPendingMessage(processType string) string {
-	if processType == "" {
-		return "Restart request queued."
+func runAppAction(service *Service, action, appName, processType string) error {
+	switch action {
+	case ActionRestart:
+		return service.RestartApp(appName, processType)
+	case ActionStop:
+		return service.StopApp(appName, processType)
+	case ActionRebuild:
+		return service.RebuildApp(appName, processType)
+	default:
+		return fmt.Errorf("unsupported action %q", action)
 	}
-	return fmt.Sprintf("Restart request queued for the %s process.", processType)
 }
 
-func restartRunningMessage(processType string) string {
-	if processType == "" {
-		return "Dokku is restarting the application."
+func actionRunningState(action string) string {
+	switch action {
+	case ActionStop:
+		return RestartOperationStateStopping
+	case ActionRebuild:
+		return RestartOperationStateRebuilding
+	default:
+		return RestartOperationStateRestarting
 	}
-	return fmt.Sprintf("Dokku is restarting the %s process.", processType)
 }
 
-func restartVerifyingMessage(processType string) string {
-	if processType == "" {
-		return "Restart command finished. Waiting for the app to report healthy status."
+func actionLabel(action string) string {
+	switch action {
+	case ActionStop:
+		return "Stop"
+	case ActionRebuild:
+		return "Rebuild"
+	default:
+		return "Restart"
 	}
-	return fmt.Sprintf("Restart command finished. Waiting for the %s process to report healthy status.", processType)
 }
 
-func restartSucceededMessage(processType string) string {
+func actionPendingMessage(action, processType string) string {
+	label := actionLabel(action)
 	if processType == "" {
-		return "Restart completed and the app is reporting a healthy status."
+		return fmt.Sprintf("%s request queued.", label)
 	}
-	return fmt.Sprintf("Restart completed and the %s process is reporting a healthy status.", processType)
+	return fmt.Sprintf("%s request queued for the %s process.", label, processType)
+}
+
+func actionRunningMessage(action, processType string) string {
+	verb := actionPresentParticiple(action)
+	if processType == "" {
+		return fmt.Sprintf("Dokku is %s the application.", verb)
+	}
+	return fmt.Sprintf("Dokku is %s the %s process.", verb, processType)
+}
+
+func actionVerifyingMessage(action, processType string) string {
+	statusLabel := "healthy"
+	if action == ActionStop {
+		statusLabel = "stopped"
+	}
+	if processType == "" {
+		return fmt.Sprintf("%s command finished. Waiting for the app to report %s status.", actionLabel(action), statusLabel)
+	}
+	return fmt.Sprintf("%s command finished. Waiting for the %s process to report %s status.", actionLabel(action), processType, statusLabel)
+}
+
+func actionSucceededMessage(action, processType string) string {
+	statusLabel := "healthy"
+	if action == ActionStop {
+		statusLabel = "stopped"
+	}
+	if processType == "" {
+		return fmt.Sprintf("%s completed and the app is reporting a %s status.", actionLabel(action), statusLabel)
+	}
+	return fmt.Sprintf("%s completed and the %s process is reporting a %s status.", actionLabel(action), processType, statusLabel)
+}
+
+func actionPresentParticiple(action string) string {
+	switch action {
+	case ActionStop:
+		return "stopping"
+	case ActionRebuild:
+		return "rebuilding"
+	default:
+		return "restarting"
+	}
 }
