@@ -179,6 +179,18 @@ type AppStatus struct {
 	Processes map[string]int `json:"processes"`
 }
 
+type AppRestartOperation struct {
+	ID          string     `json:"id"`
+	AppName     string     `json:"app_name"`
+	Action      string     `json:"action"`
+	ProcessType string     `json:"process_type,omitempty"`
+	Reused      bool       `json:"reused,omitempty"`
+	State       string     `json:"state"`
+	Message     string     `json:"message"`
+	StartedAt   time.Time  `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+}
+
 type ServerInfo struct {
 	Hostname    string `json:"hostname"`
 	OS          string `json:"os"`

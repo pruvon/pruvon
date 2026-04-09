@@ -43,7 +43,7 @@ if (!registerAppDetailFlashStore()) {
 
 <div
     x-data="{
-    activeTab: 'overview',
+    activeTab: 'summary',
     currentSubTab: 'process',
     showingLogs: false,
     logType: 'app',
@@ -54,7 +54,7 @@ if (!registerAppDetailFlashStore()) {
     envs: {},
     envVars: [],
     configData: '',
-    domainsData: [],
+    domainsData: '',
     cron: {
         jobs: []
     },
@@ -82,29 +82,18 @@ if (!registerAppDetailFlashStore()) {
     envFileError: '',
     fileContent: '',
     parsedEnvVars: [],
-    appName: '{{.Name}}',
-    activeTab: 'summary',
     summaryData: '',
     processData: '',
-    configData: '',
     portsData: '',
-    domainsData: '',
     logsData: [],
     wsConnection: null,
     showLogs: false,
     domains: [],
-    envVars: [],
-    showEnvModal: false,
-    newEnvName: '',
-    newEnvValue: '',
-    restartApp: false,
-    ports: [],
     info: [],
     storageData: '',
     terminal: null,
     terminalConnected: false,
     terminalWs: null,
-    containers: [],
     updateInterval: null,
     nginxConfigs: [],
     editingConfig: null,
@@ -144,6 +133,8 @@ if (!registerAppDetailFlashStore()) {
         lastDeployAt: '',
         processes: {}
     },
+    restartOperation: null,
+    restartOperationPollTimeout: null,
     loadingSummary: false,
     errors: {
         newEnvName: '',
@@ -213,6 +204,111 @@ if (!registerAppDetailFlashStore()) {
     initStatsUpdate() {
         this.fetchStats();
         this.statsInterval = setInterval(() => this.fetchStats(), 5000);
+    },
+    isRestartInProgress() {
+        return !!(this.restartOperation && ['pending', 'restarting', 'verifying'].includes(this.restartOperation.state));
+    },
+    restartOperationTitle() {
+        if (!this.restartOperation) {
+            return '';
+        }
+
+        switch (this.restartOperation.state) {
+            case 'pending':
+                return 'Restart queued';
+            case 'restarting':
+                return 'Restarting';
+            case 'verifying':
+                return 'Checking health';
+            case 'succeeded':
+                return 'Restart completed';
+            case 'failed':
+                return 'Restart failed';
+            default:
+                return 'Restart status';
+        }
+    },
+    clearRestartOperationPolling() {
+        if (this.restartOperationPollTimeout) {
+            clearTimeout(this.restartOperationPollTimeout);
+            this.restartOperationPollTimeout = null;
+        }
+    },
+    scheduleRestartOperationPoll(taskId) {
+        this.clearRestartOperationPolling();
+        this.restartOperationPollTimeout = setTimeout(() => {
+            this.loadRestartOperation(taskId, true);
+        }, 2000);
+    },
+    async loadRestartOperation(taskId = '', announceCompletion = false) {
+        const query = taskId ? `?task_id=${encodeURIComponent(taskId)}` : '';
+
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/restart/operations${query}`);
+
+            if (response.status === 404) {
+                this.restartOperation = null;
+                this.clearRestartOperationPolling();
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('Failed to load restart operation');
+            }
+
+            const previousState = this.restartOperation ? this.restartOperation.state : '';
+            const operation = await response.json();
+
+            this.restartOperation = operation;
+
+            if (this.isRestartInProgress()) {
+                this.scheduleRestartOperationPoll(operation.id);
+                return;
+            }
+
+            this.clearRestartOperationPolling();
+
+            if (announceCompletion && previousState && previousState !== operation.state) {
+                await this.loadAppDetails();
+                if (this.activeTab === 'process') {
+                    await this.fetchData('process', true);
+                }
+                this.showFlashMessage(operation.message, operation.state === 'failed' ? 'error' : 'success');
+            }
+        } catch (error) {
+            console.error('Error loading restart operation:', error);
+            if (announceCompletion && taskId) {
+                this.showFlashMessage('Failed to track restart status', 'error');
+            }
+        }
+    },
+    async startTrackedRestart(processType = '') {
+        let url = `/api/apps/{{.Name}}/restart/operations`;
+        if (processType) {
+            url += `?process_type=${encodeURIComponent(processType)}`;
+        }
+
+        const response = await fetch(url, {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            let message = 'Failed to restart application';
+            try {
+                const data = await response.json();
+                message = data.error || message;
+            } catch (error) {
+                console.error('Error parsing restart failure response:', error);
+            }
+            throw new Error(message);
+        }
+
+        const operation = await response.json();
+        this.restartOperation = operation;
+        if (operation.reused) {
+            this.showFlashMessage('A restart is already in progress. Showing the current status.');
+        }
+        this.scheduleRestartOperationPoll(operation.id);
     },
     stopStatsUpdate() {
         if (this.statsInterval) {
@@ -396,6 +492,8 @@ if (!registerAppDetailFlashStore()) {
 
             this.loadAppDetails(),
 
+            this.loadRestartOperation(),
+
             this.loadDomains(),
 
             this.loadServices(),
@@ -414,6 +512,7 @@ if (!registerAppDetailFlashStore()) {
         window.addEventListener('beforeunload', () => {
             if (this.updateInterval) clearInterval(this.updateInterval);
             if (this.statsInterval) clearInterval(this.statsInterval);
+            this.clearRestartOperationPolling();
         });
     },
     startLogging() {
@@ -806,6 +905,16 @@ if (!registerAppDetailFlashStore()) {
         }
     },
     async performAppAction(action, processType = '') {
+        if (action === 'restart') {
+            try {
+                await this.startTrackedRestart(processType);
+            } catch (error) {
+                console.error('Error performing restart:', error);
+                this.showFlashMessage(error.message || 'Failed to restart application', 'error');
+            }
+            return;
+        }
+
         try {
             let url = `/api/apps/{{.Name}}/${action}`;
             if (processType) {

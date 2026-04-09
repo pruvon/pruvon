@@ -39,6 +39,8 @@ func SetupAppsRoutes(app *fiber.App) {
 	app.Post("/api/apps/:name/start", handleAppStart)
 	app.Post("/api/apps/:name/stop", handleAppStop)
 	app.Post("/api/apps/:name/restart", handleAppRestart)
+	app.Post("/api/apps/:name/restart/operations", handleAppRestartOperationStart)
+	app.Get("/api/apps/:name/restart/operations", handleAppRestartOperationStatus)
 	app.Post("/api/apps/:name/rebuild", handleAppRebuild)
 	app.Get("/api/apps/:name/status", handleAppStatus)
 	app.Get("/api/apps/:name/stats", handleAppStats)
@@ -324,6 +326,41 @@ func handleAppRestart(c *fiber.Ctx) error {
 		})
 	}
 	return c.SendStatus(fiber.StatusOK)
+}
+
+func handleAppRestartOperationStart(c *fiber.Ctx) error {
+	appName := c.Params("name")
+	processType := c.Query("process_type")
+
+	operation := appsvc.StartRestartOperation(appService, appName, processType)
+	statusCode := fiber.StatusAccepted
+	if operation.Reused {
+		statusCode = fiber.StatusOK
+	}
+
+	return c.Status(statusCode).JSON(operation)
+}
+
+func handleAppRestartOperationStatus(c *fiber.Ctx) error {
+	appName := c.Params("name")
+	taskID := c.Query("task_id")
+
+	var (
+		operation models.AppRestartOperation
+		ok        bool
+	)
+
+	if taskID != "" {
+		operation, ok = appsvc.GetRestartOperation(taskID)
+	} else {
+		operation, ok = appsvc.GetLatestRestartOperation(appName)
+	}
+
+	if !ok || operation.AppName != appName {
+		return common.ErrorResponse(c, fiber.StatusNotFound, "No restart operation found")
+	}
+
+	return c.JSON(operation)
 }
 
 func handleAppRebuild(c *fiber.Ctx) error {
