@@ -4,16 +4,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 var (
 	githubAPIBaseURL = "https://api.github.com"
+	githubWebBaseURL = "https://github.com"
 	githubRepoOwner  = "pruvon"
 	githubRepoName   = "pruvon"
 	githubHTTPClient = &http.Client{Timeout: 5 * time.Second}
+	updateCheckTTL   = 10 * time.Minute
+
+	latestReleaseMu        sync.Mutex
+	cachedLatestRelease    string
+	latestReleaseCheckedAt time.Time
 )
 
 // UpdateInfo contains information about version updates
@@ -25,13 +33,95 @@ type UpdateInfo struct {
 
 // CheckForUpdates checks GitHub for the latest version tag
 func CheckForUpdates(currentVersion string) (UpdateInfo, error) {
+	currentVersion = normalizeVersion(currentVersion)
+
 	result := UpdateInfo{
 		UpdateAvailable: false,
 		LatestVersion:   currentVersion,
 		CurrentVersion:  currentVersion,
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/tags",
+	latestVersion, err := latestReleaseVersion()
+	if err != nil {
+		return result, err
+	}
+
+	result.LatestVersion = latestVersion
+
+	// Compare versions using proper numeric comparison
+	isNewer := compareVersions(latestVersion, currentVersion)
+
+	if isNewer {
+		result.UpdateAvailable = true
+	}
+
+	return result, nil
+}
+
+func latestReleaseVersion() (string, error) {
+	latestReleaseMu.Lock()
+	if cachedLatestRelease != "" && time.Since(latestReleaseCheckedAt) < updateCheckTTL {
+		cachedVersion := cachedLatestRelease
+		latestReleaseMu.Unlock()
+		return cachedVersion, nil
+	}
+	staleCachedVersion := cachedLatestRelease
+	latestReleaseMu.Unlock()
+
+	latestVersion, err := latestReleaseVersionFromRedirect()
+	if err == nil {
+		storeLatestReleaseCache(latestVersion)
+		return latestVersion, nil
+	}
+
+	latestVersion, err = latestReleaseVersionFromAPI()
+	if err == nil {
+		storeLatestReleaseCache(latestVersion)
+		return latestVersion, nil
+	}
+
+	if staleCachedVersion != "" {
+		return staleCachedVersion, nil
+	}
+
+	return "", err
+}
+
+func latestReleaseVersionFromRedirect() (string, error) {
+	url := fmt.Sprintf("%s/%s/%s/releases/latest",
+		strings.TrimRight(githubWebBaseURL, "/"),
+		githubRepoOwner,
+		githubRepoName,
+	)
+
+	req, err := http.NewRequest(http.MethodHead, url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("User-Agent", "Pruvon-App")
+
+	resp, err := githubHTTPClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.Request == nil || resp.Request.URL == nil {
+		return "", fmt.Errorf("could not resolve latest release redirect")
+	}
+
+	resolvedVersion := normalizeVersion(path.Base(resp.Request.URL.Path))
+	if resolvedVersion == "" || resolvedVersion == "latest" {
+		return "", fmt.Errorf("could not resolve latest release version from redirect")
+	}
+
+	return resolvedVersion, nil
+}
+
+func latestReleaseVersionFromAPI() (string, error) {
+
+	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest",
 		strings.TrimRight(githubAPIBaseURL, "/"),
 		githubRepoOwner,
 		githubRepoName,
@@ -39,7 +129,7 @@ func CheckForUpdates(currentVersion string) (UpdateInfo, error) {
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return result, err
+		return "", err
 	}
 
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
@@ -47,47 +137,48 @@ func CheckForUpdates(currentVersion string) (UpdateInfo, error) {
 
 	resp, err := githubHTTPClient.Do(req)
 	if err != nil {
-		return result, err
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return result, fmt.Errorf("GitHub API returned %d status", resp.StatusCode)
+		err := fmt.Errorf("GitHub API returned %d status", resp.StatusCode)
+		return "", err
 	}
 
-	var tags []struct {
-		Name string `json:"name"`
+	var release struct {
+		TagName string `json:"tag_name"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-		return result, err
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", err
 	}
 
-	if len(tags) == 0 {
-		return result, nil
-	}
+	latestVersion := normalizeVersion(release.TagName)
+	return latestVersion, nil
+}
 
-	// Find latest version by stripping prefixes and comparing
-	latestVersionStr := tags[0].Name
+func storeLatestReleaseCache(version string) {
+	latestReleaseMu.Lock()
+	defer latestReleaseMu.Unlock()
 
-	// Standardize version strings (remove v prefix for comparison)
-	cleanLatestVersion := strings.TrimPrefix(latestVersionStr, "v")
-	cleanCurrentVersion := strings.TrimPrefix(currentVersion, "v")
+	cachedLatestRelease = version
+	latestReleaseCheckedAt = time.Now()
+}
 
-	// Compare versions using proper numeric comparison
-	isNewer := compareVersions(cleanLatestVersion, cleanCurrentVersion)
-
-	if isNewer {
-		result.UpdateAvailable = true
-		result.LatestVersion = cleanLatestVersion // Store without v prefix
-	}
-
-	return result, nil
+func normalizeVersion(version string) string {
+	version = strings.TrimSpace(version)
+	version = strings.TrimPrefix(version, "v")
+	version = strings.TrimPrefix(version, "V")
+	return version
 }
 
 // compareVersions compares two semantic version strings
 // Returns true if latest is newer than current
 func compareVersions(latest, current string) bool {
+	latest = normalizeVersion(latest)
+	current = normalizeVersion(current)
+
 	// Split version strings into components
 	latestParts := strings.Split(latest, ".")
 	currentParts := strings.Split(current, ".")

@@ -108,6 +108,7 @@
   - `go vet ./...`
   - `go test ./...`
 - When validating against CI behavior, also consider `go test -race ./...`.
+- **Mandatory: always run `make lint` (or `golangci-lint run --timeout=5m`) after writing or editing code, before considering the task complete.** Do not rely on `go vet` alone catching all issues; golangci-lint includes the `unused` checker and other analyzers that `go vet` does not. A CI failure due to an unused function, variable, or import that was not caught locally indicates the lint step was skipped.
 - Some backup, static, and streaming behavior depends on environment or embedded assets. Keep tests deterministic and avoid introducing host-specific assumptions.
 
 ## High-Risk Areas

@@ -34,15 +34,32 @@ func GetSessionData(c *fiber.Ctx) fiber.Map {
 		version = "Unknown" // Fallback if version is not set
 	}
 
+	updateAvailable := c.Locals("updateAvailable")
+	if updateAvailable == nil {
+		updateAvailable = false
+	}
+	updateCheckError := c.Locals("updateCheckError")
+	if updateCheckError == nil {
+		updateCheckError = false
+	}
+	latestVersion := c.Locals("latestVersion")
+	if latestVersion == nil {
+		latestVersion = ""
+	}
+
 	return fiber.Map{
-		"HideNavigation": false,
-		"User":           username, // For backward compatibility
-		"Username":       username, // Consistent naming
-		"username":       username, // For lowercase template variables
-		"AuthType":       sess.Get("auth_type"),
-		"FlashMessage":   flashMessage,
-		"FlashType":      flashType,
-		"Version":        version, // Get version from locals
+		"HideNavigation":   false,
+		"User":             username,
+		"Username":         username,
+		"username":         username,
+		"AuthType":         sess.Get("auth_type"),
+		"FlashMessage":     flashMessage,
+		"FlashType":        flashType,
+		"Version":          version,
+		"version":          version,
+		"updateAvailable":  updateAvailable,
+		"updateCheckError": updateCheckError,
+		"latestVersion":    latestVersion,
 	}
 }
 

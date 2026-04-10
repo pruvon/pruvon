@@ -21,7 +21,7 @@ func SetupVersionMiddleware(app *fiber.App, version string) {
 func SetupUpdateCheckerMiddleware(app *fiber.App, version string) {
 	app.Use(func(c *fiber.Ctx) error {
 		// Check for updates silently
-		updateInfo, err := update.CheckForUpdates("v" + version)
+		updateInfo, err := update.CheckForUpdates(version)
 		if err != nil {
 			// Silent error handling
 			c.Locals("updateCheckError", true)
@@ -35,7 +35,7 @@ func SetupUpdateCheckerMiddleware(app *fiber.App, version string) {
 			// Only log if update is available
 			if updateInfo.UpdateAvailable {
 				fmt.Printf("Update available! Current: v%s, Latest: v%s\n",
-					version, updateInfo.LatestVersion)
+					updateInfo.CurrentVersion, updateInfo.LatestVersion)
 			}
 		}
 		return c.Next()

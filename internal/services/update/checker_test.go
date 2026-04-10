@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -76,37 +77,59 @@ func TestCompareVersions(t *testing.T) {
 
 func TestCheckForUpdates(t *testing.T) {
 	originalBaseURL := githubAPIBaseURL
+	originalWebBaseURL := githubWebBaseURL
 	originalRepoOwner := githubRepoOwner
 	originalRepoName := githubRepoName
 	originalHTTPClient := githubHTTPClient
+	originalTTL := updateCheckTTL
+	originalCachedLatestRelease := cachedLatestRelease
+	originalLatestReleaseCheckedAt := latestReleaseCheckedAt
 	t.Cleanup(func() {
 		githubAPIBaseURL = originalBaseURL
+		githubWebBaseURL = originalWebBaseURL
 		githubRepoOwner = originalRepoOwner
 		githubRepoName = originalRepoName
 		githubHTTPClient = originalHTTPClient
+		updateCheckTTL = originalTTL
+		cachedLatestRelease = originalCachedLatestRelease
+		latestReleaseCheckedAt = originalLatestReleaseCheckedAt
 	})
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		expectedPath := fmt.Sprintf("/repos/%s/%s/tags", githubRepoOwner, githubRepoName)
-		if r.URL.Path != expectedPath {
-			http.NotFound(w, r)
-			return
-		}
+		redirectPath := fmt.Sprintf("/%s/%s/releases/latest", githubRepoOwner, githubRepoName)
+		redirectTarget := fmt.Sprintf("/%s/%s/releases/tag/v1.2.3", githubRepoOwner, githubRepoName)
+		apiPath := fmt.Sprintf("/repos/%s/%s/releases/latest", githubRepoOwner, githubRepoName)
 
-		if githubRepoName != "pruvon" {
+		switch r.URL.Path {
+		case redirectPath:
+			if githubRepoName != "pruvon" {
+				http.NotFound(w, r)
+				return
+			}
+			http.Redirect(w, r, redirectTarget, http.StatusFound)
+		case redirectTarget:
+			w.WriteHeader(http.StatusOK)
+		case apiPath:
+			if githubRepoName != "pruvon" {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"tag_name":"v1.2.3"}`))
+		default:
 			http.NotFound(w, r)
-			return
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"name":"v1.2.3"},{"name":"v1.0.0"}]`))
 	}))
 	defer server.Close()
 
 	githubAPIBaseURL = server.URL
+	githubWebBaseURL = server.URL
 	githubRepoOwner = "pruvon"
 	githubRepoName = "pruvon"
 	githubHTTPClient = server.Client()
+	updateCheckTTL = 0
+	cachedLatestRelease = ""
+	latestReleaseCheckedAt = time.Time{}
 
 	t.Run("current version provided", func(t *testing.T) {
 		info, err := CheckForUpdates("1.0.0")
@@ -124,12 +147,35 @@ func TestCheckForUpdates(t *testing.T) {
 		assert.Equal(t, "1.2.3", info.LatestVersion)
 	})
 
+	t.Run("version with v prefix", func(t *testing.T) {
+		info, err := CheckForUpdates("v1.2.2")
+		assert.NoError(t, err)
+		assert.Equal(t, "1.2.2", info.CurrentVersion)
+		assert.Equal(t, "1.2.3", info.LatestVersion)
+		assert.True(t, info.UpdateAvailable)
+	})
+
 	t.Run("github error status", func(t *testing.T) {
+		cachedLatestRelease = ""
+		latestReleaseCheckedAt = time.Time{}
 		githubRepoName = "missing"
 
 		info, err := CheckForUpdates("1.0.0")
 		assert.Error(t, err)
 		assert.Equal(t, "1.0.0", info.CurrentVersion)
+
+		githubRepoName = "pruvon"
+	})
+
+	t.Run("uses stale cached version on fetch error", func(t *testing.T) {
+		cachedLatestRelease = "1.2.3"
+		latestReleaseCheckedAt = time.Now().Add(-updateCheckTTL - time.Minute)
+		githubRepoName = "missing"
+
+		info, err := CheckForUpdates("1.2.2")
+		assert.NoError(t, err)
+		assert.Equal(t, "1.2.3", info.LatestVersion)
+		assert.True(t, info.UpdateAvailable)
 
 		githubRepoName = "pruvon"
 	})

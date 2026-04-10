@@ -133,10 +133,6 @@ func (s *restartOperationStore) run(service *Service, operationID string) {
 	s.finish(operationID, RestartOperationStateSucceeded, actionSucceededMessage(operation.Action, operation.ProcessType))
 }
 
-func (s *restartOperationStore) waitForRestartVerification(service *Service, appName, processType string) error {
-	return s.waitForActionVerification(service, ActionRestart, appName, processType)
-}
-
 func (s *restartOperationStore) waitForActionVerification(service *Service, action, appName, processType string) error {
 	deadline := s.now().Add(s.verificationTimeout)
 

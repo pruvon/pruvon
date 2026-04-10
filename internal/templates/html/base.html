@@ -401,15 +401,16 @@
             <div class="border-t border-white/10 p-3">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-1.5">
-                        {{if .updateCheckError}}
-                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning animate-pulse" title="Update Check Error"></div>
-                        {{else if .updateAvailable}}
-                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning" title="Update Available"></div>
+                        {{if .updateAvailable}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning" title="Update available: v{{.latestVersion}}"></div>
+                        {{else if .updateCheckError}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-neutral" title="Update check unavailable"></div>
                         {{else}}
-                            <div class="h-1.5 w-1.5 rounded-full bg-status-success/60" title="System Online"></div>
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-success/60" title="Up to date"></div>
                         {{end}}
-                        <span class="text-[11px] font-mono text-sidebar-text-muted uppercase tracking-wide" x-show="!sidebarCollapsed">
-                            {{if .version}}v{{.version}}{{else if .appVersionNumber}}v{{.appVersionNumber}}{{else if .pruvonAppVersion}}v{{.pruvonAppVersion}}{{else}}v0.1.0{{end}}
+                        <span x-show="!sidebarCollapsed"
+                            class="text-[11px] font-mono uppercase tracking-wide {{if .updateAvailable}}text-status-warning{{else if .updateCheckError}}text-sidebar-text-muted{{else}}text-sidebar-text{{end}}">
+                            {{if .version}}v{{.version}}{{else}}v—{{end}}{{if .updateAvailable}} → v{{.latestVersion}}{{end}}
                         </span>
                     </div>
 
@@ -568,15 +569,15 @@
             <div class="border-t border-white/10 p-3">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-1.5">
-                        {{if .updateCheckError}}
-                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning animate-pulse" title="Update Check Error"></div>
-                        {{else if .updateAvailable}}
-                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning" title="Update Available"></div>
+                        {{if .updateAvailable}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-warning" title="Update available: v{{.latestVersion}}"></div>
+                        {{else if .updateCheckError}}
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-neutral" title="Update check unavailable"></div>
                         {{else}}
-                            <div class="h-1.5 w-1.5 rounded-full bg-status-success/60" title="System Online"></div>
+                            <div class="h-1.5 w-1.5 rounded-full bg-status-success/60" title="Up to date"></div>
                         {{end}}
-                        <span class="text-[11px] font-mono text-sidebar-text-muted uppercase tracking-wide">
-                            {{if .version}}v{{.version}}{{else if .appVersionNumber}}v{{.appVersionNumber}}{{else if .pruvonAppVersion}}v{{.pruvonAppVersion}}{{else}}v0.1.0{{end}}
+                        <span class="text-[11px] font-mono uppercase tracking-wide {{if .updateAvailable}}text-status-warning{{else if .updateCheckError}}text-sidebar-text-muted{{else}}text-sidebar-text{{end}}">
+                            {{if .version}}v{{.version}}{{else}}v—{{end}}{{if .updateAvailable}} → v{{.latestVersion}}{{end}}
                         </span>
                     </div>
 

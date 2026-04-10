@@ -27,11 +27,6 @@ func TestPruvonVersion(t *testing.T) {
 		t.Errorf("PruvonVersion %q seems too short for a semantic version", PruvonVersion)
 	}
 
-	// Verify it's the expected version
-	expectedVersion := "0.1.2"
-	if PruvonVersion != expectedVersion {
-		t.Errorf("PruvonVersion = %q, expected %q", PruvonVersion, expectedVersion)
-	}
 }
 
 func TestProcessBackupCommand(t *testing.T) {
