@@ -7,7 +7,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -17,11 +16,6 @@ var (
 	githubRepoOwner  = "pruvon"
 	githubRepoName   = "pruvon"
 	githubHTTPClient = &http.Client{Timeout: 5 * time.Second}
-	updateCheckTTL   = 10 * time.Minute
-
-	latestReleaseMu        sync.Mutex
-	cachedLatestRelease    string
-	latestReleaseCheckedAt time.Time
 )
 
 // UpdateInfo contains information about version updates
@@ -59,29 +53,14 @@ func CheckForUpdates(currentVersion string) (UpdateInfo, error) {
 }
 
 func latestReleaseVersion() (string, error) {
-	latestReleaseMu.Lock()
-	if cachedLatestRelease != "" && time.Since(latestReleaseCheckedAt) < updateCheckTTL {
-		cachedVersion := cachedLatestRelease
-		latestReleaseMu.Unlock()
-		return cachedVersion, nil
-	}
-	staleCachedVersion := cachedLatestRelease
-	latestReleaseMu.Unlock()
-
 	latestVersion, err := latestReleaseVersionFromRedirect()
 	if err == nil {
-		storeLatestReleaseCache(latestVersion)
 		return latestVersion, nil
 	}
 
 	latestVersion, err = latestReleaseVersionFromAPI()
 	if err == nil {
-		storeLatestReleaseCache(latestVersion)
 		return latestVersion, nil
-	}
-
-	if staleCachedVersion != "" {
-		return staleCachedVersion, nil
 	}
 
 	return "", err
@@ -157,15 +136,6 @@ func latestReleaseVersionFromAPI() (string, error) {
 	latestVersion := normalizeVersion(release.TagName)
 	return latestVersion, nil
 }
-
-func storeLatestReleaseCache(version string) {
-	latestReleaseMu.Lock()
-	defer latestReleaseMu.Unlock()
-
-	cachedLatestRelease = version
-	latestReleaseCheckedAt = time.Now()
-}
-
 func normalizeVersion(version string) string {
 	version = strings.TrimSpace(version)
 	version = strings.TrimPrefix(version, "v")

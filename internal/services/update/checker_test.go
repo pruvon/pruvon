@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -81,18 +80,12 @@ func TestCheckForUpdates(t *testing.T) {
 	originalRepoOwner := githubRepoOwner
 	originalRepoName := githubRepoName
 	originalHTTPClient := githubHTTPClient
-	originalTTL := updateCheckTTL
-	originalCachedLatestRelease := cachedLatestRelease
-	originalLatestReleaseCheckedAt := latestReleaseCheckedAt
 	t.Cleanup(func() {
 		githubAPIBaseURL = originalBaseURL
 		githubWebBaseURL = originalWebBaseURL
 		githubRepoOwner = originalRepoOwner
 		githubRepoName = originalRepoName
 		githubHTTPClient = originalHTTPClient
-		updateCheckTTL = originalTTL
-		cachedLatestRelease = originalCachedLatestRelease
-		latestReleaseCheckedAt = originalLatestReleaseCheckedAt
 	})
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -127,9 +120,6 @@ func TestCheckForUpdates(t *testing.T) {
 	githubRepoOwner = "pruvon"
 	githubRepoName = "pruvon"
 	githubHTTPClient = server.Client()
-	updateCheckTTL = 0
-	cachedLatestRelease = ""
-	latestReleaseCheckedAt = time.Time{}
 
 	t.Run("current version provided", func(t *testing.T) {
 		info, err := CheckForUpdates("1.0.0")
@@ -156,26 +146,11 @@ func TestCheckForUpdates(t *testing.T) {
 	})
 
 	t.Run("github error status", func(t *testing.T) {
-		cachedLatestRelease = ""
-		latestReleaseCheckedAt = time.Time{}
 		githubRepoName = "missing"
 
 		info, err := CheckForUpdates("1.0.0")
 		assert.Error(t, err)
 		assert.Equal(t, "1.0.0", info.CurrentVersion)
-
-		githubRepoName = "pruvon"
-	})
-
-	t.Run("uses stale cached version on fetch error", func(t *testing.T) {
-		cachedLatestRelease = "1.2.3"
-		latestReleaseCheckedAt = time.Now().Add(-updateCheckTTL - time.Minute)
-		githubRepoName = "missing"
-
-		info, err := CheckForUpdates("1.2.2")
-		assert.NoError(t, err)
-		assert.Equal(t, "1.2.3", info.LatestVersion)
-		assert.True(t, info.UpdateAvailable)
 
 		githubRepoName = "pruvon"
 	})
