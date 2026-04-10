@@ -1,18 +1,11 @@
 {{define "content"}}
-<div class="min-h-screen bg-surface px-4 py-6 sm:px-6 sm:py-10">
-    <div class="mx-auto flex min-h-[calc(100vh-3rem)] max-w-[420px] flex-col justify-center">
+<div class="flex min-h-screen items-center justify-center bg-surface px-4 py-6 sm:px-6 sm:py-10">
+    <div class="relative mx-auto w-full max-w-[420px]">
 
-        <div class="mb-8 text-center">
-            <svg class="mx-auto h-10 w-10 text-brand-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="5"></circle>
-                <line x1="12" y1="1" x2="12" y2="3"></line>
-                <line x1="12" y1="21" x2="12" y2="23"></line>
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                <line x1="1" y1="12" x2="3" y2="12"></line>
-                <line x1="21" y1="12" x2="23" y2="12"></line>
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        <div class="absolute bottom-full left-1/2 mb-8 w-full -translate-x-1/2 text-center">
+            <svg class="mx-auto h-10 w-10" viewBox="0 0 200 200" role="img" aria-label="Pruvon logo">
+                <rect width="200" height="200" rx="40" fill="#2D9B6F"></rect>
+                <path fill="#FFFFFF" fill-rule="evenodd" d="M60 35H108C138 35 156 52 156 79C156 106 138 123 108 123H88V165H60ZM88 59H106C120 59 128 66 128 79C128 92 120 99 106 99H88Z"></path>
             </svg>
             <h1 class="mt-3 font-serif text-2xl text-text-primary">Pruvon</h1>
             <p class="mt-1 text-sm text-text-secondary">Dokku management dashboard</p>
