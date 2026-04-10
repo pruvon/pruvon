@@ -5,8 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="view-transition" content="same-origin">
     <title>{{if .title}}{{.title}} - Pruvon{{else if .Title}}{{.Title}} - Pruvon{{else}}Pruvon{{end}}</title>
-    {{if not .HideNavigation}}
-    <link rel="icon" type="image/x-icon" href="/static/images/logo/favicon.ico">
+    {{if .HideNavigation}}
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232D9B6F' stroke-width='2.35' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='5'/%3E%3Cline x1='12' y1='1' x2='12' y2='3'/%3E%3Cline x1='12' y1='21' x2='12' y2='23'/%3E%3Cline x1='4.22' y1='4.22' x2='5.64' y2='5.64'/%3E%3Cline x1='18.36' y1='18.36' x2='19.78' y2='19.78'/%3E%3Cline x1='1' y1='12' x2='3' y2='12'/%3E%3Cline x1='21' y1='12' x2='23' y2='12'/%3E%3Cline x1='4.22' y1='19.78' x2='5.64' y2='18.36'/%3E%3Cline x1='18.36' y1='5.64' x2='19.78' y2='4.22'/%3E%3C/svg%3E">
+    {{else}}
+    <link rel="icon" type="image/svg+xml" href="/static/images/logo/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/images/logo/favicon-32x32.png">
+    <link rel="apple-touch-icon" href="/static/images/logo/apple-touch-icon.png">
+    <link rel="shortcut icon" href="/static/images/logo/favicon.ico">
     <link rel="preload" href="/static/images/logo/logo.webp" as="image" type="image/webp">
     {{end}}
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -275,9 +280,9 @@
     >
         <aside data-primary-sidebar class="hidden h-screen flex-col border-r border-border bg-sidebar transition-all duration-200 lg:flex lg:flex-shrink-0 w-44" :class="sidebarCollapsed ? 'w-14' : 'w-44'">
             <div class="flex h-11 items-center justify-between border-b border-white/10 px-2.5">
-                <a href="/" class="flex flex-1 items-center justify-center gap-2 text-base font-medium tracking-wide text-sidebar-text">
+                <a href="/" class="flex flex-1 items-center gap-2 overflow-hidden text-base font-medium tracking-wide text-sidebar-text" :class="sidebarCollapsed ? 'justify-center' : 'px-2'">
+                    <img src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-7 w-7 flex-shrink-0">
                     <span x-show="!sidebarCollapsed">Pruvon</span>
-                    <span x-show="sidebarCollapsed" class="flex h-7 w-7 items-center justify-center rounded bg-brand-primary text-sm font-medium text-white">P</span>
                 </a>
                 <button
                     @click="toggleSidebar()"
@@ -440,6 +445,7 @@
         >
             <div class="flex h-11 items-center justify-between border-b border-white/10 px-3">
                 <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-tight text-sidebar-text">
+                    <img src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-6 w-6 flex-shrink-0">
                     <span>Pruvon</span>
                 </a>
                 <button
@@ -603,7 +609,7 @@
                         </svg>
                     </button>
                     <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-tight text-text-primary">
-                        <img src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-6 w-6 rounded-sm border border-border bg-card p-0.5">
+                        <img src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-6 w-6 flex-shrink-0">
                         <span>Pruvon</span>
                     </a>
                     <a href="/logout" class="text-xs font-medium text-text-secondary transition-colors duration-150 hover:text-text-primary">Logout</a>
