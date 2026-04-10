@@ -7,6 +7,17 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-10
+
+### Fixed
+- sidebar version display and update check mechanism
+
+### Changed
+- refactor(ui): improve sidebar collapse with expand icon in header
+- feat(ui): update logo and favicon to P branding icon
+- feat(ui): update logo and favicon to sun-style icon
+
+
 ## [0.1.2] - 2026-04-10
 
 ### Added
