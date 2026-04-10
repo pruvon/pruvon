@@ -17,7 +17,7 @@ import (
 )
 
 // PruvonVersion defines the current version of Pruvon.
-var PruvonVersion = "0.1.1"
+var PruvonVersion = "0.1.2"
 
 const defaultListenAddr = "127.0.0.1:8080"
 

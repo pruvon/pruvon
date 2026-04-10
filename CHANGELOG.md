@@ -7,6 +7,25 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-10
+
+### Added
+- add tracked operations for app stop/restart/rebuild with status polling
+- add tracked restart operations with status polling
+
+### Changed
+- fix(dokku): run all dokku commands as dokku user for proper permission handling
+- fix(services): use sudo -n in shell export commands
+- fix(install): resolve latest version via GitHub redirect instead of API
+- feat(install): add listen address, service status, and docs links to summary
+- fix(install): rotate example admin hash in existing config and add reset docs
+- fix(install): escape colon in sudoers storage alias for Ubuntu
+
+### Documentation
+- rewrite all public docs as production help pages
+- use htpasswd interactive or stdin instead of -b flag
+
+
 ## [0.1.1] - 2026-04-07
 
 ### Changed
