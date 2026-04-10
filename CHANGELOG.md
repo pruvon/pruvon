@@ -7,6 +7,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-04-10
+
+### Changed
+- remove update version cache for real-time release detection
+
+
 ## [0.1.3] - 2026-04-10
 
 ### Fixed
