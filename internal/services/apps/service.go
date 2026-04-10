@@ -467,7 +467,7 @@ func (s *Service) EnableSSL(appName string) (*SSLEnableResult, error) {
 		return &SSLEnableResult{
 			Success: false,
 			Error:   "Letsencrypt plugin is not installed",
-			Message: "The letsencrypt plugin is not installed. Please install it first with 'dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git'",
+			Message: "The letsencrypt plugin is not installed. Please install it first with 'sudo -n -u dokku dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git'",
 		}, nil
 	}
 

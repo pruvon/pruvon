@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -193,13 +192,7 @@ func GetServices(runner CommandRunner, svcType string) ([]models.Service, error)
 	output, err := runner.RunCommand("dokku", cmd)
 	if err != nil {
 		log.Printf("Error getting services for type %s: %v", svcType, err)
-		// Try with a direct command as fallback
-		directOutput, directErr := exec.Command("sudo", "-n", "dokku", cmd).Output()
-		if directErr != nil {
-			log.Printf("Direct command also failed: %v", directErr)
-			return nil, fmt.Errorf("service list could not be retrieved: %v (dokku plugin may not be installed)", err)
-		}
-		output = string(directOutput)
+		return nil, fmt.Errorf("service list could not be retrieved: %v (dokku plugin may not be installed)", err)
 	}
 
 	lines := strings.Split(output, "\n")

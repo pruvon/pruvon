@@ -710,7 +710,7 @@ func handleAppCreate(c *websocket.Conn) {
 			// Let's Encrypt failing is not critical - app can still be used,
 			// and user can enable it later manually
 			warningMsg, _ := json.Marshal(models.StepResult{
-				Message:  "SSL enabling error. Check your domain settings and manually run 'dokku letsencrypt:enable " + appName + "' command later.",
+				Message:  "SSL enabling error. Check your domain settings and manually run 'sudo -n -u dokku dokku letsencrypt:enable " + appName + "' command later.",
 				Progress: 90,
 				Error:    err.Error(),
 			})

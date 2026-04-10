@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -135,5 +136,25 @@ func TestNewCommandRunner(t *testing.T) {
 	_, ok := runner.(*RealCommandRunner)
 	if !ok {
 		t.Errorf("NewCommandRunner returned wrong type: %T", runner)
+	}
+}
+
+func TestBuildCommandWrapsDokkuWithDokkuUser(t *testing.T) {
+	cmd := buildCommand("dokku", "apps:list")
+	want := []string{"sudo", "-n", "-u", "dokku", "dokku", "apps:list"}
+
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Fatalf("expected dokku command args %v, got %v", want, cmd.Args)
+	}
+}
+
+func TestBuildCommandKeepsDokkuWrappedWhenSudoDisabled(t *testing.T) {
+	t.Setenv("PRUVON_DISABLE_SUDO", "1")
+
+	cmd := buildCommand("dokku", "apps:list")
+	want := []string{"sudo", "-n", "-u", "dokku", "dokku", "apps:list"}
+
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Fatalf("expected dokku command args %v, got %v", want, cmd.Args)
 	}
 }

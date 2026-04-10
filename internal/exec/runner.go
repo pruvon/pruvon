@@ -21,7 +21,6 @@ type RealCommandRunner struct{}
 var sudoEligibleCommands = map[string]struct{}{
 	"chmod": {},
 	"chown": {},
-	"dokku": {},
 }
 
 func shouldUseSudo(command string) bool {
@@ -37,7 +36,16 @@ func shouldUseSudo(command string) bool {
 	return ok
 }
 
+func buildDokkuCommand(args ...string) *exec.Cmd {
+	sudoArgs := append([]string{"-n", "-u", "dokku", "dokku"}, args...)
+	return exec.Command("sudo", sudoArgs...)
+}
+
 func buildCommand(command string, args ...string) *exec.Cmd {
+	if command == "dokku" {
+		return buildDokkuCommand(args...)
+	}
+
 	if shouldUseSudo(command) {
 		sudoArgs := append([]string{"-n", command}, args...)
 		return exec.Command("sudo", sudoArgs...)

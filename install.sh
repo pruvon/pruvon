@@ -709,7 +709,8 @@ Defaults:${APP_USER} !requiretty
 Cmnd_Alias PRUVON_DOKKU = ${dokku_bin}, ${dokku_bin} *
 Cmnd_Alias PRUVON_NGINX = ${nginx_bin}, ${nginx_bin} *, ${systemctl_bin} reload nginx, ${systemctl_bin} restart nginx, ${systemctl_bin} status nginx
 Cmnd_Alias PRUVON_STORAGE = ${chown_bin} -R dokku\:dokku /var/lib/dokku/data/storage/*, ${chmod_bin} -R * /var/lib/dokku/data/storage/*
-${APP_USER} ALL=(root) NOPASSWD: PRUVON_DOKKU, PRUVON_NGINX, PRUVON_STORAGE
+${APP_USER} ALL=(dokku) NOPASSWD: PRUVON_DOKKU
+${APP_USER} ALL=(root) NOPASSWD: PRUVON_NGINX, PRUVON_STORAGE
 EOF
 
     visudo -cf "${temp_file}" >/dev/null

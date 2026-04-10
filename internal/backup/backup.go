@@ -35,6 +35,11 @@ type TimeData struct {
 	WeekNumber      int
 }
 
+func dokkuCommand(args ...string) *exec.Cmd {
+	sudoArgs := append([]string{"-n", "-u", "dokku", "dokku"}, args...)
+	return exec.Command("sudo", sudoArgs...)
+}
+
 // GetTimeData returns current time information needed for backups
 func GetTimeData() TimeData {
 	now := time.Now()
@@ -251,7 +256,7 @@ func listDatabases(dbType string) ([]string, error) {
 		dokkuDbType = "mongo"
 	}
 
-	cmd := exec.Command("sudo", "-n", "dokku", dokkuDbType+":list")
+	cmd := dokkuCommand(dokkuDbType + ":list")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list %s databases: %v", dbType, err)
@@ -275,7 +280,7 @@ func listDatabases(dbType string) ([]string, error) {
 
 // isPluginInstalled checks if a specific dokku plugin is installed
 func isPluginInstalled(pluginName string) (bool, error) {
-	cmd := exec.Command("sudo", "-n", "dokku", "plugin:list")
+	cmd := dokkuCommand("plugin:list")
 	output, err := cmd.Output()
 	if err != nil {
 		// If dokku or plugin:list command fails, assume plugin is not installed
@@ -306,7 +311,7 @@ func exportDatabase(dbType, db, filename string) error {
 	}
 
 	// Run dokku export command directly without script wrapper
-	cmd := exec.Command("sudo", "-n", "dokku", dokkuDbType+":export", db)
+	cmd := dokkuCommand(dokkuDbType+":export", db)
 
 	// Set environment variables to prevent tty errors and ensure clean output
 	cmd.Env = append(os.Environ(),

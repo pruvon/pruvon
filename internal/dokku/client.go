@@ -19,9 +19,5 @@ type CommandRunner = execpkg.CommandRunner
 var DefaultCommandRunner CommandRunner = execpkg.NewCommandRunner()
 
 func dokkuShellPrefix() string {
-	if os.Geteuid() == 0 || os.Getenv("PRUVON_DISABLE_SUDO") == "1" {
-		return "dokku"
-	}
-
-	return "sudo -n dokku"
+	return "sudo -n -u dokku dokku"
 }

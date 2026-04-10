@@ -136,17 +136,14 @@ func TestExportServiceUsesDokkuShellPrefix(t *testing.T) {
 		t.Fatal("expected export command to be executed")
 	}
 
-	wantPrefix := "dokku postgres:export "
-	if os.Geteuid() != 0 {
-		wantPrefix = "sudo -n dokku postgres:export "
-	}
+	wantPrefix := "sudo -n -u dokku dokku postgres:export "
 
 	if !strings.HasPrefix(runner.commands[0], wantPrefix) {
 		t.Fatalf("expected export command to start with %q, got %q", wantPrefix, runner.commands[0])
 	}
 }
 
-func TestExportServiceSkipsSudoWhenDisabled(t *testing.T) {
+func TestExportServiceUsesDokkuUserWhenSudoDisabledEnvSet(t *testing.T) {
 	t.Setenv("PRUVON_DISABLE_SUDO", "1")
 
 	runner := &exportMockRunner{}
@@ -165,7 +162,7 @@ func TestExportServiceSkipsSudoWhenDisabled(t *testing.T) {
 		t.Fatal("expected export command to be executed")
 	}
 
-	if !strings.HasPrefix(runner.commands[0], "dokku postgres:export ") {
-		t.Fatalf("expected sudo-free export command, got %q", runner.commands[0])
+	if !strings.HasPrefix(runner.commands[0], "sudo -n -u dokku dokku postgres:export ") {
+		t.Fatalf("expected dokku-user export command, got %q", runner.commands[0])
 	}
 }
