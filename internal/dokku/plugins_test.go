@@ -175,14 +175,14 @@ func TestGetAvailablePlugins(t *testing.T) {
 			installedOutput: `postgres                     1.23.1 enabled    dokku postgres service plugin
 letsencrypt                  0.19.0 enabled    dokku letsencrypt plugin`,
 			commandError:      nil,
-			expectedAvailable: 17, // Total 19 - 2 installed
+			expectedAvailable: 18, // Total 20 - 2 installed
 			expectedError:     false,
 		},
 		{
 			name:              "no plugins installed",
 			installedOutput:   "",
 			commandError:      nil,
-			expectedAvailable: 19, // All plugins available
+			expectedAvailable: 20, // All plugins available
 			expectedError:     false,
 		},
 		{

@@ -10,6 +10,7 @@ func SetupApiRoutes(app *fiber.App, deps *appdeps.Dependencies) {
 	initializeDependencies(deps)
 
 	SetupAppsRoutes(app)
+	SetupAuditRoutes(app)
 	SetupBackupsRoutes(app)
 	SetupServiceRoutes(app)
 	SetupDockerRoutes(app)

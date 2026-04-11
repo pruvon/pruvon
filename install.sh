@@ -494,7 +494,53 @@ install_binary() {
 
     install -d -m 0755 "${APP_INSTALL_DIR}"
     install -m 0755 "${binary_source}" "${APP_BINARY_DEST}"
-    ln -sfn "${APP_BINARY_DEST}" "${APP_SYMLINK}"
+	ln -sfn "${APP_BINARY_DEST}" "${APP_SYMLINK}"
+}
+
+install_dokku_audit_dependencies() {
+	local packages=()
+
+	command_exists sqlite3 || packages+=(sqlite3)
+	command_exists flock || packages+=(util-linux)
+
+	if [[ ${#packages[@]} -eq 0 ]]; then
+		return
+	fi
+
+	if ! command_exists apt-get; then
+		die "dokku-audit requires ${packages[*]}, and apt-get is not available to install them automatically"
+	fi
+
+	log "installing dokku-audit dependencies: ${packages[*]}"
+	apt-get update
+	DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+
+	command_exists sqlite3 || die "sqlite3 is required for dokku-audit"
+}
+
+install_or_update_dokku_audit() {
+	local plugin_url="https://github.com/pruvon/dokku-audit.git"
+	local plugin_list=""
+	local doctor_output=""
+
+	command_exists dokku || die "dokku command not found"
+
+	install_dokku_audit_dependencies
+
+	plugin_list="$(dokku plugin:list 2>/dev/null || true)"
+	if printf '%s\n' "${plugin_list}" | awk '{print $1}' | grep -Fxq audit; then
+		log "updating dokku-audit plugin"
+		dokku plugin:update audit
+	else
+		log "installing dokku-audit plugin"
+		dokku plugin:install "${plugin_url}"
+	fi
+
+	log "verifying dokku-audit plugin"
+	dokku audit:status >/dev/null
+	if ! doctor_output="$(dokku audit:doctor 2>&1)"; then
+		warn "dokku-audit doctor reported issues: ${doctor_output}"
+	fi
 }
 
 prepare_directories() {
@@ -826,11 +872,14 @@ main() {
         resolve_version >/dev/null
     fi
 
-    log "creating service user and group memberships"
-    ensure_user
+	log "creating service user and group memberships"
+	ensure_user
 
-    log "installing binary"
-    install_binary
+	log "installing dokku-audit plugin"
+	install_or_update_dokku_audit
+
+	log "installing binary"
+	install_binary
 
     log "preparing runtime, backup, and log directories"
     prepare_directories

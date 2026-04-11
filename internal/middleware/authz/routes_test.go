@@ -39,6 +39,8 @@ func TestIsAuthenticatedUserRoute(t *testing.T) {
 		{"Metrics API", "/api/metrics", true},
 		{"Server info API", "/api/server/info", true},
 		{"Docker stats API", "/api/docker/stats", true},
+		{"Audit overview API", "/api/audit/overview", true},
+		{"Audit event API", "/api/audit/events/42", true},
 		{"Apps page", "/apps", false},
 		{"Random API", "/api/apps/list", false},
 	}

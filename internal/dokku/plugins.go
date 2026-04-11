@@ -75,6 +75,7 @@ func GetAvailablePlugins(runner CommandRunner) ([]models.AvailablePlugin, error)
 
 	// Define all possible plugins
 	allPlugins := []models.AvailablePlugin{
+		{Name: "audit", URL: "https://github.com/pruvon/dokku-audit.git"},
 		{Name: "letsencrypt", URL: "https://github.com/dokku/dokku-letsencrypt.git"},
 		{Name: "mariadb", URL: "https://github.com/dokku/dokku-mariadb.git"},
 		{Name: "postgres", URL: "https://github.com/dokku/dokku-postgres.git"},

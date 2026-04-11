@@ -18,6 +18,8 @@ var AuthenticatedUserRoutes = []string{
 	"/api/metrics",
 	"/api/server/info",
 	"/api/docker/stats",
+	"/api/audit/overview",
+	"/api/audit/events/*",
 }
 
 // IsPublicRoute checks if a path is a public route

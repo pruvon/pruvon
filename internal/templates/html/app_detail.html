@@ -108,8 +108,88 @@ if (!registerAppDetailFlashStore()) {
     linkedServices: [],
     servicesLoaded: false,
     loadingServices: false,
+    audit: {
+        enabled: false,
+        timeline: [],
+        deploys: [],
+        deploy_flows: [],
+        config_changes: [],
+        domain_changes: [],
+        port_changes: [],
+        problem_events: []
+    },
+    auditLoaded: false,
+    loadingAudit: false,
+    auditEventDetail: null,
+    showAuditEventModal: false,
+    auditCurrentPage: 1,
+    auditPageSize: 25,
+    auditSearchQuery: '',
+    auditCategoryFilter: 'all',
+    auditStatusFilter: 'all',
+    get filteredAuditEvents() {
+        let events = this.audit.timeline || [];
+        if (this.auditSearchQuery) {
+            const q = this.auditSearchQuery.toLowerCase();
+            events = events.filter(e =>
+                (e.action || '').toLowerCase().includes(q) ||
+                (e.category || '').toLowerCase().includes(q) ||
+                (e.actor_label || '').toLowerCase().includes(q) ||
+                (e.message || '').toLowerCase().includes(q)
+            );
+        }
+        if (this.auditCategoryFilter !== 'all') {
+            events = events.filter(e => e.category === this.auditCategoryFilter);
+        }
+        if (this.auditStatusFilter !== 'all') {
+            events = events.filter(e => e.status === this.auditStatusFilter);
+        }
+        return events;
+    },
+    get availableAuditCategories() {
+        const cats = new Set((this.audit.timeline || []).map(e => e.category).filter(Boolean));
+        return Array.from(cats).sort();
+    },
+    get availableAuditStatuses() {
+        const statuses = new Set((this.audit.timeline || []).map(e => e.status).filter(Boolean));
+        return Array.from(statuses).sort();
+    },
+    get paginatedAuditTimeline() {
+        const events = this.filteredAuditEvents;
+        const start = (this.auditCurrentPage - 1) * this.auditPageSize;
+        return events.slice(start, start + this.auditPageSize);
+    },
+    get totalAuditPages() {
+        return Math.ceil(this.filteredAuditEvents.length / this.auditPageSize);
+    },
+    get auditEventGroups() {
+        const events = this.paginatedAuditTimeline;
+        if (!events || !events.length) return [];
+        const groups = [];
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}`;
+        let currentGroup = null;
+        for (const event of events) {
+            const d = new Date(event.ts || event.created_at);
+            const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            let label;
+            if (dateStr === todayStr) label = 'Today';
+            else if (dateStr === yesterdayStr) label = 'Yesterday';
+            else label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+            if (!currentGroup || currentGroup.dateStr !== dateStr) {
+                currentGroup = { dateStr, label, events: [] };
+                groups.push(currentGroup);
+            }
+            currentGroup.events.push(event);
+        }
+        return groups;
+    },
     pendingRequests: {},
-    allTabs: ['summary', 'process', 'env', 'nginx', 'services', 'docker-options'],
+    allTabs: ['summary', 'process', 'config', 'resource', 'docker-options', 'services', 'storage', 'nginx', 'logs', 'terminal', 'cron', 'audit', 'danger'],
     previousTab() {
         const currentIndex = this.allTabs.indexOf(this.activeTab);
         if (currentIndex > 0) {
@@ -200,6 +280,12 @@ if (!registerAppDetailFlashStore()) {
         } catch (error) {
             console.error('Error fetching stats:', error);
         }
+    },
+    formatAuditTime(value) {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
     },
     initStatsUpdate() {
         this.fetchStats();
@@ -373,6 +459,12 @@ if (!registerAppDetailFlashStore()) {
         if (tab === 'services') {
             if (!this.servicesLoaded && !this.loadingServices) {
                 await this.loadServices();
+            }
+            return;
+        }
+        if (tab === 'audit') {
+            if (!this.auditLoaded || forceRefresh) {
+                await this.loadAppAudit(forceRefresh);
             }
             return;
         }
@@ -861,6 +953,50 @@ if (!registerAppDetailFlashStore()) {
             this.loadingServices = false;
         }
     },
+    async loadAppAudit(forceRefresh = false) {
+        if (this.loadingAudit) return;
+
+        if (forceRefresh) {
+            this.clearCache(`/api/apps/{{.Name}}/audit`);
+        }
+
+        this.loadingAudit = true;
+        try {
+            const response = await this.cachedFetch(`/api/apps/{{.Name}}/audit`, forceRefresh);
+            this.audit = await response.json();
+            this.auditLoaded = true;
+            this.auditCurrentPage = 1;
+            this.auditSearchQuery = '';
+            this.auditCategoryFilter = 'all';
+            this.auditStatusFilter = 'all';
+        } catch (error) {
+            console.error('Error loading audit:', error);
+            this.showFlashMessage('Failed to load audit timeline', 'error');
+        } finally {
+            this.loadingAudit = false;
+        }
+    },
+    async openAppAuditEvent(id) {
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/audit/events/${id}`, {
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to load audit event');
+            }
+            this.auditEventDetail = await response.json();
+            this.showAuditEventModal = true;
+        } catch (error) {
+            console.error('Error loading audit event:', error);
+            this.showFlashMessage(error.message || 'Failed to load audit event', 'error');
+        }
+    },
+    downloadAppAuditExport(format = 'json') {
+        window.location.href = `/api/apps/{{.Name}}/audit/export?format=${encodeURIComponent(format)}`;
+    },
     async loadServerDomain() {
         try {
             const response = await this.cachedFetch('/api/server/domain');
@@ -1173,6 +1309,9 @@ if (!registerAppDetailFlashStore()) {
                     <button @click="fetchData('cron')" :class="activeTab === 'cron' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
                         <span>Cron</span>
                     </button>
+                    <button @click="fetchData('audit')" :class="activeTab === 'audit' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'" class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
+                        <span>Audit</span>
+                    </button>
                 </div>
 
                 <!-- Danger Zone -->
@@ -1217,6 +1356,10 @@ if (!registerAppDetailFlashStore()) {
 
             <template x-if="activeTab === 'docker-options'">
                 {{template "app_docker_options" .}}
+            </template>
+
+            <template x-if="activeTab === 'audit'">
+                {{template "app_audit" .}}
             </template>
 
             <template x-if="activeTab === 'nginx'">

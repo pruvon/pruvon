@@ -220,6 +220,62 @@
                 }
             }
         })
+
+        function auditCategoryStyle(category) {
+            const styles = {
+                'config': 'bg-brand-subtle text-brand-primary',
+                'deploy': 'bg-status-success-bg text-status-success',
+                'process': 'bg-status-neutral-bg text-status-neutral',
+                'service': 'bg-brand-accent-subtle text-brand-accent',
+                'storage': 'bg-status-warning-bg text-status-warning',
+                'terminal': 'bg-status-neutral-bg text-status-neutral',
+                'logs': 'bg-status-neutral-bg text-status-neutral',
+                'cron': 'bg-status-neutral-bg text-status-neutral',
+                'nginx': 'bg-status-neutral-bg text-status-neutral',
+                'domains': 'bg-brand-subtle text-brand-primary',
+                'ports': 'bg-brand-subtle text-brand-primary',
+                'access': 'bg-status-neutral-bg text-status-neutral',
+                'backup': 'bg-status-warning-bg text-status-warning',
+                'command': 'bg-status-neutral-bg text-status-neutral',
+                'maintenance': 'bg-status-warning-bg text-status-warning',
+            };
+            return styles[category] || 'bg-status-neutral-bg text-status-neutral';
+        }
+
+        function auditCategoryDotColor(category) {
+            const colors = {
+                'config': 'bg-brand-primary',
+                'deploy': 'bg-status-success',
+                'process': 'bg-status-neutral',
+                'service': 'bg-brand-accent',
+                'storage': 'bg-status-warning',
+                'terminal': 'bg-text-secondary',
+                'logs': 'bg-text-secondary',
+                'cron': 'bg-text-secondary',
+                'nginx': 'bg-text-secondary',
+                'domains': 'bg-brand-primary',
+                'ports': 'bg-brand-primary',
+                'access': 'bg-status-neutral',
+                'backup': 'bg-status-warning',
+                'command': 'bg-status-neutral',
+                'maintenance': 'bg-status-warning',
+            };
+            return colors[category] || 'bg-status-neutral';
+        }
+
+        function formatAuditTimeShort(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return value;
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+            const dateStr = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+            if (dateStr === todayStr) {
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            }
+            return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+        }
     </script>
 
     {{if .FlashMessage}}
@@ -279,14 +335,14 @@
         @keydown.escape.window="mobileSidebarOpen = false"
     >
         <aside data-primary-sidebar class="hidden h-screen flex-col border-r border-border bg-sidebar transition-all duration-200 lg:flex lg:flex-shrink-0 w-44" :class="sidebarCollapsed ? 'w-14' : 'w-44'">
-            <div class="flex h-11 items-center justify-between border-b border-white/10 px-2.5">
+            <div class="flex h-10 items-center justify-between border-b border-white/10 px-2.5">
                 <a href="/" class="flex flex-1 items-center gap-2 overflow-hidden text-base font-medium tracking-wide text-sidebar-text" :class="sidebarCollapsed ? 'justify-center' : 'px-2'">
-                    <img x-show="!sidebarCollapsed" src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-7 w-7 flex-shrink-0">
+                    <img x-show="!sidebarCollapsed" src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-5 w-5 flex-shrink-0 object-contain">
                     <span x-show="!sidebarCollapsed">Pruvon</span>
                     <button
                         x-show="sidebarCollapsed"
                         @click.prevent="toggleSidebar()"
-                        class="flex h-7 w-7 items-center justify-center rounded text-sidebar-text-muted transition-colors duration-150 hover:bg-white/10 hover:text-sidebar-text"
+                        class="flex h-6 w-6 items-center justify-center rounded text-sidebar-text-muted transition-colors duration-150 hover:bg-white/10 hover:text-sidebar-text"
                         title="Expand sidebar"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-[14px] w-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -451,9 +507,9 @@
             x-transition:leave-end="-translate-x-full"
             class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-sidebar lg:hidden"
         >
-            <div class="flex h-11 items-center justify-between border-b border-white/10 px-3">
-                <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-tight text-sidebar-text">
-                    <img src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-6 w-6 flex-shrink-0">
+            <div class="flex h-10 items-center justify-between border-b border-white/10 px-3">
+                <a href="/" class="flex items-center gap-2 text-base font-medium tracking-wide text-sidebar-text">
+                    <img src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-5 w-5 flex-shrink-0 object-contain">
                     <span>Pruvon</span>
                 </a>
                 <button
@@ -616,8 +672,8 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
                         </svg>
                     </button>
-                    <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-tight text-text-primary">
-                        <img src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-6 w-6 flex-shrink-0">
+                    <a href="/" class="flex items-center gap-2 text-sm font-medium tracking-tight text-text-primary">
+                        <img src="/static/images/logo/logo.webp" alt="Pruvon Logo" class="h-5 w-5 flex-shrink-0 object-contain">
                         <span>Pruvon</span>
                     </a>
                     <a href="/logout" class="text-xs font-medium text-text-secondary transition-colors duration-150 hover:text-text-primary">Logout</a>
