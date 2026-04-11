@@ -7,6 +7,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-04-12
+
+### Changed
+- fix(audit): enrich deploy events with actor and meta from correlated timeline
+- perf(dashboard): speed up initial load with async data and skeleton UI
+- feat(audit): add dokku-audit integration for dashboard, app and service detail
+
+
 ## [0.1.4] - 2026-04-10
 
 ### Changed
