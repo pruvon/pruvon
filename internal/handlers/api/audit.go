@@ -75,6 +75,12 @@ func handleAuditOverview(c *fiber.Ctx) error {
 			})
 		}
 
+		timeline, err := getAuditTimelineForApps(appNames, 48, 0)
+		if err == nil {
+			recent = enrichAuditEventsWithTimeline(recent, timeline)
+			deploys = enrichAuditEventsWithTimeline(deploys, timeline)
+		}
+
 		overview.Recent = recent
 		overview.Deploys = deploys
 
@@ -107,6 +113,12 @@ func handleAuditOverview(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Recent audit deploys could not be retrieved: %v", err),
 		})
+	}
+
+	timeline, err := getAuditTimelineForEventApps(appendAuditEvents(recent, deploys), 48)
+	if err == nil {
+		recent = enrichAuditEventsWithTimeline(recent, timeline)
+		deploys = enrichAuditEventsWithTimeline(deploys, timeline)
 	}
 
 	overview.Status = &status
@@ -162,6 +174,9 @@ func handleAppAudit(c *fiber.Ctx) error {
 		})
 	}
 
+	timeline = enrichAuditEventsWithTimeline(timeline, timeline)
+	deploys = enrichAuditEventsWithTimeline(deploys, timeline)
+
 	result.Timeline = timeline
 	result.Deploys = deploys
 	result.DeployFlows = dokku.GroupAuditEventsByCorrelation(filterAuditEventsWithCorrelation(timeline))
@@ -201,6 +216,8 @@ func handleAppAuditEvent(c *fiber.Ctx) error {
 			"error": "Audit event not found for this application",
 		})
 	}
+
+	event = enrichAuditEventWithAppTimeline(event, appName, 250)
 
 	return c.JSON(event)
 }
@@ -247,6 +264,8 @@ func handleAuditEvent(c *fiber.Ctx) error {
 			})
 		}
 	}
+
+	event = enrichAuditEventWithAppTimeline(event, event.App, 250)
 
 	return c.JSON(event)
 }
@@ -310,6 +329,9 @@ func handleServiceAudit(c *fiber.Ctx) error {
 		})
 	}
 
+	recent = enrichAuditEventsWithTimeline(recent, recent)
+	deploys = enrichAuditEventsWithTimeline(deploys, recent)
+
 	result.Recent = recent
 	result.Deploys = deploys
 
@@ -360,6 +382,8 @@ func handleServiceAuditEvent(c *fiber.Ctx) error {
 			"error": "Audit event not found for this service",
 		})
 	}
+
+	event = enrichAuditEventWithAppTimeline(event, event.App, 250)
 
 	return c.JSON(event)
 }
@@ -582,6 +606,182 @@ func auditEventSortKey(event models.AuditEvent) string {
 		return event.Timestamp
 	}
 	return event.CreatedAt
+}
+
+func appendAuditEvents(chunks ...[]models.AuditEvent) []models.AuditEvent {
+	combined := make([]models.AuditEvent, 0)
+	for _, chunk := range chunks {
+		combined = append(combined, chunk...)
+	}
+
+	return combined
+}
+
+func getAuditTimelineForEventApps(events []models.AuditEvent, perAppLimit int) ([]models.AuditEvent, error) {
+	appNames := make([]string, 0)
+	seen := make(map[string]bool)
+	for _, event := range events {
+		if event.App == "" || seen[event.App] {
+			continue
+		}
+		seen[event.App] = true
+		appNames = append(appNames, event.App)
+	}
+
+	if len(appNames) == 0 {
+		return []models.AuditEvent{}, nil
+	}
+
+	sort.Strings(appNames)
+	return getAuditTimelineForApps(appNames, perAppLimit, 0)
+}
+
+func enrichAuditEventWithAppTimeline(event models.AuditEvent, appName string, limit int) models.AuditEvent {
+	if appName == "" {
+		return event
+	}
+
+	timeline, err := dokku.GetAuditTimeline(commandRunner, appName, limit, "", "", "")
+	if err != nil {
+		return event
+	}
+
+	return enrichAuditEventWithTimeline(event, timeline)
+}
+
+func enrichAuditEventsWithTimeline(events []models.AuditEvent, timeline []models.AuditEvent) []models.AuditEvent {
+	if len(events) == 0 || len(timeline) == 0 {
+		return events
+	}
+
+	enriched := make([]models.AuditEvent, len(events))
+	for i, event := range events {
+		enriched[i] = enrichAuditEventWithTimeline(event, timeline)
+	}
+
+	return enriched
+}
+
+func enrichAuditEventWithTimeline(event models.AuditEvent, timeline []models.AuditEvent) models.AuditEvent {
+	related := collectRelatedAuditEvents(event, timeline)
+	if len(related) == 0 {
+		return event
+	}
+
+	enriched := event
+	for _, candidate := range related {
+		enriched = mergeAuditEvent(enriched, candidate)
+	}
+
+	return enriched
+}
+
+func collectRelatedAuditEvents(event models.AuditEvent, timeline []models.AuditEvent) []models.AuditEvent {
+	related := make([]models.AuditEvent, 0)
+	seen := make(map[int]bool)
+	for _, candidate := range timeline {
+		if event.ID != 0 && candidate.ID == event.ID {
+			related = append(related, candidate)
+			seen[candidate.ID] = true
+			continue
+		}
+
+		if event.CorrelationID != "" && candidate.CorrelationID == event.CorrelationID {
+			if seen[candidate.ID] {
+				continue
+			}
+			related = append(related, candidate)
+			seen[candidate.ID] = true
+		}
+	}
+
+	sort.SliceStable(related, func(i, j int) bool {
+		return auditEventSortKey(related[i]) < auditEventSortKey(related[j])
+	})
+
+	return related
+}
+
+func mergeAuditEvent(base models.AuditEvent, candidate models.AuditEvent) models.AuditEvent {
+	if shouldReplaceAuditActor(base, candidate) {
+		if candidate.ActorType != "" {
+			base.ActorType = candidate.ActorType
+		}
+		if candidate.ActorName != "" {
+			base.ActorName = candidate.ActorName
+		}
+		if candidate.ActorLabel != "" {
+			base.ActorLabel = candidate.ActorLabel
+		}
+	}
+
+	if base.SourceTrigger == "" && candidate.SourceTrigger != "" {
+		base.SourceTrigger = candidate.SourceTrigger
+	}
+	if base.SourceType == "" && candidate.SourceType != "" {
+		base.SourceType = candidate.SourceType
+	}
+	if base.ImageTag == "" && candidate.ImageTag != "" {
+		base.ImageTag = candidate.ImageTag
+	}
+	if base.Revision == "" && candidate.Revision != "" {
+		base.Revision = candidate.Revision
+	}
+	if base.CorrelationID == "" && candidate.CorrelationID != "" {
+		base.CorrelationID = candidate.CorrelationID
+	}
+
+	base.Meta = mergeAuditMeta(base.Meta, candidate.Meta)
+	return base
+}
+
+func shouldReplaceAuditActor(base models.AuditEvent, candidate models.AuditEvent) bool {
+	if candidate.ActorLabel == "" {
+		return false
+	}
+
+	if base.ActorLabel == "" {
+		return true
+	}
+
+	if strings.EqualFold(base.ActorType, "system") || strings.EqualFold(base.ActorLabel, "dokku-system") {
+		return !strings.EqualFold(candidate.ActorType, "system") && !strings.EqualFold(candidate.ActorLabel, "dokku-system")
+	}
+
+	return false
+}
+
+func mergeAuditMeta(base map[string]interface{}, candidate map[string]interface{}) map[string]interface{} {
+	if len(candidate) == 0 {
+		return base
+	}
+
+	merged := make(map[string]interface{}, len(base)+len(candidate))
+	for key, value := range base {
+		merged[key] = value
+	}
+
+	for key, value := range candidate {
+		existing, ok := merged[key]
+		if !ok || auditMetaValueEmpty(existing) {
+			merged[key] = value
+		}
+	}
+
+	return merged
+}
+
+func auditMetaValueEmpty(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed) == ""
+	}
+
+	return false
 }
 
 func filterAuditEventsByCategory(events []models.AuditEvent, category string, limit int) []models.AuditEvent {

@@ -59,6 +59,17 @@ func TestHandleAuditOverviewIncludesHostHealthForAdmin(t *testing.T) {
 			"dokku audit:doctor":                                "ok: sqlite3 executable available\n",
 			"dokku audit:recent --limit 10 --format json":       `[{"id":1,"ts":"2026-04-10T12:00:00Z","app":"allowed-app","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_label":"sudo-user:emre","message":"deploy finished"}]`,
 			"dokku audit:last-deploys --limit 10 --format json": `[{"id":3,"ts":"2026-04-10T11:50:00Z","app":"allowed-app","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_label":"sudo-user:emre","message":"deploy finished"}]`,
+			"dokku audit:timeline allowed-app --limit 48 --format json": `[{
+				"id":3,
+				"ts":"2026-04-10T11:50:00Z",
+				"app":"allowed-app",
+				"category":"deploy",
+				"action":"finish",
+				"status":"success",
+				"classification":"source_deploy",
+				"actor_label":"sudo-user:emre",
+				"message":"deploy finished"
+			}]`,
 		},
 		ErrorMap: map[string]error{},
 	}
@@ -77,6 +88,36 @@ func TestHandleAuditOverviewIncludesHostHealthForAdmin(t *testing.T) {
 	require.NotNil(t, overview.Doctor)
 	assert.Equal(t, 42, overview.Status.TotalEvents)
 	assert.True(t, overview.Doctor.Healthy)
+}
+
+func TestHandleAuditOverviewEnrichesDeployActorsForAdmin(t *testing.T) {
+	runner := &dokku.MockCommandRunner{
+		OutputMap: map[string]string{
+			"dokku plugin:list":                                     "=====> Installed plugins\naudit 0.2.0\n",
+			"dokku audit:status":                                    "plugin version: 0.2.0\ntotal events: 42\n",
+			"dokku audit:doctor":                                    "ok: sqlite3 executable available\n",
+			"dokku audit:recent --limit 10 --format json":           `[{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}]`,
+			"dokku audit:last-deploys --limit 10 --format json":     `[{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}]`,
+			"dokku audit:timeline yoklama --limit 48 --format json": `[{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"user","actor_name":"admin","actor_label":"ssh-key:admin","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push","ssh_name":"admin","triggered_by_subcommand":"git:push"}}]`,
+		},
+		ErrorMap: map[string]error{},
+	}
+
+	app := newAuditTestApp(t, githubAuditConfig(), runner)
+
+	cookies := loginAuditUser(t, app, "admin", "admin")
+	resp := performAuditRequest(t, app, http.MethodGet, "/api/audit/overview", cookies)
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	var overview models.AuditOverview
+	decodeAuditResponse(t, resp, &overview)
+	require.Len(t, overview.Recent, 1)
+	require.Len(t, overview.Deploys, 1)
+	assert.Equal(t, "ssh-key:admin", overview.Recent[0].ActorLabel)
+	assert.Equal(t, "ssh-key:admin", overview.Deploys[0].ActorLabel)
+	assert.Equal(t, "admin", overview.Deploys[0].Meta["ssh_name"])
+	assert.Equal(t, "git:push", overview.Deploys[0].Meta["triggered_by_subcommand"])
 }
 
 func TestHandleAuditEventDeniedForUnauthorizedGitHubUser(t *testing.T) {
@@ -103,6 +144,34 @@ func TestHandleAuditEventDeniedForUnauthorizedGitHubUser(t *testing.T) {
 	var payload map[string]string
 	decodeAuditResponse(t, resp, &payload)
 	assert.Equal(t, "Access denied", payload["error"])
+}
+
+func TestHandleAuditEventEnrichesDeployMetadata(t *testing.T) {
+	runner := &dokku.MockCommandRunner{
+		OutputMap: map[string]string{
+			"dokku plugin:list":                  "=====> Installed plugins\naudit 0.2.0\n",
+			"dokku audit:show 159 --format json": `{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}`,
+			"dokku audit:timeline yoklama --limit 250 --format json": `[
+				{"id":158,"ts":"2026-04-11T10:34:38Z","app":"yoklama","category":"deploy","action":"receive-app","status":"success","classification":"source_deploy","actor_type":"user","actor_name":"admin","actor_label":"ssh-key:admin","correlation_id":"corr-1","message":"source deploy received","meta":{"ssh_name":"admin","triggered_by_command":"git push yoklama","triggered_by_subcommand":"git:push"}},
+				{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}
+			]`,
+		},
+		ErrorMap: map[string]error{},
+	}
+
+	app := newAuditTestApp(t, githubAuditConfig(), runner)
+
+	cookies := loginAuditUser(t, app, "admin", "admin")
+	resp := performAuditRequest(t, app, http.MethodGet, "/api/audit/events/159", cookies)
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	var event models.AuditEvent
+	decodeAuditResponse(t, resp, &event)
+	assert.Equal(t, "ssh-key:admin", event.ActorLabel)
+	assert.Equal(t, "admin", event.Meta["ssh_name"])
+	assert.Equal(t, "git:push", event.Meta["triggered_by_subcommand"])
+	assert.Equal(t, "git push yoklama", event.Meta["triggered_by_command"])
 }
 
 func TestHandleAppAuditDeniedForUnauthorizedGitHubUser(t *testing.T) {
@@ -178,6 +247,28 @@ func TestHandleAppAuditExportAllowsAuthorizedGitHubUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `[{"id":1}]`, string(body))
 	assert.Equal(t, fiber.MIMEApplicationJSON, resp.Header.Get(fiber.HeaderContentType))
+}
+
+func TestMergeAuditMetaDoesNotMutateBaseMap(t *testing.T) {
+	base := map[string]interface{}{
+		"image_tag": "latest",
+		"ssh_name":  "",
+	}
+	candidate := map[string]interface{}{
+		"ssh_name":                "admin",
+		"triggered_by_subcommand": "git:push",
+	}
+
+	merged := mergeAuditMeta(base, candidate)
+
+	assert.Equal(t, "", base["ssh_name"])
+	assert.Nil(t, base["triggered_by_subcommand"])
+	assert.Equal(t, "admin", merged["ssh_name"])
+	assert.Equal(t, "git:push", merged["triggered_by_subcommand"])
+	assert.Equal(t, "latest", merged["image_tag"])
+
+	merged["ssh_name"] = "changed"
+	assert.Equal(t, "", base["ssh_name"])
 }
 
 func TestHandleAuditExportRequiresAdminEvenWithExplicitRoute(t *testing.T) {
