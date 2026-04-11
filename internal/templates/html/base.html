@@ -93,6 +93,26 @@
     <style>
         [x-cloak] { display: none !important; }
 
+        [data-spa-skeleton] {
+            position: relative;
+            overflow: hidden;
+        }
+
+        [data-spa-skeleton]::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            transform: translateX(-100%);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+            animation: spa-skeleton-shimmer 1.4s ease-in-out infinite;
+        }
+
+        @keyframes spa-skeleton-shimmer {
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
         /* Sidebar FOUC prevention */
         html.sidebar-collapsed aside[data-primary-sidebar] [x-show="!sidebarCollapsed"] {
             display: none !important;
@@ -312,6 +332,7 @@
             currentPath: window.location.pathname,
             sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true',
             mobileSidebarOpen: false,
+            isNavigating: false,
             isActive(path) {
                 if (path === '/') {
                     return this.currentPath === '/';
@@ -696,6 +717,93 @@
         const mainEl = document.getElementById('spa-main');
         if (!mainEl) return;
 
+        const dashboardSkeletonHTML = `
+            <div class="space-y-5" data-spa-skeleton-root>
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div class="space-y-2">
+                        <div class="h-6 w-40 rounded bg-surface" data-spa-skeleton></div>
+                        <div class="h-4 w-72 max-w-full rounded bg-surface" data-spa-skeleton></div>
+                        <div class="h-5 w-48 rounded bg-surface" data-spa-skeleton></div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="h-8 w-28 rounded border border-border bg-card" data-spa-skeleton></div>
+                        <div class="h-8 w-24 rounded border border-border bg-card" data-spa-skeleton></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    ${Array.from({ length: 4 }).map(() => `
+                        <div class="rounded-md border border-border bg-card p-4">
+                            <div class="h-4 w-20 rounded bg-surface" data-spa-skeleton></div>
+                            <div class="mt-3 h-6 w-12 rounded bg-surface" data-spa-skeleton></div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="rounded-md border border-border bg-card p-4">
+                    <div class="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                        <div class="space-y-3">
+                            <div class="h-4 w-28 rounded bg-surface" data-spa-skeleton></div>
+                            ${Array.from({ length: 5 }).map(() => `<div class="h-8 rounded bg-surface" data-spa-skeleton></div>`).join('')}
+                        </div>
+                        <div class="space-y-3">
+                            <div class="h-4 w-20 rounded bg-surface" data-spa-skeleton></div>
+                            <div class="h-28 rounded bg-surface" data-spa-skeleton></div>
+                            <div class="h-28 rounded bg-surface" data-spa-skeleton></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="rounded-md border border-border bg-card p-4">
+                    <div class="h-4 w-28 rounded bg-surface" data-spa-skeleton></div>
+                    <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        ${Array.from({ length: 2 }).map(() => `
+                            <div class="space-y-2">
+                                ${Array.from({ length: 4 }).map(() => `<div class="h-12 rounded border border-border bg-card" data-spa-skeleton></div>`).join('')}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const genericSkeletonHTML = `
+            <div class="space-y-5" data-spa-skeleton-root>
+                <div class="space-y-2">
+                    <div class="h-6 w-40 rounded bg-surface" data-spa-skeleton></div>
+                    <div class="h-4 w-72 max-w-full rounded bg-surface" data-spa-skeleton></div>
+                </div>
+                <div class="rounded-md border border-border bg-card p-4 space-y-3">
+                    ${Array.from({ length: 6 }).map(() => `<div class="h-10 rounded bg-surface" data-spa-skeleton></div>`).join('')}
+                </div>
+            </div>
+        `;
+
+        function getSkeletonHTML(url) {
+            const pathname = new URL(url, window.location.origin).pathname;
+            return pathname === '/' ? dashboardSkeletonHTML : genericSkeletonHTML;
+        }
+
+        function setNavigatingState(url, isNavigating) {
+            const layoutEl = document.getElementById('spa-layout');
+            if (!layoutEl || !layoutEl._x_dataStack) return;
+            const sidebarData = layoutEl._x_dataStack[0];
+            if (!sidebarData) return;
+
+            if ('isNavigating' in sidebarData) {
+                sidebarData.isNavigating = isNavigating;
+            }
+
+            if (isNavigating && 'currentPath' in sidebarData) {
+                sidebarData.currentPath = new URL(url, window.location.origin).pathname;
+            }
+        }
+
+        function showSkeleton(url) {
+            destroyAlpineInEl(mainEl);
+            setNavigatingState(url, true);
+            mainEl.innerHTML = getSkeletonHTML(url);
+            const contentArea = mainEl.closest('.lg\\:overflow-y-auto') || mainEl.parentElement;
+            if (contentArea) contentArea.scrollTop = 0;
+        }
+
         // Track loaded head scripts so we don't duplicate them
         const loadedScripts = new Set();
         document.querySelectorAll('head script[src]').forEach(s => loadedScripts.add(s.src));
@@ -758,6 +866,8 @@
         }
 
         async function navigateTo(url, pushState = true) {
+            showSkeleton(url);
+
             try {
                 const resp = await fetch(url, {
                     headers: { 'Accept': 'text/html' },
@@ -834,20 +944,15 @@
                     history.pushState({ spaNav: true }, '', url);
                 }
 
-                // 8. Update sidebar active state via Alpine
-                const layoutEl = document.getElementById('spa-layout');
-                if (layoutEl && layoutEl._x_dataStack) {
-                    const sidebarData = layoutEl._x_dataStack[0];
-                    if (sidebarData && 'currentPath' in sidebarData) {
-                        sidebarData.currentPath = new URL(url, window.location.origin).pathname;
-                    }
-                }
+                // 8. Update sidebar loading state via Alpine
+                setNavigatingState(url, false);
 
                 // 9. Scroll content area to top
                 const contentArea = mainEl.closest('.lg\\:overflow-y-auto') || mainEl.parentElement;
                 if (contentArea) contentArea.scrollTop = 0;
 
             } catch(err) {
+                setNavigatingState(url, false);
                 console.error('SPA navigation failed, falling back:', err);
                 window.location.href = url;
             }

@@ -70,6 +70,13 @@
   - `/var/lib/dokku/...`
   - `/var/log/nginx/<app>-{access,error}.log`
 
+## Task Workflow
+
+- Maintain the root `TASKS.md` file for any phased or multi-step implementation that should survive across turns.
+- Update `TASKS.md` before starting substantial work, and keep statuses accurate as phases complete.
+- Treat `TASKS.md` as the persistent source of truth for open work unless the user explicitly replaces the plan.
+- For phased implementation requests, continue through all listed phases in `TASKS.md` unless blocked or redirected by the user.
+
 ## Routing And Auth Invariants
 
 - Preserve route ordering where comments call it out.

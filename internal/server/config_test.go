@@ -1,11 +1,17 @@
 package server
 
 import (
+	"fmt"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/pruvon/pruvon/internal/services/update"
 
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
@@ -133,34 +139,109 @@ func TestSetupVersionMiddleware(t *testing.T) {
 	}
 }
 
-// func TestSetupUpdateCheckerMiddleware(t *testing.T) {
-// 	app := fiber.New()
-// 	version := "1.2.3"
+func TestSetupUpdateCheckerMiddlewareUsesCachedState(t *testing.T) {
+	resetUpdateCheckState()
+	originalUpdateCheckFunc := updateCheckFunc
+	originalUpdateCheckTTL := updateCheckTTL
+	originalUpdateCheckNow := updateCheckNow
+	t.Cleanup(func() {
+		updateCheckFunc = originalUpdateCheckFunc
+		updateCheckTTL = originalUpdateCheckTTL
+		updateCheckNow = originalUpdateCheckNow
+		resetUpdateCheckState()
+	})
 
-// 	SetupUpdateCheckerMiddleware(app, version)
+	var callCount int32
+	refreshDone := make(chan struct{}, 1)
+	baseTime := time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC)
+	updateCheckTTL = time.Hour
+	updateCheckNow = func() time.Time { return baseTime }
+	updateCheckFunc = func(currentVersion string) (update.UpdateInfo, error) {
+		atomic.AddInt32(&callCount, 1)
+		select {
+		case refreshDone <- struct{}{}:
+		default:
+		}
+		return update.UpdateInfo{
+			CurrentVersion:  currentVersion,
+			LatestVersion:   "9.9.9",
+			UpdateAvailable: true,
+		}, nil
+	}
 
-// 	// Add a test route
-// 	app.Get("/test", func(c *fiber.Ctx) error {
-// 		// Check that locals are set
-// 		if c.Locals("updateCheckError") == nil {
-// 			return c.Status(500).SendString("updateCheckError not set")
-// 		}
-// 		if c.Locals("updateAvailable") == nil {
-// 			return c.Status(500).SendString("updateAvailable not set")
-// 		}
-// 		if c.Locals("latestVersion") == nil {
-// 			return c.Status(500).SendString("latestVersion not set")
-// 		}
-// 		return c.SendString("ok")
-// 	})
+	app := fiber.New()
+	SetupUpdateCheckerMiddleware(app, "1.2.3")
+	app.Get("/test", func(c *fiber.Ctx) error {
+		latestVersion, _ := c.Locals("latestVersion").(string)
+		return c.SendString(fmt.Sprintf("%v|%v|%s", c.Locals("updateCheckError"), c.Locals("updateAvailable"), latestVersion))
+	})
 
-// 	// Test request
-// 	req := httptest.NewRequest("GET", "/test", nil)
-// 	resp, err := app.Test(req)
-// 	if err != nil {
-// 		t.Fatalf("App test failed: %v", err)
-// 	}
-// 	if resp.StatusCode != 200 {
-// 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-// 	}
-// }
+	firstReq := httptest.NewRequest("GET", "/test", nil)
+	firstResp, err := app.Test(firstReq)
+	if err != nil {
+		t.Fatalf("App test failed: %v", err)
+	}
+	firstBody, err := io.ReadAll(firstResp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read first response: %v", err)
+	}
+	if string(firstBody) != "true|false|" {
+		t.Fatalf("Unexpected first response body: %s", string(firstBody))
+	}
+
+	select {
+	case <-refreshDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for async update refresh")
+	}
+
+	secondReq := httptest.NewRequest("GET", "/test", nil)
+	secondResp, err := app.Test(secondReq)
+	if err != nil {
+		t.Fatalf("App test failed on second request: %v", err)
+	}
+	secondBody, err := io.ReadAll(secondResp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read second response: %v", err)
+	}
+	if string(secondBody) != "false|true|9.9.9" {
+		t.Fatalf("Unexpected second response body: %s", string(secondBody))
+	}
+
+	if atomic.LoadInt32(&callCount) != 1 {
+		t.Fatalf("expected one update check, got %d", atomic.LoadInt32(&callCount))
+	}
+}
+
+func TestSetupUpdateCheckerMiddlewareSkipsAPIRequests(t *testing.T) {
+	resetUpdateCheckState()
+	originalUpdateCheckFunc := updateCheckFunc
+	t.Cleanup(func() {
+		updateCheckFunc = originalUpdateCheckFunc
+		resetUpdateCheckState()
+	})
+
+	var callCount int32
+	updateCheckFunc = func(currentVersion string) (update.UpdateInfo, error) {
+		atomic.AddInt32(&callCount, 1)
+		return update.UpdateInfo{CurrentVersion: currentVersion}, nil
+	}
+
+	app := fiber.New()
+	SetupUpdateCheckerMiddleware(app, "1.2.3")
+	app.Get("/api/test", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("App test failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	if atomic.LoadInt32(&callCount) != 0 {
+		t.Fatalf("expected no update checks for API path, got %d", atomic.LoadInt32(&callCount))
+	}
+}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/pruvon/pruvon/internal/config"
-	"github.com/pruvon/pruvon/internal/docker"
 	"github.com/pruvon/pruvon/internal/dokku"
 	"github.com/pruvon/pruvon/internal/middleware"
 	"github.com/pruvon/pruvon/internal/templates"
@@ -16,31 +15,7 @@ import (
 
 // HandleDashboard handles the dashboard page
 func HandleDashboard(c *fiber.Ctx) error {
-	// Get Dokku version
-	dokkuVersion, err := dokku.GetDokkuVersion(dokkuRunner)
-	if err != nil {
-		dokkuVersion = "Unknown"
-	}
-
-	// Get Docker stats
-	dockerStats, err := docker.GetDockerStats(dokkuRunner)
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Docker statistics could not be retrieved: "+err.Error())
-	}
-
-	// Get app count
-	apps, err := dokku.GetDokkuApps(dokkuRunner)
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Application list could not be retrieved: "+err.Error())
-	}
-
-	// Get plugin count
-	plugins, err := dokku.GetPlugins(dokkuRunner)
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Plugin list could not be retrieved: "+err.Error())
-	}
-
-	// Render template
+	// Render template without blocking on live Dokku or Docker calls.
 	tmpl, err := templates.GetTemplate("dashboard.html")
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "template parse error: "+err.Error())
@@ -51,11 +26,6 @@ func HandleDashboard(c *fiber.Ctx) error {
 
 	// Add dashboard specific data
 	sessionData["Title"] = "Dashboard"
-	sessionData["DokkuVersion"] = dokkuVersion
-	sessionData["DockerStats"] = dockerStats
-	sessionData["AppCount"] = len(apps)
-	sessionData["PluginCount"] = len(plugins)
-	sessionData["LoadApexCharts"] = true
 
 	var out bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&out, "base.html", sessionData); err != nil {

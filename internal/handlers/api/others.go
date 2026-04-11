@@ -36,7 +36,7 @@ func handleMetrics(c *fiber.Ctx) error {
 }
 
 func handleResourceMetrics(c *fiber.Ctx) error {
-	metrics := system.GetSystemMetrics()
+	metrics := system.GetResourceMetrics()
 	return c.JSON(fiber.Map{
 		"cpu_usage":  metrics.CPUUsage,
 		"ram_usage":  metrics.RAMUsage,
@@ -50,8 +50,9 @@ func handleResourceMetrics(c *fiber.Ctx) error {
 }
 
 func handleCountMetrics(c *fiber.Ctx) error {
-	metrics := system.GetSystemMetrics()
+	metrics := system.GetCountMetrics()
 	return c.JSON(fiber.Map{
+		"dokku_version":   metrics.DokkuVersion,
 		"app_count":       metrics.AppCount,
 		"service_count":   metrics.ServiceCount,
 		"container_count": metrics.ContainerCount,

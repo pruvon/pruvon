@@ -1,12 +1,36 @@
 package system
 
 import (
+	"errors"
+	"fmt"
 	"github.com/pruvon/pruvon/internal/models"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	gopsutildocker "github.com/shirou/gopsutil/v4/docker"
 	"github.com/stretchr/testify/assert"
 )
+
+type testCommandRunner struct {
+	run func(command string, args ...string) (string, error)
+}
+
+func (t testCommandRunner) RunCommand(command string, args ...string) (string, error) {
+	if t.run == nil {
+		return "", nil
+	}
+	return t.run(command, args...)
+}
+
+func (testCommandRunner) StartPTY(command string, args ...string) (*os.File, error) {
+	return nil, errors.New("not implemented")
+}
 
 func TestReadCPUStats(t *testing.T) {
 	t.Run("Valid CPU stats", func(t *testing.T) {
@@ -268,4 +292,155 @@ func BenchmarkContains(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		Contains(slice, "cherry")
 	}
+}
+
+func TestGetCountMetricsUsesCache(t *testing.T) {
+	resetSystemCaches()
+	originalRunner := systemCommandRunner
+	originalDockerStatFunc := dockerStatFunc
+	originalCountMetricsTTL := countMetricsTTL
+	originalNowFunc := nowFunc
+	t.Cleanup(func() {
+		systemCommandRunner = originalRunner
+		dockerStatFunc = originalDockerStatFunc
+		countMetricsTTL = originalCountMetricsTTL
+		nowFunc = originalNowFunc
+		resetSystemCaches()
+	})
+
+	baseTime := time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC)
+	currentTime := baseTime
+	nowFunc = func() time.Time { return currentTime }
+	countMetricsTTL = time.Minute
+
+	var runnerCalls int32
+	systemCommandRunner = testCommandRunner{run: func(command string, args ...string) (string, error) {
+		atomic.AddInt32(&runnerCalls, 1)
+		joined := command + " " + strings.Join(args, " ")
+		switch joined {
+		case "dokku postgres:list":
+			return "postgres-service\n", nil
+		case "dokku mariadb:list":
+			return "", nil
+		case "dokku mongo:list":
+			return "mongo-service\n", nil
+		case "dokku redis:list":
+			return "redis-a\nredis-b\n", nil
+		case "dokku --quiet apps:list":
+			return "app-a\napp-b\n", nil
+		case "dokku --version":
+			return "dokku version 0.35.0", nil
+		default:
+			return "", fmt.Errorf("unexpected command: %s", joined)
+		}
+	}}
+	dockerStatFunc = func() ([]gopsutildocker.CgroupDockerStat, error) {
+		return []gopsutildocker.CgroupDockerStat{{}, {}, {}}, nil
+	}
+
+	first := GetCountMetrics()
+	second := GetCountMetrics()
+
+	assert.Equal(t, 2, first.AppCount)
+	assert.Equal(t, 4, first.ServiceCount)
+	assert.Equal(t, 3, first.ContainerCount)
+	assert.Equal(t, "0.35.0", first.DokkuVersion)
+	assert.Equal(t, first, second)
+	assert.Equal(t, int32(6), atomic.LoadInt32(&runnerCalls))
+}
+
+func TestGetServerInfoUsesCachedPublicIP(t *testing.T) {
+	resetSystemCaches()
+	originalClient := publicIPHTTPClient
+	originalURL := publicIPLookupURL
+	originalNowFunc := nowFunc
+	originalPublicIPTTL := publicIPTTL
+	t.Cleanup(func() {
+		publicIPHTTPClient = originalClient
+		publicIPLookupURL = originalURL
+		nowFunc = originalNowFunc
+		publicIPTTL = originalPublicIPTTL
+		resetSystemCaches()
+	})
+
+	baseTime := time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC)
+	currentTime := baseTime
+	nowFunc = func() time.Time { return currentTime }
+	publicIPTTL = time.Hour
+
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		_, _ = io.WriteString(w, "203.0.113.10")
+	}))
+	defer server.Close()
+
+	publicIPHTTPClient = server.Client()
+	publicIPLookupURL = server.URL
+
+	assert.Equal(t, "", getCachedPublicIP())
+
+	assert.Eventually(t, func() bool {
+		return atomic.LoadInt32(&requestCount) == 1 && getCachedPublicIP() == "203.0.113.10"
+	}, time.Second, 20*time.Millisecond)
+
+	assert.Equal(t, "203.0.113.10", getCachedPublicIP())
+	assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+}
+
+func TestGetCachedPublicIPDoesNotExtendTTLOnFailure(t *testing.T) {
+	resetSystemCaches()
+	originalClient := publicIPHTTPClient
+	originalURL := publicIPLookupURL
+	originalNowFunc := nowFunc
+	originalPublicIPTTL := publicIPTTL
+	t.Cleanup(func() {
+		publicIPHTTPClient = originalClient
+		publicIPLookupURL = originalURL
+		nowFunc = originalNowFunc
+		publicIPTTL = originalPublicIPTTL
+		resetSystemCaches()
+	})
+
+	baseTime := time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC)
+	currentTime := baseTime
+	nowFunc = func() time.Time { return currentTime }
+	publicIPTTL = time.Minute
+
+	publicIPMu.Lock()
+	publicIPCache = "203.0.113.99"
+	publicIPCheckedAt = baseTime.Add(-2 * time.Minute)
+	publicIPRefreshing = false
+	publicIPMu.Unlock()
+
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	publicIPHTTPClient = server.Client()
+	publicIPLookupURL = server.URL
+
+	assert.Equal(t, "203.0.113.99", getCachedPublicIP())
+	assert.Eventually(t, func() bool {
+		return atomic.LoadInt32(&requestCount) == 1
+	}, time.Second, 20*time.Millisecond)
+
+	publicIPMu.RLock()
+	checkedAtAfterFailure := publicIPCheckedAt
+	refreshedValue := publicIPCache
+	refreshing := publicIPRefreshing
+	publicIPMu.RUnlock()
+
+	assert.Equal(t, "203.0.113.99", refreshedValue)
+	assert.Equal(t, baseTime.Add(-2*time.Minute), checkedAtAfterFailure)
+	assert.False(t, refreshing)
+
+	currentTime = baseTime.Add(30 * time.Second)
+	assert.Equal(t, "203.0.113.99", getCachedPublicIP())
+	assert.Eventually(t, func() bool {
+		return atomic.LoadInt32(&requestCount) == 2
+	}, time.Second, 20*time.Millisecond)
 }

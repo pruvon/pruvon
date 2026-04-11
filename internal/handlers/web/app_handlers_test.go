@@ -1,6 +1,12 @@
 package web
 
-import "testing"
+import (
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/pruvon/pruvon/internal/templates"
+)
 
 func TestParseAppMetadata(t *testing.T) {
 	tests := []struct {
@@ -48,5 +54,23 @@ func TestParseAppMetadata(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestHandleDashboardRendersWithoutDokkuCalls(t *testing.T) {
+	if err := templates.Initialize(); err != nil {
+		t.Fatalf("templates.Initialize failed: %v", err)
+	}
+
+	app := fiber.New()
+	app.Get("/", HandleDashboard)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("App test failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 }

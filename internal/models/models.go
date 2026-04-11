@@ -144,6 +144,7 @@ type SystemMetrics struct {
 	SwapInfo       string  `json:"swap_info"`  // Newly added
 	DiskUsage      float64 `json:"disk_usage"`
 	DiskInfo       string  `json:"disk_info"`
+	DokkuVersion   string  `json:"dokku_version"`
 	ContainerCount int     `json:"container_count"`
 	ServiceCount   int     `json:"service_count"`
 	AppCount       int     `json:"app_count"`

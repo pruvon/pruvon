@@ -47,6 +47,10 @@
         };
     },
 
+    dokkuVersionLabel() {
+        return this.countMetrics?.dokku_version || '-';
+    },
+
     async fetchWithRetry(url, options = {}, retries = 3) {
         for (let i = 0; i < retries; i++) {
             try {
@@ -299,7 +303,12 @@
     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div class="rounded-md border border-border bg-card p-4">
             <p class="text-xs font-medium text-text-secondary">Dokku Version</p>
-            <p class="mt-1.5 text-xl font-semibold text-text-primary">{{.DokkuVersion}}</p>
+            <template x-if="initialLoading.counts">
+                <div class="mt-1.5 h-6 w-16 animate-pulse rounded bg-surface"></div>
+            </template>
+            <template x-if="!initialLoading.counts">
+                <p class="mt-1.5 text-xl font-semibold text-text-primary" x-text="dokkuVersionLabel()"></p>
+            </template>
         </div>
 
         <div class="rounded-md border border-border bg-card p-4">

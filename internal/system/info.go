@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pruvon/pruvon/internal/exec"
@@ -19,11 +20,47 @@ import (
 	"github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
-	"github.com/shirou/gopsutil/v4/net"
 )
 
 // readFileFunc, os.ReadFile fonksiyonunu mock'lamak için değişken
 var readFileFunc = os.ReadFile
+
+var systemCommandRunner = exec.NewCommandRunner()
+var publicIPHTTPClient = &http.Client{Timeout: 2 * time.Second}
+var publicIPLookupURL = "https://api.ipify.org"
+var dockerStatFunc = docker.GetDockerStat
+var nowFunc = time.Now
+
+var (
+	resourceMetricsMu          sync.RWMutex
+	resourceMetricsCache       models.SystemMetrics
+	resourceMetricsCheckedAt   time.Time
+	resourceMetricsInitialized bool
+
+	countMetricsMu          sync.RWMutex
+	countMetricsCache       models.SystemMetrics
+	countMetricsCheckedAt   time.Time
+	countMetricsInitialized bool
+
+	serverInfoMu          sync.RWMutex
+	serverInfoCache       models.ServerInfo
+	serverInfoCheckedAt   time.Time
+	serverInfoInitialized bool
+
+	publicIPMu         sync.RWMutex
+	publicIPCache      string
+	publicIPCheckedAt  time.Time
+	publicIPRefreshing bool
+)
+
+var (
+	resourceMetricsTTL = 2 * time.Second
+	countMetricsTTL    = 15 * time.Second
+	serverInfoTTL      = 30 * time.Second
+	publicIPTTL        = 30 * time.Minute
+)
+
+var serviceTypesForMetrics = []string{"postgres", "mariadb", "mongo", "redis"}
 
 // ReadCPUStats reads CPU statistics from /proc/stat
 func ReadCPUStats() (models.CPUStats, error) {
@@ -99,145 +136,123 @@ func formatBytesPerSecond(bytesPerSec float64) string {
 
 // GetSystemMetrics returns system metrics
 func GetSystemMetrics() models.SystemMetrics {
+	resourceMetrics := GetResourceMetrics()
+	countMetrics := GetCountMetrics()
+
+	resourceMetrics.DokkuVersion = countMetrics.DokkuVersion
+	resourceMetrics.ContainerCount = countMetrics.ContainerCount
+	resourceMetrics.ServiceCount = countMetrics.ServiceCount
+	resourceMetrics.AppCount = countMetrics.AppCount
+
+	return resourceMetrics
+}
+
+// GetServerInfo returns server information
+func GetServerInfo() models.ServerInfo {
+	if info, ok := getCachedServerInfo(); ok {
+		return info
+	}
+
+	info := loadServerInfo()
+	setCachedServerInfo(info)
+	return info
+}
+
+func GetResourceMetrics() models.SystemMetrics {
+	if metrics, ok := getCachedResourceMetrics(); ok {
+		return metrics
+	}
+
+	metrics := loadResourceMetrics()
+	setCachedResourceMetrics(metrics)
+	return metrics
+}
+
+func GetCountMetrics() models.SystemMetrics {
+	if metrics, ok := getCachedCountMetrics(); ok {
+		return metrics
+	}
+
+	metrics := loadCountMetrics()
+	setCachedCountMetrics(metrics)
+	return metrics
+}
+
+func loadResourceMetrics() models.SystemMetrics {
 	metrics := models.SystemMetrics{}
 
-	// CPU Kullanımı
-	if cpuPercent, err := cpu.Percent(time.Second, false); err == nil && len(cpuPercent) > 0 {
+	if cpuPercent, err := cpu.Percent(0, false); err == nil && len(cpuPercent) > 0 {
 		metrics.CPUUsage = math.Round(cpuPercent[0])
 	}
 
-	// CPU bilgileri - Tüm CPU'ların toplam core sayısı
 	if cpuInfo, err := cpu.Info(); err == nil {
 		var totalCores int32
-		for _, cpu := range cpuInfo {
-			totalCores += cpu.Cores
+		for _, currentCPU := range cpuInfo {
+			totalCores += currentCPU.Cores
 		}
 		metrics.CPUInfo = fmt.Sprintf("%d cores", totalCores)
 	}
 
-	// Load Average bilgileri
 	if loadAvg, err := load.Avg(); err == nil {
 		metrics.LoadAvg = fmt.Sprintf("%.2f %.2f %.2f", loadAvg.Load1, loadAvg.Load5, loadAvg.Load15)
 	}
 
-	// RAM Kullanımı
 	if memInfo, err := mem.VirtualMemory(); err == nil {
 		metrics.RAMUsage = math.Round(memInfo.UsedPercent)
 		metrics.RAMInfo = fmt.Sprintf("%.1f GB / %.1f GB", float64(memInfo.Used)/1024/1024/1024, float64(memInfo.Total)/1024/1024/1024)
 	}
 
-	// Swap Kullanımı
 	if swapInfo, err := mem.SwapMemory(); err == nil {
 		metrics.SwapUsage = math.Round(swapInfo.UsedPercent)
 		metrics.SwapInfo = fmt.Sprintf("%.1f GB / %.1f GB", float64(swapInfo.Used)/1024/1024/1024, float64(swapInfo.Total)/1024/1024/1024)
 	}
 
-	// Disk Kullanımı
 	if diskInfo, err := disk.Usage("/"); err == nil {
 		metrics.DiskUsage = math.Round(diskInfo.UsedPercent)
 		metrics.DiskInfo = fmt.Sprintf("%.1f GB / %.1f GB", float64(diskInfo.Used)/1024/1024/1024, float64(diskInfo.Total)/1024/1024/1024)
 	}
 
-	// Network Usage - Get current network stats
-	if netStats1, err := net.IOCounters(false); err == nil && len(netStats1) > 0 {
-		// Aggregate stats from all interfaces if not pernic
-		totalSent := netStats1[0].BytesSent
-		totalRecv := netStats1[0].BytesRecv
+	return metrics
+}
 
-		// Short delay to calculate rate
-		time.Sleep(500 * time.Millisecond)
-
-		// Get updated stats
-		if netStats2, err := net.IOCounters(false); err == nil && len(netStats2) > 0 {
-			// Calculate the rates in bytes/sec
-			sentDiff := netStats2[0].BytesSent - totalSent
-			recvDiff := netStats2[0].BytesRecv - totalRecv
-			elapsedSecs := 0.5 // 500ms = 0.5s
-
-			// Set the metrics
-			metrics.NetBytesSent = netStats2[0].BytesSent
-			metrics.NetBytesRecv = netStats2[0].BytesRecv
-			metrics.NetBytesSentRate = float64(sentDiff) / elapsedSecs
-			metrics.NetBytesRecvRate = float64(recvDiff) / elapsedSecs
-
-			// Get details for the main interface
-			if netStatsPerNic, err := net.IOCounters(true); err == nil && len(netStatsPerNic) > 0 {
-				// Find the most active interface (excluding loopback)
-				var mainInterface *net.IOCountersStat
-				maxBytes := uint64(0)
-
-				for i := range netStatsPerNic {
-					if netStatsPerNic[i].Name != "lo" && netStatsPerNic[i].Name != "lo0" {
-						totalBytes := netStatsPerNic[i].BytesSent + netStatsPerNic[i].BytesRecv
-						if totalBytes > maxBytes {
-							maxBytes = totalBytes
-							mainInterface = &netStatsPerNic[i]
-						}
-					}
-				}
-
-				if mainInterface != nil {
-					metrics.NetInterfaceName = mainInterface.Name
-					// Format human-readable network info
-					metrics.NetInfo = fmt.Sprintf(
-						"↓ %s  ↑ %s",
-						formatBytesPerSecond(metrics.NetBytesRecvRate),
-						formatBytesPerSecond(metrics.NetBytesSentRate),
-					)
-				}
-			}
-		}
+func loadCountMetrics() models.SystemMetrics {
+	metrics := models.SystemMetrics{
+		DokkuVersion: "Unknown",
 	}
 
-	// Container Sayısı
-	if containers, err := docker.GetDockerStat(); err == nil {
+	if containers, err := dockerStatFunc(); err == nil {
 		metrics.ContainerCount = len(containers)
 	}
 
-	// Service Sayısı
 	serviceCount := 0
-	for _, serviceType := range []string{"postgres", "mariadb", "mongo", "redis"} {
-		output, err := exec.NewCommandRunner().RunCommand("dokku", serviceType+":list")
+	for _, serviceType := range serviceTypesForMetrics {
+		output, err := systemCommandRunner.RunCommand("dokku", serviceType+":list")
 		if err != nil {
 			continue
 		}
-		lines := strings.Split(output, "\n")
-		for _, line := range lines {
-			if line != "" && !strings.Contains(line, "=====") {
-				serviceCount++
-			}
-		}
+		serviceCount += countDokkuEntries(output)
 	}
 	metrics.ServiceCount = serviceCount
 
-	// Uygulama Sayısı - Dokku özel olduğu için aynı kalıyor
-	output, err := exec.NewCommandRunner().RunCommand("dokku", "--quiet", "apps:list")
-	if err != nil {
-		metrics.AppCount = 0
-	} else {
-		// Handle empty output case
-		trimmedOutput := strings.TrimSpace(output)
-		if trimmedOutput == "" {
-			metrics.AppCount = 0
-		} else {
-			metrics.AppCount = len(strings.Split(trimmedOutput, "\n"))
-		}
+	if output, err := systemCommandRunner.RunCommand("dokku", "--quiet", "apps:list"); err == nil {
+		metrics.AppCount = countDokkuEntries(output)
+	}
+
+	if output, err := systemCommandRunner.RunCommand("dokku", "--version"); err == nil {
+		metrics.DokkuVersion = parseDokkuVersionOutput(output)
 	}
 
 	return metrics
 }
 
-// GetServerInfo returns server information
-func GetServerInfo() models.ServerInfo {
+func loadServerInfo() models.ServerInfo {
 	info := models.ServerInfo{}
 
-	// Host bilgileri
 	if hostInfo, err := host.Info(); err == nil {
 		info.Hostname = hostInfo.Hostname
 		info.OS = hostInfo.Platform + " " + hostInfo.PlatformVersion
 		info.Kernel = hostInfo.KernelVersion
 
-		// Uptime hesaplama
 		uptime := time.Duration(hostInfo.Uptime) * time.Second
 		days := int(uptime.Hours() / 24)
 		hours := int(uptime.Hours()) % 24
@@ -245,7 +260,6 @@ func GetServerInfo() models.ServerInfo {
 		info.Uptime = fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
 	}
 
-	// CPU bilgileri
 	if cpuInfo, err := cpu.Info(); err == nil {
 		var totalCores int32
 		for _, c := range cpuInfo {
@@ -254,13 +268,11 @@ func GetServerInfo() models.ServerInfo {
 		info.CPUCores = fmt.Sprintf("%d", totalCores)
 	}
 
-	// Memory bilgileri
 	if memInfo, err := mem.VirtualMemory(); err == nil {
 		info.MemoryTotal = fmt.Sprintf("%.1f GB", float64(memInfo.Total)/1024/1024/1024)
 		info.MemoryUsed = fmt.Sprintf("%.1f GB", float64(memInfo.Used)/1024/1024/1024)
 	}
 
-	// Disk bilgileri
 	if diskInfo, err := disk.Usage("/"); err == nil {
 		info.DiskUsage = fmt.Sprintf("Total: %.1f GB, Used: %.1f GB, Free: %.1f GB (%.1f%%)",
 			float64(diskInfo.Total)/1024/1024/1024,
@@ -270,16 +282,178 @@ func GetServerInfo() models.ServerInfo {
 		)
 	}
 
-	// Public IP - mevcut yöntem iyi çalıştığı için aynı kalabilir
-	resp, err := http.Get("https://api.ipify.org")
-	if err == nil {
-		defer resp.Body.Close()
-		if ip, err := io.ReadAll(resp.Body); err == nil {
-			info.PublicIP = string(ip)
-		}
-	}
+	info.PublicIP = getCachedPublicIP()
 
 	return info
+}
+
+func getCachedResourceMetrics() (models.SystemMetrics, bool) {
+	now := nowFunc()
+	resourceMetricsMu.RLock()
+	defer resourceMetricsMu.RUnlock()
+	if !resourceMetricsInitialized || now.Sub(resourceMetricsCheckedAt) >= resourceMetricsTTL {
+		return models.SystemMetrics{}, false
+	}
+	return resourceMetricsCache, true
+}
+
+func setCachedResourceMetrics(metrics models.SystemMetrics) {
+	resourceMetricsMu.Lock()
+	defer resourceMetricsMu.Unlock()
+	resourceMetricsCache = metrics
+	resourceMetricsCheckedAt = nowFunc()
+	resourceMetricsInitialized = true
+}
+
+func getCachedCountMetrics() (models.SystemMetrics, bool) {
+	now := nowFunc()
+	countMetricsMu.RLock()
+	defer countMetricsMu.RUnlock()
+	if !countMetricsInitialized || now.Sub(countMetricsCheckedAt) >= countMetricsTTL {
+		return models.SystemMetrics{}, false
+	}
+	return countMetricsCache, true
+}
+
+func setCachedCountMetrics(metrics models.SystemMetrics) {
+	countMetricsMu.Lock()
+	defer countMetricsMu.Unlock()
+	countMetricsCache = metrics
+	countMetricsCheckedAt = nowFunc()
+	countMetricsInitialized = true
+}
+
+func getCachedServerInfo() (models.ServerInfo, bool) {
+	now := nowFunc()
+	serverInfoMu.RLock()
+	defer serverInfoMu.RUnlock()
+	if !serverInfoInitialized || now.Sub(serverInfoCheckedAt) >= serverInfoTTL {
+		return models.ServerInfo{}, false
+	}
+	return serverInfoCache, true
+}
+
+func setCachedServerInfo(info models.ServerInfo) {
+	serverInfoMu.Lock()
+	defer serverInfoMu.Unlock()
+	serverInfoCache = info
+	serverInfoCheckedAt = nowFunc()
+	serverInfoInitialized = true
+}
+
+func getCachedPublicIP() string {
+	now := nowFunc()
+	publicIPMu.RLock()
+	value := publicIPCache
+	checkedAt := publicIPCheckedAt
+	refreshing := publicIPRefreshing
+	publicIPMu.RUnlock()
+
+	if value != "" && now.Sub(checkedAt) < publicIPTTL {
+		return value
+	}
+
+	if !refreshing {
+		refreshPublicIPAsync()
+	}
+
+	return value
+}
+
+func refreshPublicIPAsync() {
+	publicIPMu.Lock()
+	if publicIPRefreshing {
+		publicIPMu.Unlock()
+		return
+	}
+	publicIPRefreshing = true
+	publicIPMu.Unlock()
+
+	go func() {
+		publicIPMu.RLock()
+		ip := publicIPCache
+		publicIPMu.RUnlock()
+
+		refreshSucceeded := false
+		resp, err := publicIPHTTPClient.Get(publicIPLookupURL)
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+				if body, readErr := io.ReadAll(resp.Body); readErr == nil {
+					trimmedIP := strings.TrimSpace(string(body))
+					if trimmedIP != "" {
+						ip = trimmedIP
+						refreshSucceeded = true
+					}
+				}
+			}
+		}
+
+		publicIPMu.Lock()
+		if refreshSucceeded {
+			publicIPCache = ip
+			publicIPCheckedAt = nowFunc()
+		}
+		publicIPRefreshing = false
+		publicIPMu.Unlock()
+	}()
+}
+
+func countDokkuEntries(output string) int {
+	trimmedOutput := strings.TrimSpace(output)
+	if trimmedOutput == "" {
+		return 0
+	}
+
+	count := 0
+	for _, line := range strings.Split(trimmedOutput, "\n") {
+		if line == "" || strings.Contains(line, "=====") {
+			continue
+		}
+		count++
+	}
+
+	return count
+}
+
+func parseDokkuVersionOutput(output string) string {
+	parts := strings.Fields(output)
+	if len(parts) >= 3 {
+		return parts[2]
+	}
+
+	trimmedOutput := strings.TrimSpace(output)
+	if trimmedOutput == "" {
+		return "Unknown"
+	}
+
+	return trimmedOutput
+}
+
+func resetSystemCaches() {
+	resourceMetricsMu.Lock()
+	resourceMetricsCache = models.SystemMetrics{}
+	resourceMetricsCheckedAt = time.Time{}
+	resourceMetricsInitialized = false
+	resourceMetricsMu.Unlock()
+
+	countMetricsMu.Lock()
+	countMetricsCache = models.SystemMetrics{}
+	countMetricsCheckedAt = time.Time{}
+	countMetricsInitialized = false
+	countMetricsMu.Unlock()
+
+	serverInfoMu.Lock()
+	serverInfoCache = models.ServerInfo{}
+	serverInfoCheckedAt = time.Time{}
+	serverInfoInitialized = false
+	serverInfoMu.Unlock()
+
+	publicIPMu.Lock()
+	publicIPCache = ""
+	publicIPCheckedAt = time.Time{}
+	publicIPRefreshing = false
+	publicIPMu.Unlock()
 }
 
 // Contains checks if a string slice contains a specific string

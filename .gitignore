@@ -46,3 +46,4 @@ Thumbs.db
 # Local artifacts
 coverage.out
 dist/
+TASKS.md
