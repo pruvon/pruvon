@@ -651,6 +651,39 @@ Rules:
 - No complex animation.
 - `animate-bounce` and `animate-spin` are forbidden except actual loading spinners.
 
+## 10.1 Loading States (Async Actions)
+
+Any action triggered by a user click that results in an async API call must show a processing state to prevent duplicate submissions and provide clear feedback.
+
+**Rules:**
+- Use an Alpine.js boolean state (e.g., `isSaving`, `isProcessing`) scoped to the action.
+- Set the flag to `true` before the `fetch` call and reset to `false` in a `finally` block.
+- The primary action button must display a spinning loader icon and change its label to "Processing..." while active.
+- Disable the primary action button while processing.
+- Disable the cancel/close button (including the modal X button) while processing.
+- Apply `disabled:cursor-not-allowed disabled:opacity-50` to all disabled buttons during processing.
+
+**Spinner markup:**
+
+```html
+<svg class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+</svg>
+```
+
+**Button pattern:**
+
+```html
+<button
+  @click="isProcessing = true; fetch(...).finally(() => isProcessing = false)"
+  :disabled="isProcessing"
+  class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
+  <svg x-show="isProcessing" class="h-3.5 w-3.5 animate-spin" ...>...</svg>
+  <span x-text="isProcessing ? 'Processing...' : 'Save'"></span>
+</button>
+```
+
 ## 11. Screen-Specific Decisions
 
 ### Dashboard
@@ -761,5 +794,6 @@ Before finalizing any UI change, confirm all of the following:
 - [ ] A card was not used where Section + Divider would be better.
 - [ ] Table row actions are icon buttons, not colored squares.
 - [ ] Danger Zone is at the bottom in its own section.
+- [ ] Async actions (save, delete, confirm) show a processing spinner and disable buttons during the operation.
 
 Last updated: Pruvon UI v2 Design System

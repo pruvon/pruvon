@@ -71,10 +71,15 @@ if (!registerAppDetailFlashStore()) {
     hasRedirectPlugin: false,
     isLoading: false,
     showEnvModal: false,
+    showEditEnvModal: false,
     showEnvFileModal: false,
     showDeleteEnvModal: false,
     newEnvName: '',
     newEnvValue: '',
+    editEnvKey: '',
+    editEnvValue: '',
+    editEnvRestart: false,
+    isSavingEnvVar: false,
     restartApp: false,
     restartAppFromFile: false,
     restartOnDelete: false,
@@ -218,7 +223,8 @@ if (!registerAppDetailFlashStore()) {
     loadingSummary: false,
     errors: {
         newEnvName: '',
-        newEnvValue: ''
+        newEnvValue: '',
+        editEnvValue: ''
     },
     nginxSubTab: 'settings',
     showNginxLogs: false,
@@ -254,6 +260,46 @@ if (!registerAppDetailFlashStore()) {
         }
 
         return isValid;
+    },
+    async updateEnvVar() {
+        if (!this.editEnvValue.trim()) {
+            this.errors.editEnvValue = 'Value is required';
+            return;
+        }
+        this.errors.editEnvValue = '';
+        this.isSavingEnvVar = true;
+
+        try {
+            const response = await fetch(`/api/apps/{{.Name}}/config`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    key: this.editEnvKey,
+                    value: this.editEnvValue,
+                    restart: this.editEnvRestart
+                })
+            });
+            if (response.ok) {
+                this.showEditEnvModal = false;
+                this.editEnvKey = '';
+                this.editEnvValue = '';
+                this.editEnvRestart = false;
+                this.errors.editEnvValue = '';
+                this.configData = '';
+                await this.fetchData('config');
+                this.showFlashMessage('Environment variable updated successfully');
+            } else {
+                const error = await response.json();
+                this.errors.editEnvValue = error.error || 'Failed to update environment variable';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            this.errors.editEnvValue = 'Network error occurred';
+        } finally {
+            this.isSavingEnvVar = false;
+        }
     },
     async cachedFetch(url, forceRefresh = false, options = {}) {
         const cacheKey = url + JSON.stringify(options);

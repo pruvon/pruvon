@@ -66,6 +66,13 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
                                         </svg>
                                     </button>
+                                    <button @click="editEnvKey = env.key; editEnvValue = env.value; showEditEnvModal = true"
+                                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary"
+                                            title="Edit variable">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                        </svg>
+                                    </button>
                                     <button @click="deleteEnvVar = env.key; showDeleteEnvModal = true"
                                             class="inline-flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-status-danger"
                                             title="Delete variable">
@@ -183,6 +190,72 @@
                     }"
                             class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
                         Add
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showEditEnvModal" class="fixed inset-0 z-40" x-cloak>
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"></div>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md rounded-lg border border-border bg-card shadow-modal">
+                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                    <h3 class="text-sm font-semibold text-text-primary">Edit Environment Variable</h3>
+                    <button @click="showEditEnvModal = false; errors = {}; editEnvKey = ''; editEnvValue = ''; editEnvRestart = false;"
+                            :disabled="isSavingEnvVar"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-150 hover:bg-surface hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-4 px-5 py-4">
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Variable Name</label>
+                        <input type="text"
+                               x-model="editEnvKey"
+                               readonly
+                               class="h-8 rounded border border-border bg-surface px-3 font-mono text-[13px] text-text-secondary focus:outline-none cursor-not-allowed"
+                               placeholder="Variable name">
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-text-secondary">Value</label>
+                        <input type="text"
+                               x-model.trim="editEnvValue"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                               :class="{'border-status-danger text-status-danger focus:border-status-danger focus:ring-status-danger': errors.editEnvValue}"
+                               placeholder="Enter value">
+                        <p x-show="errors.editEnvValue" class="text-xs text-status-danger" x-text="errors.editEnvValue"></p>
+                    </div>
+
+                    <label class="flex items-start gap-3 rounded-md border border-border bg-surface px-3 py-3">
+                        <input type="checkbox"
+                               x-model="editEnvRestart"
+                               class="mt-0.5 h-4 w-4 rounded border-border text-brand-primary focus:ring-brand-primary">
+                        <span>
+                            <span class="block text-sm font-medium text-text-primary">Restart Application</span>
+                            <span class="block text-xs text-text-secondary">Redeploy after saving this value.</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
+                    <button @click="showEditEnvModal = false; errors = {}; editEnvKey = ''; editEnvValue = ''; editEnvRestart = false;"
+                            :disabled="isSavingEnvVar"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
+                        Cancel
+                    </button>
+                    <button @click="updateEnvVar()"
+                            :disabled="isSavingEnvVar"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
+                        <svg x-show="isSavingEnvVar" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isSavingEnvVar ? 'Processing...' : 'Save'"></span>
                     </button>
                 </div>
             </div>

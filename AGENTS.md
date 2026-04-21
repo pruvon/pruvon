@@ -102,6 +102,7 @@
 - Guard dynamic template expressions with safe fallbacks before using `.length`, indexing, `x-for`, or `.includes()`.
 - Only load xterm or ApexCharts when the page data uses `LoadXTerm` or `LoadApexCharts`.
 - For any UI, layout, Tailwind, or visual styling change, read `.agents/skills/pruvon-ui/SKILL.md` first and follow it as the source of truth.
+- When adding user-triggered async actions (save, delete, confirm) in templates, always follow the loading state pattern defined in the UI skill: show a processing spinner, change the button label to "Processing...", disable all modal buttons, and reset the flag in a `finally` block.
 
 ## Testing Expectations
 
