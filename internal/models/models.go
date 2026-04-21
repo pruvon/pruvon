@@ -205,7 +205,8 @@ type ServerInfo struct {
 }
 
 type DomainRequest struct {
-	Domain string `json:"domain"`
+	Domain    string `json:"domain"`
+	EnableSSL bool   `json:"enable_ssl"`
 }
 
 type DockerStats struct {

@@ -30,6 +30,9 @@
     showLetsEncryptModal: false,
     isProcessingLetsEncrypt: false,
     letsEncryptErrorMessage: null,
+    enableSSLForDomain: false,
+    isAddingDomain: false,
+    domainError: '',
     async fetchCustomConfigPath() {
         try {
             this.isLoadingConfigPath = true;
@@ -169,22 +172,46 @@
             return;
         }
 
+        this.isAddingDomain = true;
+        this.domainError = '';
+
         try {
+            const enableSSL = sslInfo?.active || (this.domains.length === 0 && this.enableSSLForDomain);
             const response = await fetch(`/api/apps/{{.Name}}/domains`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ domain: this.newDomain })
+                body: JSON.stringify({
+                    domain: this.newDomain,
+                    enable_ssl: enableSSL
+                })
             });
+
+            const data = await response.json();
 
             if (response.ok) {
                 this.showDomainModal = false;
                 this.newDomain = '';
+                this.enableSSLForDomain = false;
                 await this.fetchDomains();
+                if (data.ssl && data.ssl.success) {
+                    Alpine.store('flash').show(data.ssl.message || 'SSL certificate enabled successfully', 'success');
+                    if (typeof fetchData === 'function') {
+                        fetchData('nginx');
+                    }
+                } else if (data.ssl && !data.ssl.success) {
+                    const errorText = data.ssl.message || data.ssl.error || 'SSL could not be enabled';
+                    Alpine.store('flash').show(errorText, 'warning');
+                }
+            } else {
+                this.domainError = data.error || 'Failed to add domain';
             }
         } catch (error) {
             console.error('Error adding domain:', error);
+            this.domainError = 'Failed to add domain';
+        } finally {
+            this.isAddingDomain = false;
         }
     },
     async deleteDomain(domain) {
@@ -809,24 +836,43 @@
                         </svg>
                     </button>
                 </div>
-                <div class="px-5 py-4">
+                <div class="px-5 py-4 space-y-3">
                     <div class="flex flex-col gap-1.5">
                         <label class="text-xs font-medium text-text-secondary">Domain Name</label>
                         <input type="text"
                                x-model="newDomain"
                                placeholder="e.g., example.com"
-                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                               :disabled="isAddingDomain"
+                               class="h-8 rounded border border-border bg-card px-3 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary disabled:cursor-not-allowed disabled:opacity-50">
                     </div>
+                    <template x-if="domains.length === 0 && !sslInfo?.active">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox"
+                                   x-model="enableSSLForDomain"
+                                   :disabled="isAddingDomain"
+                                   class="h-3.5 w-3.5 rounded border-border text-brand-primary focus:ring-brand-primary disabled:cursor-not-allowed disabled:opacity-50">
+                            <span class="text-xs text-text-secondary">Enable Let's Encrypt SSL for this domain</span>
+                        </label>
+                    </template>
+                    <template x-if="sslInfo?.active">
+                        <p class="text-xs text-text-secondary">Let's Encrypt is active. SSL will be automatically renewed for the new domain.</p>
+                    </template>
+                    <p x-show="domainError" class="text-xs text-status-danger" x-text="domainError"></p>
                 </div>
                 <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
                     <button @click="showDomainModal = false"
-                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                            :disabled="isAddingDomain"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
                         Cancel
                     </button>
                     <button @click="addDomain()"
-                            :disabled="!newDomain"
+                            :disabled="!newDomain || isAddingDomain"
                             class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
-                        Add Domain
+                        <svg x-show="isAddingDomain" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isAddingDomain ? 'Processing...' : 'Add Domain'"></span>
                     </button>
                 </div>
             </div>

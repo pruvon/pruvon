@@ -433,6 +433,27 @@ func handleAppDomainAdd(c *fiber.Ctx) error {
 			"error": fmt.Sprintf("Domain eklenemedi: %v", err),
 		})
 	}
+
+	if req.EnableSSL {
+		sslResult, sslErr := appService.EnableSSL(appName)
+		if sslErr != nil {
+			return c.JSON(fiber.Map{
+				"output": output,
+				"ssl": fiber.Map{
+					"success": false,
+					"error":   sslErr.Error(),
+				},
+			})
+		}
+		if !sslResult.Success {
+			return c.JSON(fiber.Map{
+				"output": output,
+				"ssl":    sslResult,
+			})
+		}
+		return c.JSON(fiber.Map{"output": output, "ssl": sslResult})
+	}
+
 	return c.JSON(fiber.Map{"output": output})
 }
 
