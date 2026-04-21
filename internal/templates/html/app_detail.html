@@ -1184,7 +1184,7 @@ if (!registerAppDetailFlashStore()) {
 
             this.parsedEnvVars.push({
                 key: key.trim(),
-                value: value
+                value: value.replace(/\\n/g, '\n')
             });
         });
 
@@ -1259,6 +1259,23 @@ if (!registerAppDetailFlashStore()) {
             console.error('Error:', err);
             this.envFileError = 'Network error occurred';
         }
+    },
+    downloadEnvVars() {
+        if (!this.envVars || this.envVars.length === 0) {
+            Alpine.store('flash').show('No environment variables to download', 'error');
+            return;
+        }
+
+        const lines = this.envVars.map(env => `${env.key}=${env.value.replace(/\n/g, '\\n')}`);
+        const content = lines.join('\n');
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '{{.Name}}.env';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 }"
     x-init="$nextTick(() => {
