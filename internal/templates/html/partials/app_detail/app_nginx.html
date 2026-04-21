@@ -18,8 +18,11 @@
     newRedirect: { source: '', destination: '' },
     showDeleteRedirectModal: false,
     deletingRedirect: null,
+    isDeletingRedirect: false,
     showDeleteDomainModal: false,
     deletingDomain: null,
+    isDeletingDomain: false,
+    isAddingRedirect: false,
     customConfigPath: '',
     isLoadingConfigPath: false,
     isSavingConfigPath: false,
@@ -215,6 +218,7 @@
         }
     },
     async deleteDomain(domain) {
+        this.isDeletingDomain = true;
         try {
             const response = await fetch(`/api/apps/{{.Name}}/domains/${domain}`, {
                 method: 'DELETE'
@@ -227,6 +231,8 @@
             }
         } catch (error) {
             console.error('Error deleting domain:', error);
+        } finally {
+            this.isDeletingDomain = false;
         }
     },
     async addRedirect() {
@@ -234,6 +240,7 @@
             return;
         }
 
+        this.isAddingRedirect = true;
         try {
             const response = await fetch(`/api/apps/{{.Name}}/redirects`, {
                 method: 'POST',
@@ -248,9 +255,12 @@
             }
         } catch (error) {
             console.error('Error adding redirect:', error);
+        } finally {
+            this.isAddingRedirect = false;
         }
     },
     async deleteRedirect(redirect) {
+        this.isDeletingRedirect = true;
         try {
             const response = await fetch(`/api/apps/{{.Name}}/redirects`, {
                 method: 'DELETE',
@@ -265,6 +275,8 @@
             }
         } catch (error) {
             console.error('Error deleting redirect:', error);
+        } finally {
+            this.isDeletingRedirect = false;
         }
     },
     init() {
@@ -897,12 +909,18 @@
                 </div>
                 <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
                     <button @click="showDeleteDomainModal = false"
-                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                            :disabled="isDeletingDomain"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
                         Cancel
                     </button>
                     <button @click="deleteDomain(deletingDomain)"
-                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
-                        Delete
+                            :disabled="isDeletingDomain"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530] disabled:cursor-not-allowed disabled:opacity-50">
+                        <svg x-show="isDeletingDomain" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isDeletingDomain ? 'Processing...' : 'Delete'"></span>
                     </button>
                 </div>
             </div>
@@ -1010,13 +1028,18 @@
                 </div>
                 <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
                     <button @click="showRedirectModal = false"
-                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                            :disabled="isAddingRedirect"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
                         Cancel
                     </button>
                     <button @click="addRedirect()"
-                            :disabled="!newRedirect.source || !newRedirect.destination || newRedirect.source === newRedirect.destination"
+                            :disabled="!newRedirect.source || !newRedirect.destination || newRedirect.source === newRedirect.destination || isAddingRedirect"
                             class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
-                        Add Redirect
+                        <svg x-show="isAddingRedirect" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isAddingRedirect ? 'Processing...' : 'Add Redirect'"></span>
                     </button>
                 </div>
             </div>
@@ -1042,12 +1065,18 @@
                 </div>
                 <div class="flex items-center justify-end gap-2 border-t border-border-subtle px-5 py-4">
                     <button @click="showDeleteRedirectModal = false"
-                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                            :disabled="isDeletingRedirect"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
                         Cancel
                     </button>
                     <button @click="deleteRedirect(deletingRedirect)"
-                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530]">
-                        Delete
+                            :disabled="isDeletingRedirect"
+                            class="inline-flex h-8 items-center gap-1.5 rounded border border-status-danger bg-status-danger px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#833530] disabled:cursor-not-allowed disabled:opacity-50">
+                        <svg x-show="isDeletingRedirect" class="h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span x-text="isDeletingRedirect ? 'Processing...' : 'Delete'"></span>
                     </button>
                 </div>
             </div>
