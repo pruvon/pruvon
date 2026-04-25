@@ -109,7 +109,7 @@
                                                         class="flex w-full items-center gap-2.5 px-4 py-2 text-left transition-colors duration-100 hover:bg-surface">
                                                     <span class="mt-0.5 h-2 w-2 shrink-0 rounded-full" :class="auditCategoryDotColor(event.category)"></span>
                                                     <span class="inline-flex shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-2xs font-medium" :class="auditCategoryStyle(event.category)" x-text="event.category"></span>
-                                                    <span class="shrink-0 text-sm font-medium text-text-primary truncate max-w-[40%]" x-text="event.action"></span>
+                                                    <span class="shrink-0 text-sm font-medium text-text-primary truncate max-w-[40%]" x-text="auditEventTitle(event)"></span>
                                                     <template x-if="event.status && event.status !== 'success'">
                                                         <span class="inline-flex shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-medium"
                                                               :class="{
@@ -189,7 +189,7 @@
                         <template x-if="auditEventDetail?.category">
                             <span class="inline-flex shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-2xs font-medium" :class="auditCategoryStyle(auditEventDetail?.category)" x-text="auditEventDetail?.category"></span>
                         </template>
-                        <h2 class="text-sm font-semibold text-text-primary" x-text="auditEventDetail?.action || 'Event Detail'"></h2>
+                        <h2 class="text-sm font-semibold text-text-primary" x-text="auditEventTitle(auditEventDetail)"></h2>
                     </div>
                     <p class="mt-0.5 text-xs text-text-secondary" x-text="auditEventDetail?.message || ''"></p>
                 </div>

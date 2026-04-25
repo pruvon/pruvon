@@ -296,6 +296,21 @@
             }
             return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
         }
+
+        function auditEventTitle(event) {
+            if (!event) return '-';
+            const category = event.category || '';
+            if (category === 'deploy') {
+                return event.action || event.status || '-';
+            }
+            if (category === 'command') {
+                return (event.meta && event.meta.command) || event.action || '-';
+            }
+            if (category === 'config') {
+                return (event.meta && (event.meta.triggered_by_command || event.meta.command)) || event.action || '-';
+            }
+            return event.action || '-';
+        }
     </script>
 
     {{if .FlashMessage}}

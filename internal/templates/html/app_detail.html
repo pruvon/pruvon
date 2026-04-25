@@ -140,7 +140,10 @@ if (!registerAppDetailFlashStore()) {
                 (e.action || '').toLowerCase().includes(q) ||
                 (e.category || '').toLowerCase().includes(q) ||
                 (e.actor_label || '').toLowerCase().includes(q) ||
-                (e.message || '').toLowerCase().includes(q)
+                (e.message || '').toLowerCase().includes(q) ||
+                (e.status || '').toLowerCase().includes(q) ||
+                ((e.meta && e.meta.command) || '').toLowerCase().includes(q) ||
+                ((e.meta && e.meta.triggered_by_command) || '').toLowerCase().includes(q)
             );
         }
         if (this.auditCategoryFilter !== 'all') {
