@@ -179,7 +179,10 @@ if (!registerAppDetailFlashStore()) {
         const yesterdayStr = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}`;
         let currentGroup = null;
         for (const event of events) {
-            const d = new Date(event.ts || event.created_at);
+            const ts = event.ts || event.created_at;
+            if (!ts) continue;
+            const d = new Date(ts);
+            if (Number.isNaN(d.getTime())) continue;
             const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
             let label;
             if (dateStr === todayStr) label = 'Today';

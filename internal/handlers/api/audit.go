@@ -1,12 +1,14 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/pruvon/pruvon/internal/dokku"
+	internallog "github.com/pruvon/pruvon/internal/log"
 	"github.com/pruvon/pruvon/internal/middleware"
 	"github.com/pruvon/pruvon/internal/models"
 	"github.com/pruvon/pruvon/internal/templates"
@@ -30,6 +32,7 @@ func SetupAuditRoutes(app *fiber.App) {
 
 	app.Get("/api/services/:type/:name/audit", handleServiceAudit)
 	app.Get("/api/services/:type/:name/audit/events/:id", handleServiceAuditEvent)
+	app.Get("/api/services/:type/:name/audit/export", handleServiceAuditExport)
 }
 
 func handleAuditOverview(c *fiber.Ctx) error {
@@ -293,10 +296,14 @@ func handleServiceAudit(c *fiber.Ctx) error {
 	}
 
 	result := models.ServiceAuditDetails{
-		Enabled:    installed,
-		LinkedApps: []string{},
-		Recent:     []models.AuditEvent{},
-		Deploys:    []models.AuditEvent{},
+		Enabled:       installed,
+		Timeline:      []models.AuditEvent{},
+		Deploys:       []models.AuditEvent{},
+		DeployFlows:   []models.AuditDeployFlow{},
+		ConfigChanges: []models.AuditEvent{},
+		DomainChanges: []models.AuditEvent{},
+		PortChanges:   []models.AuditEvent{},
+		ProblemEvents: []models.AuditEvent{},
 	}
 
 	if !installed {
@@ -310,30 +317,85 @@ func handleServiceAudit(c *fiber.Ctx) error {
 		})
 	}
 
-	result.LinkedApps = linkedApps
-	if len(linkedApps) == 0 {
-		return c.JSON(result)
+	// Filter linked apps to those the current user is allowed to access
+	_, authType := getSessionIdentity(c)
+	var allowedApps map[string]bool
+	if authType != "admin" {
+		var appErr error
+		allowedApps, _, appErr = getAllowedAppMapForCurrentUser(c)
+		if appErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": fmt.Sprintf("Allowed app list could not be resolved: %v", appErr),
+			})
+		}
+		filtered := make([]string, 0)
+		for _, app := range linkedApps {
+			if allowedApps[app] {
+				filtered = append(filtered, app)
+			}
+		}
+		linkedApps = filtered
 	}
 
-	recent, err := getAuditTimelineForApps(linkedApps, 24, 12)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Service audit activity could not be retrieved: %v", err),
-		})
+	var timeline []models.AuditEvent
+	if len(linkedApps) > 0 {
+		timeline, err = getAuditTimelineForApps(linkedApps, 250, 0)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": fmt.Sprintf("Service audit timeline could not be retrieved: %v", err),
+			})
+		}
 	}
 
-	deploys, err := getAuditDeploysForApps(linkedApps, 10, 8)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Service deploy activity could not be retrieved: %v", err),
-		})
+	// Include host-level events that mention this service
+	hostEvents, hostErr := dokku.GetAuditRecent(commandRunner, 250, "", "", "", "")
+	if hostErr == nil {
+		hostEvents = filterAuditEventsForService(hostEvents, svcName)
+		// For non-admin users, drop host events that reference unauthorized apps
+		if authType != "admin" {
+			filteredHost := make([]models.AuditEvent, 0, len(hostEvents))
+			for _, event := range hostEvents {
+				if event.App != "" && !allowedApps[event.App] {
+					continue
+				}
+				filteredHost = append(filteredHost, event)
+			}
+			hostEvents = filteredHost
+		}
+		timeline = mergeAndSortAuditEvents(timeline, hostEvents)
+	} else {
+		internallog.LogWarning(fmt.Sprintf("failed to load host audit events for service %s: %v", svcName, hostErr))
 	}
 
-	recent = enrichAuditEventsWithTimeline(recent, recent)
-	deploys = enrichAuditEventsWithTimeline(deploys, recent)
+	// Get deploys from linked apps and filter to service-related
+	var deploys []models.AuditEvent
+	if len(linkedApps) > 0 {
+		var deployErr error
+		deploys, deployErr = getAuditDeploysForApps(linkedApps, 12, 0)
+		if deployErr == nil {
+			deploys = filterAuditEventsForService(deploys, svcName)
+		} else {
+			internallog.LogWarning(fmt.Sprintf("failed to load deploy events for service %s: %v", svcName, deployErr))
+		}
+	}
 
-	result.Recent = recent
+	timeline = enrichAuditEventsWithTimeline(timeline, timeline)
+	deploys = enrichAuditEventsWithTimeline(deploys, timeline)
+
+	if timeline == nil {
+		timeline = []models.AuditEvent{}
+	}
+	if deploys == nil {
+		deploys = []models.AuditEvent{}
+	}
+
+	result.Timeline = timeline
 	result.Deploys = deploys
+	result.DeployFlows = dokku.GroupAuditEventsByCorrelation(filterAuditEventsWithCorrelation(timeline))
+	result.ConfigChanges = filterAuditEventsByCategory(timeline, "config", 12)
+	result.DomainChanges = filterAuditEventsByCategory(timeline, "domains", 12)
+	result.PortChanges = filterAuditEventsByCategory(timeline, "ports", 12)
+	result.ProblemEvents = filterProblemAuditEvents(timeline, 12)
 
 	return c.JSON(result)
 }
@@ -362,6 +424,24 @@ func handleServiceAuditEvent(c *fiber.Ctx) error {
 		})
 	}
 
+	// Filter linked apps to those the current user is allowed to access
+	_, authType := getSessionIdentity(c)
+	if authType != "admin" {
+		allowedApps, _, appErr := getAllowedAppMapForCurrentUser(c)
+		if appErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": fmt.Sprintf("Allowed app list could not be resolved: %v", appErr),
+			})
+		}
+		filtered := make([]string, 0)
+		for _, app := range linkedApps {
+			if allowedApps[app] {
+				filtered = append(filtered, app)
+			}
+		}
+		linkedApps = filtered
+	}
+
 	event, err := dokku.GetAuditEvent(commandRunner, eventID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -370,10 +450,15 @@ func handleServiceAuditEvent(c *fiber.Ctx) error {
 	}
 
 	allowed := false
-	for _, appName := range linkedApps {
-		if event.App == appName {
-			allowed = true
-			break
+	if event.App == "" {
+		// Host-level event: allow if it is related to this service
+		allowed = isEventRelatedToService(event, svcName)
+	} else {
+		for _, appName := range linkedApps {
+			if event.App == appName {
+				allowed = true
+				break
+			}
 		}
 	}
 
@@ -383,9 +468,149 @@ func handleServiceAuditEvent(c *fiber.Ctx) error {
 		})
 	}
 
-	event = enrichAuditEventWithAppTimeline(event, event.App, 250)
+	var timelineApp string
+	if event.App != "" {
+		timelineApp = event.App
+	}
+	event = enrichAuditEventWithAppTimeline(event, timelineApp, 250)
 
 	return c.JSON(event)
+}
+
+func handleServiceAuditExport(c *fiber.Ctx) error {
+	svcType := c.Params("type")
+	svcName := c.Params("name")
+
+	installed, err := dokku.IsPluginInstalledWithRunner(commandRunner, "audit")
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Audit plugin status could not be checked: %v", err),
+		})
+	}
+	if !installed {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Audit plugin is not installed",
+		})
+	}
+
+	linkedApps, err := dokku.GetLinkedApps(commandRunner, svcType, svcName)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Linked applications could not be retrieved: %v", err),
+		})
+	}
+
+	_, authType := getSessionIdentity(c)
+	var allowedApps map[string]bool
+	if authType != "admin" {
+		var err error
+		allowedApps, _, err = getAllowedAppMapForCurrentUser(c)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": fmt.Sprintf("Allowed app list could not be resolved: %v", err),
+			})
+		}
+		filtered := make([]string, 0)
+		for _, app := range linkedApps {
+			if allowedApps[app] {
+				filtered = append(filtered, app)
+			}
+		}
+		linkedApps = filtered
+	}
+
+	format := strings.ToLower(strings.TrimSpace(c.Query("format", "json")))
+	if format != "json" && format != "jsonl" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Unsupported export format",
+		})
+	}
+
+	allEvents := make([]models.AuditEvent, 0)
+	seen := make(map[int]bool)
+	var lastErr error
+	for _, appName := range linkedApps {
+		content, err := dokku.ExportAuditEvents(commandRunner, "json", appName, c.Query("since"), c.Query("until"))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var events []models.AuditEvent
+		if jsonErr := json.Unmarshal([]byte(content), &events); jsonErr != nil {
+			lastErr = jsonErr
+			continue
+		}
+		for _, event := range events {
+			if seen[event.ID] {
+				continue
+			}
+			if isEventRelatedToService(event, svcName) {
+				seen[event.ID] = true
+				allEvents = append(allEvents, event)
+			}
+		}
+	}
+
+	// Also include host-level events related to this service
+	hostExport, hostErr := dokku.ExportAuditEvents(commandRunner, "json", "", c.Query("since"), c.Query("until"))
+	if hostErr == nil {
+		var hostEvents []models.AuditEvent
+		if jsonErr := json.Unmarshal([]byte(hostExport), &hostEvents); jsonErr == nil {
+			for _, event := range hostEvents {
+				if seen[event.ID] {
+					continue
+				}
+				if !isEventRelatedToService(event, svcName) {
+					continue
+				}
+				// For non-admin users, drop host events that reference unauthorized apps
+				if authType != "admin" && event.App != "" && !allowedApps[event.App] {
+					continue
+				}
+				seen[event.ID] = true
+				allEvents = append(allEvents, event)
+			}
+		}
+	}
+
+	if len(allEvents) == 0 && len(linkedApps) > 0 && lastErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Audit export could not be retrieved: %v", lastErr),
+		})
+	}
+
+	sort.Slice(allEvents, func(i, j int) bool {
+		left := auditEventSortKey(allEvents[i])
+		right := auditEventSortKey(allEvents[j])
+		if left == right {
+			return allEvents[i].ID > allEvents[j].ID
+		}
+		return left > right
+	})
+
+	var output []byte
+	if format == "jsonl" {
+		lines := make([]string, 0, len(allEvents))
+		for _, event := range allEvents {
+			line, err := json.Marshal(event)
+			if err != nil {
+				continue
+			}
+			lines = append(lines, string(line))
+		}
+		output = []byte(strings.Join(lines, "\n"))
+		c.Set(fiber.HeaderContentType, "application/x-ndjson")
+	} else {
+		output, err = json.MarshalIndent(allEvents, "", "  ")
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": fmt.Sprintf("Export could not be created: %v", err),
+			})
+		}
+		c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	}
+
+	return c.Send(output)
 }
 
 func handleAuditExport(c *fiber.Ctx) error {
@@ -827,4 +1052,73 @@ func filterAuditEventsWithCorrelation(events []models.AuditEvent) []models.Audit
 	}
 
 	return filtered
+}
+
+func filterAuditEventsForService(events []models.AuditEvent, svcName string) []models.AuditEvent {
+	filtered := make([]models.AuditEvent, 0)
+	for _, event := range events {
+		if isEventRelatedToService(event, svcName) {
+			filtered = append(filtered, event)
+		}
+	}
+	return filtered
+}
+
+func isEventRelatedToService(event models.AuditEvent, svcName string) bool {
+	lowerSvcName := strings.ToLower(svcName)
+	if containsWholeWord(strings.ToLower(event.Message), lowerSvcName) {
+		return true
+	}
+	if cmd, ok := event.Meta["triggered_by_command"].(string); ok {
+		if containsWholeWord(strings.ToLower(cmd), lowerSvcName) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsWholeWord(text, word string) bool {
+	if word == "" {
+		return false
+	}
+	idx := strings.Index(text, word)
+	for idx != -1 {
+		before := idx == 0 || !isWordChar(text[idx-1])
+		after := idx+len(word) == len(text) || !isWordChar(text[idx+len(word)])
+		if before && after {
+			return true
+		}
+		next := strings.Index(text[idx+1:], word)
+		if next == -1 {
+			break
+		}
+		idx += 1 + next
+	}
+	return false
+}
+
+func isWordChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'
+}
+
+func mergeAndSortAuditEvents(a, b []models.AuditEvent) []models.AuditEvent {
+	merged := appendAuditEvents(a, b)
+	seen := make(map[int]bool)
+	unique := make([]models.AuditEvent, 0, len(merged))
+	for _, event := range merged {
+		if seen[event.ID] {
+			continue
+		}
+		seen[event.ID] = true
+		unique = append(unique, event)
+	}
+	sort.Slice(unique, func(i, j int) bool {
+		left := auditEventSortKey(unique[i])
+		right := auditEventSortKey(unique[j])
+		if left == right {
+			return unique[i].ID > unique[j].ID
+		}
+		return left > right
+	})
+	return unique
 }

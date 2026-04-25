@@ -74,8 +74,12 @@ type AppAuditDetails struct {
 }
 
 type ServiceAuditDetails struct {
-	Enabled    bool         `json:"enabled"`
-	LinkedApps []string     `json:"linked_apps"`
-	Recent     []AuditEvent `json:"recent"`
-	Deploys    []AuditEvent `json:"deploys"`
+	Enabled       bool              `json:"enabled"`
+	Timeline      []AuditEvent      `json:"timeline"`
+	Deploys       []AuditEvent      `json:"deploys"`
+	DeployFlows   []AuditDeployFlow `json:"deploy_flows"`
+	ConfigChanges []AuditEvent      `json:"config_changes"`
+	DomainChanges []AuditEvent      `json:"domain_changes"`
+	PortChanges   []AuditEvent      `json:"port_changes"`
+	ProblemEvents []AuditEvent      `json:"problem_events"`
 }

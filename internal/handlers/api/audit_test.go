@@ -291,17 +291,20 @@ func TestHandleServiceAuditReturnsLinkedAppActivity(t *testing.T) {
 	runner := &dokku.MockCommandRunner{
 		OutputMap: map[string]string{
 			"dokku plugin:list":        "=====> Installed plugins\naudit 0.2.0\n",
+			"dokku apps:list":          "=====> My Apps\nallowed-app\nlinked-app\n",
 			"dokku postgres:links db1": "=====> db1 links\nallowed-app\nlinked-app\n",
-			"dokku audit:timeline allowed-app --limit 24 --format json":           `[{"id":11,"ts":"2026-04-10T12:00:00Z","app":"allowed-app","category":"config","action":"set","status":"success","classification":"","actor_label":"sudo-user:emre","message":"config updated"}]`,
-			"dokku audit:timeline linked-app --limit 24 --format json":            `[{"id":13,"ts":"2026-04-10T12:02:00Z","app":"linked-app","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_label":"sudo-user:emre","message":"deploy finished"}]`,
-			"dokku audit:last-deploys --limit 10 --format json --app allowed-app": `[]`,
-			"dokku audit:last-deploys --limit 10 --format json --app linked-app":  `[{"id":21,"ts":"2026-04-10T11:50:00Z","app":"linked-app","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_label":"sudo-user:emre","message":"deploy finished"}]`,
+			"dokku audit:timeline allowed-app --limit 250 --format json":          `[{"id":11,"ts":"2026-04-10T12:00:00Z","app":"allowed-app","category":"service","action":"link","status":"success","classification":"","actor_label":"sudo-user:emre","message":"service postgres db1 linked"}]`,
+			"dokku audit:timeline linked-app --limit 250 --format json":           `[{"id":13,"ts":"2026-04-10T12:02:00Z","app":"linked-app","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_label":"sudo-user:emre","message":"deploy finished after linking db1"}]`,
+			"dokku audit:last-deploys --limit 12 --format json --app allowed-app": `[]`,
+			"dokku audit:last-deploys --limit 12 --format json --app linked-app":  `[{"id":21,"ts":"2026-04-10T11:50:00Z","app":"linked-app","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_label":"sudo-user:emre","message":"deploy finished after linking db1"}]`,
+			"dokku audit:recent --limit 250 --format json":                        `[{"id":31,"ts":"2026-04-10T10:00:00Z","app":"","category":"service","action":"create","status":"success","actor_label":"sudo-user:emre","message":"created postgres service db1"}]`,
 		},
 		ErrorMap: map[string]error{},
 	}
 
 	app := newAuditTestApp(t, githubAuditConfig(config.GitHubUser{
 		Username: "octo",
+		Apps:     []string{"allowed-app", "linked-app"},
 		Services: map[string][]string{
 			"postgres": {"db1"},
 		},
@@ -316,11 +319,11 @@ func TestHandleServiceAuditReturnsLinkedAppActivity(t *testing.T) {
 	decodeAuditResponse(t, resp, &details)
 
 	require.True(t, details.Enabled)
-	assert.Equal(t, []string{"allowed-app", "linked-app"}, details.LinkedApps)
-	assert.Len(t, details.Recent, 2)
+	assert.Len(t, details.Timeline, 3)
 	assert.Len(t, details.Deploys, 1)
-	assert.Equal(t, "linked-app", details.Recent[0].App)
-	assert.Equal(t, "allowed-app", details.Recent[1].App)
+	assert.Equal(t, "linked-app", details.Timeline[0].App)
+	assert.Equal(t, "allowed-app", details.Timeline[1].App)
+	assert.Equal(t, "", details.Timeline[2].App)
 	assert.Equal(t, "linked-app", details.Deploys[0].App)
 }
 

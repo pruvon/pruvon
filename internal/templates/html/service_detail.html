@@ -103,7 +103,7 @@
                             :class="activeTab === 'audit' ? 'border-l-2 border-brand-primary bg-brand-subtle text-brand-primary font-medium' : 'border-l-2 border-transparent text-text-secondary hover:text-text-primary'"
                             class="flex w-full items-center px-2.5 py-1 text-left text-[13px] transition-colors duration-100">
                         <span>Audit</span>
-                        <span x-show="isAuditLoading" class="ml-auto">
+                        <span x-show="loadingAudit" class="ml-auto">
                             <svg class="h-3.5 w-3.5 animate-spin text-text-tertiary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -761,91 +761,247 @@
 
                 <template x-if="activeTab === 'audit'">
                     <div class="space-y-4">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h3 class="text-sm font-semibold text-text-primary">Service Audit</h3>
-                                <p class="mt-0.5 text-xs text-text-secondary">Derived audit activity from applications linked to this service.</p>
-                            </div>
-                            <button @click="fetchAudit(true)"
-                                    :disabled="isAuditLoading"
-                                    class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:opacity-50">
-                                <span x-text="isAuditLoading ? 'Refreshing...' : 'Refresh'"></span>
-                            </button>
+                        <div>
+                            <h3 class="text-sm font-semibold text-text-primary">Activity</h3>
+                            <p class="mt-0.5 text-xs text-text-secondary">Operational history and audit trail for this service.</p>
                         </div>
 
-                        <template x-if="!audit.enabled">
-                            <div class="rounded-md border border-border bg-card p-4 text-sm text-text-secondary">
-                                dokku-audit is not installed on this host.
+                        <template x-if="loadingAudit && !auditLoaded">
+                            <div class="space-y-3">
+                                <div class="h-8 animate-pulse rounded border border-border bg-surface"></div>
+                                <div class="h-64 animate-pulse rounded-md border border-border bg-surface"></div>
                             </div>
                         </template>
 
-                        <template x-if="audit.enabled">
+                        <template x-if="!loadingAudit || auditLoaded">
                             <div class="space-y-4">
-                                <div class="rounded-md border border-border bg-card p-4">
-                                    <h4 class="mb-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">Linked Apps</h4>
-                                    <div class="flex flex-wrap gap-2">
-                                        <template x-if="!audit.linked_apps?.length">
-                                            <p class="text-sm text-text-secondary">No linked applications for this service.</p>
+                                <template x-if="!audit.enabled">
+                                    <div class="rounded-md border border-border bg-card p-6 text-center">
+                                        <p class="text-sm text-text-secondary">dokku-audit is not installed on this host.</p>
+                                        <p class="mt-1 text-xs text-text-tertiary">Install the plugin to enable activity tracking for this service.</p>
+                                    </div>
+                                </template>
+
+                                <template x-if="audit.enabled">
+                                    <div class="space-y-3">
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <div class="relative">
+                                                    <svg class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                                                    <input type="text"
+                                                           x-model="auditSearchQuery"
+                                                           @input="auditCurrentPage = 1"
+                                                           placeholder="Search events..."
+                                                           class="h-8 w-48 rounded border border-border bg-card pl-8 pr-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary transition-colors duration-150">
+                                                </div>
+                                                <div class="relative">
+                                                    <select x-model="auditCategoryFilter"
+                                                            @change="auditCurrentPage = 1"
+                                                            class="h-8 appearance-none rounded border border-border bg-card pl-2.5 pr-7 text-sm font-sans text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary transition-colors duration-150">
+                                                        <option value="all">All categories</option>
+                                                        <template x-for="cat in availableAuditCategories" :key="cat">
+                                                            <option :value="cat" x-text="cat"></option>
+                                                        </template>
+                                                    </select>
+                                                    <svg class="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                                                </div>
+                                                <div class="relative">
+                                                    <select x-model="auditStatusFilter"
+                                                            @change="auditCurrentPage = 1"
+                                                            class="h-8 appearance-none rounded border border-border bg-card pl-2.5 pr-7 text-sm font-sans text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary transition-colors duration-150">
+                                                        <option value="all">All statuses</option>
+                                                        <template x-for="st in availableAuditStatuses" :key="st">
+                                                            <option :value="st" x-text="st"></option>
+                                                        </template>
+                                                    </select>
+                                                    <svg class="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <button @click="fetchAudit(true)"
+                                                        :disabled="loadingAudit"
+                                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:opacity-50">
+                                                    <svg class="h-3.5 w-3.5" :class="loadingAudit && 'animate-spin'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.5M22 12.5a10 10 0 0 1-18.8 4.5"/></svg>
+                                                    <span x-text="loadingAudit ? 'Loading...' : 'Refresh'"></span>
+                                                </button>
+                                                <button @click="downloadServiceAuditExport('json')"
+                                                        class="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-surface hover:text-text-primary">
+                                                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                                                    Export
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <template x-if="filteredAuditEvents.length === 0 && (auditSearchQuery || auditCategoryFilter !== 'all' || auditStatusFilter !== 'all')">
+                                            <div class="rounded-md border border-border bg-card p-6 text-center">
+                                                <p class="text-sm text-text-secondary">No events match your current filters.</p>
+                                                <button @click="auditSearchQuery = ''; auditCategoryFilter = 'all'; auditStatusFilter = 'all'; auditCurrentPage = 1"
+                                                        class="mt-2 inline-flex h-8 items-center gap-1.5 rounded border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-surface">
+                                                    Clear filters
+                                                </button>
+                                            </div>
                                         </template>
-                                        <template x-for="app in audit.linked_apps || []" :key="app">
-                                            <a :href="'/apps/' + app" class="inline-flex rounded-sm border border-border bg-surface px-2 py-1 font-mono text-[12px] text-text-primary transition-colors duration-150 hover:bg-card" x-text="app"></a>
+
+                                        <template x-if="filteredAuditEvents.length === 0 && !auditSearchQuery && auditCategoryFilter === 'all' && auditStatusFilter === 'all'">
+                                            <div class="rounded-md border border-border bg-card p-6 text-center">
+                                                <p class="text-sm text-text-secondary">No audit events recorded yet.</p>
+                                                <p class="mt-1 text-xs text-text-tertiary">Activity will appear here as operations are performed on this service.</p>
+                                            </div>
+                                        </template>
+
+                                        <template x-if="filteredAuditEvents.length > 0">
+                                            <div class="rounded-md border border-border bg-card">
+                                                <div class="flex items-center justify-between border-b border-border-subtle px-4 py-2">
+                                                    <span class="text-xs text-text-tertiary"
+                                                          x-text="`${filteredAuditEvents.length} event${filteredAuditEvents.length !== 1 ? 's' : ''}`"></span>
+                                                    <span x-show="totalAuditPages > 1" class="text-xs text-text-tertiary"
+                                                          x-text="`Page ${auditCurrentPage} of ${totalAuditPages}`"></span>
+                                                </div>
+
+                                                <div>
+                                                    <template x-for="group in auditEventGroups" :key="group.dateStr">
+                                                        <div>
+                                                            <div class="sticky top-0 z-10 border-b border-border-subtle bg-card px-4 py-1.5">
+                                                                <span class="text-2xs font-medium uppercase tracking-wider text-text-tertiary" x-text="group.label"></span>
+                                                            </div>
+                                                            <div class="divide-y divide-border-subtle">
+                                                                <template x-for="event in group.events" :key="event.id">
+                                                                    <button @click="openServiceAuditEvent(event.id)"
+                                                                            class="flex w-full items-center gap-2.5 px-4 py-2 text-left transition-colors duration-100 hover:bg-surface">
+                                                                        <span class="mt-0.5 h-2 w-2 shrink-0 rounded-full" :class="auditCategoryDotColor(event.category)"></span>
+                                                                        <span class="inline-flex shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-2xs font-medium" :class="auditCategoryStyle(event.category)" x-text="event.category"></span>
+                                                                        <span class="shrink-0 text-sm font-medium text-text-primary truncate max-w-[40%]" x-text="event.action"></span>
+                                                                        <template x-if="event.status && event.status !== 'success'">
+                                                                            <span class="inline-flex shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-medium"
+                                                                                  :class="{
+                                                                                      'bg-status-warning-bg text-status-warning': event.status === 'pending' || event.status === 'running',
+                                                                                      'bg-status-danger-bg text-status-danger': event.status === 'error' || event.status === 'failed'
+                                                                                  }"
+                                                                                  x-text="event.status"></span>
+                                                                        </template>
+                                                                        <span class="min-w-0 flex-1"></span>
+                                                                        <template x-if="event.actor_label">
+                                                                            <span class="shrink-0 truncate text-xs text-text-secondary max-w-[20%]" x-text="event.actor_label"></span>
+                                                                        </template>
+                                                                        <span class="shrink-0 text-xs text-text-tertiary tabular-nums" x-text="formatAuditTimeShort(event.ts)"></span>
+                                                                    </button>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+
+                                                <template x-if="totalAuditPages > 1">
+                                                    <div class="flex items-center justify-between border-t border-border-subtle px-4 py-2">
+                                                        <button @click="auditCurrentPage = Math.max(1, auditCurrentPage - 1)"
+                                                                :disabled="auditCurrentPage <= 1"
+                                                                class="inline-flex h-7 items-center gap-1 rounded border border-border bg-card px-2.5 text-xs font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed">
+                                                            Previous
+                                                        </button>
+                                                        <div class="flex items-center gap-1">
+                                                            <template x-for="page in Array.from({length: Math.min(totalAuditPages, 7)}, (_, i) => {
+                                                                const start = auditCurrentPage <= 4 ? 1 : Math.min(auditCurrentPage - 3, Math.max(1, totalAuditPages - 6));
+                                                                return start + i;
+                                                            }).filter(p => p >= 1 && p <= totalAuditPages)">
+                                                                <button @click="auditCurrentPage = page"
+                                                                        :class="page === auditCurrentPage ? 'bg-brand-primary text-white border-brand-primary' : 'bg-card border-border text-text-primary hover:bg-surface'"
+                                                                        class="inline-flex h-7 w-7 items-center justify-center rounded border text-xs font-medium transition-colors duration-150"
+                                                                        x-text="page"></button>
+                                                            </template>
+                                                        </div>
+                                                        <button @click="auditCurrentPage = Math.min(totalAuditPages, auditCurrentPage + 1)"
+                                                                :disabled="auditCurrentPage >= totalAuditPages"
+                                                                class="inline-flex h-7 items-center gap-1 rounded border border-border bg-card px-2.5 text-xs font-medium text-text-primary transition-colors duration-150 hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed">
+                                                            Next
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                            </div>
                                         </template>
                                     </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <div x-show="showAuditEventModal"
+                             x-cloak
+                             x-transition:enter="transition ease-out duration-200"
+                             x-transition:enter-start="opacity-0"
+                             x-transition:enter-end="opacity-100"
+                             x-transition:leave="transition ease-in duration-150"
+                             x-transition:leave-start="opacity-100"
+                             x-transition:leave-end="opacity-0"
+                             class="fixed inset-0 z-40 bg-[#1A2B3C]/30 backdrop-blur-sm"
+                             @click="showAuditEventModal = false"></div>
+
+                        <div x-show="showAuditEventModal"
+                             x-cloak
+                             x-transition:enter="transition ease-out duration-200"
+                             x-transition:enter-start="opacity-0 scale-95"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             x-transition:leave="transition ease-in duration-150"
+                             x-transition:leave-start="opacity-100 scale-100"
+                             x-transition:leave-end="opacity-0 scale-95"
+                             class="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+                            <div class="w-full max-w-2xl rounded-lg border border-border bg-card shadow-modal pointer-events-auto" @click.stop>
+                                <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <template x-if="auditEventDetail?.category">
+                                                <span class="inline-flex shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-2xs font-medium" :class="auditCategoryStyle(auditEventDetail?.category)" x-text="auditEventDetail?.category"></span>
+                                            </template>
+                                            <h2 class="text-sm font-semibold text-text-primary" x-text="auditEventDetail?.action || 'Event Detail'"></h2>
+                                        </div>
+                                        <p class="mt-0.5 text-xs text-text-secondary" x-text="auditEventDetail?.message || ''"></p>
+                                    </div>
+                                    <button @click="showAuditEventModal = false"
+                                            class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
+                                        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                        </svg>
+                                    </button>
                                 </div>
-
-                                <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                                    <div class="rounded-md border border-border bg-card p-4">
-                                        <div class="mb-3 flex items-center justify-between">
-                                            <h4 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">Recent Activity</h4>
-                                            <span class="text-xs text-text-tertiary" x-text="`${audit.recent?.length || 0} items`"></span>
+                                <div class="space-y-4 px-5 py-4">
+                                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <div class="space-y-2.5">
+                                            <div class="flex items-center justify-between gap-3"><span class="text-xs text-text-secondary">Category</span><span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.category || '-'" x-cloak></span></div>
+                                            <div class="flex items-center justify-between gap-3"><span class="text-xs text-text-secondary">Action</span><span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.action || '-'" x-cloak></span></div>
+                                            <div class="flex items-center justify-between gap-3">
+                                                <span class="text-xs text-text-secondary">Status</span>
+                                                <span x-cloak>
+                                                    <template x-if="auditEventDetail?.status && auditEventDetail.status !== 'success'">
+                                                        <span class="inline-flex rounded-sm px-1.5 py-0.5 text-2xs font-medium"
+                                                              :class="{
+                                                                  'bg-status-warning-bg text-status-warning': auditEventDetail?.status === 'pending' || auditEventDetail?.status === 'running',
+                                                                  'bg-status-danger-bg text-status-danger': auditEventDetail?.status === 'error' || auditEventDetail?.status === 'failed',
+                                                                  'bg-status-success-bg text-status-success': auditEventDetail?.status === 'success'
+                                                              }"
+                                                              x-text="auditEventDetail?.status || '-'"></span>
+                                                    </template>
+                                                    <template x-if="!auditEventDetail?.status || auditEventDetail?.status === 'success'">
+                                                        <span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.status || '-'" x-cloak></span>
+                                                    </template>
+                                                </span>
+                                            </div>
+                                            <div class="flex items-center justify-between gap-3"><span class="text-xs text-text-secondary">Classification</span><span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.classification || '-'" x-cloak></span></div>
                                         </div>
-                                        <div class="space-y-2">
-                                            <template x-if="!audit.recent?.length">
-                                                <p class="text-sm text-text-secondary">No recent service-related activity.</p>
-                                            </template>
-                                            <template x-for="event in audit.recent || []" :key="event.id">
-                                                <button @click="openServiceAuditEvent(event.id)" class="flex w-full items-start justify-between gap-3 rounded border border-border-subtle px-3 py-2 text-left transition-colors duration-100 hover:bg-surface">
-                                                    <div class="min-w-0 flex-1">
-                                                        <div class="flex items-center gap-2">
-                                                            <span class="inline-flex rounded-sm bg-surface px-2 py-0.5 font-mono text-[11px] text-text-secondary" x-text="event.app || '-'" x-cloak></span>
-                                                            <span class="text-sm font-medium text-text-primary" x-text="event.action"></span>
-                                                        </div>
-                                                        <p class="mt-1 text-xs text-text-secondary" x-text="event.message || event.status"></p>
-                                                    </div>
-                                                    <span class="shrink-0 text-xs text-text-tertiary" x-text="formatAuditTime(event.ts)"></span>
-                                                </button>
-                                            </template>
+                                        <div class="space-y-2.5">
+                                            <div class="flex items-center justify-between gap-3"><span class="text-xs text-text-secondary">Actor</span><span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.actor_label || '-'" x-cloak></span></div>
+                                            <div class="flex items-center justify-between gap-3"><span class="text-xs text-text-secondary">Actor Type</span><span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.actor_type || '-'" x-cloak></span></div>
+                                            <div class="flex items-center justify-between gap-3"><span class="text-xs text-text-secondary">Correlation</span><span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.correlation_id || '-'" x-cloak></span></div>
+                                            <div class="flex items-center justify-between gap-3"><span class="text-xs text-text-secondary">Time</span><span class="text-sm text-text-primary" x-text="formatAuditTime(auditEventDetail?.ts)"></span></div>
                                         </div>
                                     </div>
-
-                                    <div class="rounded-md border border-border bg-card p-4">
-                                        <div class="mb-3 flex items-center justify-between">
-                                            <h4 class="text-xs font-semibold uppercase tracking-wide text-text-secondary">Linked App Deploys</h4>
-                                            <span class="text-xs text-text-tertiary" x-text="`${audit.deploys?.length || 0} items`"></span>
-                                        </div>
-                                        <div class="space-y-2">
-                                            <template x-if="!audit.deploys?.length">
-                                                <p class="text-sm text-text-secondary">No deploys recorded for linked applications.</p>
-                                            </template>
-                                            <template x-for="event in audit.deploys || []" :key="event.id">
-                                                <button @click="openServiceAuditEvent(event.id)" class="flex w-full items-start justify-between gap-3 rounded border border-border-subtle px-3 py-2 text-left transition-colors duration-100 hover:bg-surface">
-                                                    <div class="min-w-0 flex-1">
-                                                        <div class="flex items-center gap-2">
-                                                            <span class="text-sm font-medium text-text-primary" x-text="event.app || '-'" x-cloak></span>
-                                                            <span class="inline-flex rounded-sm px-2 py-0.5 text-[11px] font-medium"
-                                                                  :class="event.classification === 'release_only' ? 'bg-status-warning-bg text-status-warning' : 'bg-status-success-bg text-status-success'"
-                                                                  x-text="event.classification || 'deploy'"></span>
-                                                        </div>
-                                                        <p class="mt-1 font-mono text-[11px] text-text-secondary" x-text="event.actor_label || '-'" x-cloak></p>
-                                                    </div>
-                                                    <span class="shrink-0 text-xs text-text-tertiary" x-text="formatAuditTime(event.ts)"></span>
-                                                </button>
-                                            </template>
-                                        </div>
+                                    <template x-if="auditEventDetail?.rev">
+                                        <div class="flex items-center justify-between gap-3"><span class="text-xs text-text-secondary">Revision</span><span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.rev || '-'" x-cloak></span></div>
+                                    </template>
+                                    <div>
+                                        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">Metadata</h3>
+                                        <pre class="max-h-72 overflow-auto rounded-md border border-border bg-surface p-3 font-mono text-[12px] leading-relaxed text-text-primary" x-text="auditEventDetail ? JSON.stringify(auditEventDetail.meta || {}, null, 2) : '{}' "></pre>
                                     </div>
                                 </div>
                             </div>
-                        </template>
+                        </div>
                     </div>
                 </template>
 
@@ -1184,73 +1340,6 @@
         </div>
     </div>
 
-    <!-- Import Confirmation Modal -->
-    <div x-show="showAuditEventModal"
-         class="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2B3C]/30 p-4 backdrop-blur-sm"
-         x-cloak>
-        <div class="w-full max-w-2xl rounded-lg border border-border bg-card shadow-modal">
-            <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
-                <div>
-                    <h3 class="text-sm font-medium text-text-primary">Audit Event</h3>
-                    <p class="mt-0.5 text-xs text-text-secondary" x-text="auditEventDetail?.message || auditEventDetail?.action || ''"></p>
-                </div>
-                <button @click="showAuditEventModal = false"
-                        class="inline-flex h-7 w-7 items-center justify-center rounded text-text-tertiary transition-colors duration-100 hover:bg-surface hover:text-text-primary">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-
-            <div class="space-y-4 px-5 py-4">
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div class="space-y-2 text-sm">
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-text-secondary">App</span>
-                            <span class="text-sm text-text-primary" x-text="auditEventDetail?.app || 'Host'"></span>
-                        </div>
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-text-secondary">Category</span>
-                            <span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.category || '-'" x-cloak></span>
-                        </div>
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-text-secondary">Action</span>
-                            <span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.action || '-'" x-cloak></span>
-                        </div>
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-text-secondary">Status</span>
-                            <span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.status || '-'" x-cloak></span>
-                        </div>
-                    </div>
-
-                    <div class="space-y-2 text-sm">
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-text-secondary">Time</span>
-                            <span class="text-sm text-text-primary" x-text="formatAuditTime(auditEventDetail?.ts)"></span>
-                        </div>
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-text-secondary">Actor</span>
-                            <span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.actor_label || '-'" x-cloak></span>
-                        </div>
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-text-secondary">Correlation</span>
-                            <span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.correlation_id || '-'" x-cloak></span>
-                        </div>
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-text-secondary">Revision</span>
-                            <span class="font-mono text-[13px] text-text-primary" x-text="auditEventDetail?.rev || '-'" x-cloak></span>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <h4 class="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">Metadata</h4>
-                    <pre class="max-h-72 overflow-auto rounded-md border border-border bg-surface p-3 font-mono text-[12px] text-text-primary" x-text="auditEventDetail ? JSON.stringify(auditEventDetail.meta || {}, null, 2) : '{}' "></pre>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div x-show="showImportModal"
          class="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2B3C]/30 backdrop-blur-sm"
          x-cloak>
@@ -1318,20 +1407,93 @@
             hasResourceData: false,
             hasLinksData: false,
             hasConfigData: false,
-            auditLoaded: false,
             isResourceLoading: false,
             isLinksLoading: false,
             isConfigLoading: false,
-            isAuditLoading: false,
 
             audit: {
                 enabled: false,
-                linked_apps: [],
-                recent: [],
-                deploys: []
+                timeline: [],
+                deploys: [],
+                deploy_flows: [],
+                config_changes: [],
+                domain_changes: [],
+                port_changes: [],
+                problem_events: []
             },
             auditEventDetail: null,
             showAuditEventModal: false,
+            auditLoaded: false,
+            loadingAudit: false,
+            auditCurrentPage: 1,
+            auditPageSize: 25,
+            auditSearchQuery: '',
+            auditCategoryFilter: 'all',
+            auditStatusFilter: 'all',
+            get filteredAuditEvents() {
+                let events = this.audit.timeline || [];
+                if (this.auditSearchQuery) {
+                    const q = this.auditSearchQuery.toLowerCase();
+                    events = events.filter(e =>
+                        (e.action || '').toLowerCase().includes(q) ||
+                        (e.category || '').toLowerCase().includes(q) ||
+                        (e.actor_label || '').toLowerCase().includes(q) ||
+                        (e.message || '').toLowerCase().includes(q)
+                    );
+                }
+                if (this.auditCategoryFilter !== 'all') {
+                    events = events.filter(e => e.category === this.auditCategoryFilter);
+                }
+                if (this.auditStatusFilter !== 'all') {
+                    events = events.filter(e => e.status === this.auditStatusFilter);
+                }
+                return events;
+            },
+            get availableAuditCategories() {
+                const cats = new Set((this.audit.timeline || []).map(e => e.category).filter(Boolean));
+                return Array.from(cats).sort();
+            },
+            get availableAuditStatuses() {
+                const statuses = new Set((this.audit.timeline || []).map(e => e.status).filter(Boolean));
+                return Array.from(statuses).sort();
+            },
+            get paginatedAuditTimeline() {
+                const events = this.filteredAuditEvents;
+                const start = (this.auditCurrentPage - 1) * this.auditPageSize;
+                return events.slice(start, start + this.auditPageSize);
+            },
+            get totalAuditPages() {
+                return Math.ceil(this.filteredAuditEvents.length / this.auditPageSize);
+            },
+            get auditEventGroups() {
+                const events = this.paginatedAuditTimeline;
+                if (!events || !events.length) return [];
+                const groups = [];
+                const now = new Date();
+                const pad = (n) => String(n).padStart(2, '0');
+                const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+                const yesterday = new Date(now);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}`;
+                let currentGroup = null;
+                for (const event of events) {
+                    const ts = event.ts || event.created_at;
+                    if (!ts) continue;
+                    const d = new Date(ts);
+                    if (Number.isNaN(d.getTime())) continue;
+                    const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                    let label;
+                    if (dateStr === todayStr) label = 'Today';
+                    else if (dateStr === yesterdayStr) label = 'Yesterday';
+                    else label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                    if (!currentGroup || currentGroup.dateStr !== dateStr) {
+                        currentGroup = { dateStr, label, events: [] };
+                        groups.push(currentGroup);
+                    }
+                    currentGroup.events.push(event);
+                }
+                return groups;
+            },
 
             // PostgreSQL config specific properties
             pgConfig: null,
@@ -1545,8 +1707,8 @@
             },
 
             async fetchAudit(forceRefresh = false) {
-                if (this.isAuditLoading) return;
-                this.isAuditLoading = true;
+                if (this.loadingAudit) return;
+                this.loadingAudit = true;
                 try {
                     const response = await fetch(`/api/services/{{.Type}}/{{.Name}}/audit`, {
                         credentials: 'same-origin',
@@ -1559,12 +1721,20 @@
                     }
                     this.audit = await response.json();
                     this.auditLoaded = true;
+                    this.auditCurrentPage = 1;
+                    this.auditSearchQuery = '';
+                    this.auditCategoryFilter = 'all';
+                    this.auditStatusFilter = 'all';
                 } catch (error) {
                     console.error('Error fetching audit info:', error);
                     this.showFlashMessage(error.message || 'Failed to fetch audit info', 'error');
                 } finally {
-                    this.isAuditLoading = false;
+                    this.loadingAudit = false;
                 }
+            },
+
+            downloadServiceAuditExport(format = 'json') {
+                window.location.href = `/api/services/{{.Type}}/{{.Name}}/audit/export?format=${encodeURIComponent(format)}`;
             },
 
             async openServiceAuditEvent(id) {
