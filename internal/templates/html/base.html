@@ -301,7 +301,7 @@
             if (!event) return '-';
             const category = event.category || '';
             if (category === 'deploy') {
-                return event.action || event.status || '-';
+                return event.status || event.action || '-';
             }
             if (category === 'command') {
                 return (event.meta && event.meta.command) || event.action || '-';
