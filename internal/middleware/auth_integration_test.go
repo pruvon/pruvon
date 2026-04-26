@@ -12,9 +12,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/session"
 )
 
-func TestAuth_GitHubAppPermissions_RestrictAccessByAppAcrossRouteTypes(t *testing.T) {
-	app := newAuthIntegrationApp(t, githubOnlyConfig(config.GitHubUser{
+func TestAuth_ScopedAppPermissions_RestrictAccessByAppAcrossRouteTypes(t *testing.T) {
+	app := newAuthIntegrationApp(t, scopedUsersConfig(config.User{
 		Username: "app-user",
+		Role:     config.RoleUser,
 		Apps:     []string{"foo"},
 	}), func(app *fiber.App) {
 		app.Get("/apps/:name", okHandler)
@@ -22,7 +23,7 @@ func TestAuth_GitHubAppPermissions_RestrictAccessByAppAcrossRouteTypes(t *testin
 		app.Get("/ws/apps/:name/logs", okHandler)
 	})
 
-	cookies := loginAs(t, app, "app-user", "github")
+	cookies := loginAs(t, app, "app-user", config.RoleUser)
 
 	tests := []struct {
 		name   string
@@ -49,9 +50,50 @@ func TestAuth_GitHubAppPermissions_RestrictAccessByAppAcrossRouteTypes(t *testin
 	}
 }
 
-func TestAuth_GitHubCustomRoutes_HonorExactAndWildcardPaths(t *testing.T) {
-	app := newAuthIntegrationApp(t, githubOnlyConfig(config.GitHubUser{
+func TestAuth_RouteDerivedAppPermissions_AllowAppRoutesWithoutAppsMembership(t *testing.T) {
+	app := newAuthIntegrationApp(t, scopedUsersConfig(config.User{
+		Username: "route-user",
+		Role:     config.RoleUser,
+		Routes:   []string{"/apps/bar/*"},
+	}), func(app *fiber.App) {
+		app.Get("/apps", okHandler)
+		app.Get("/apps/:name", okHandler)
+		app.Get("/apps/:name/logs", okHandler)
+		app.Get("/api/apps/:name/details", okHandler)
+		app.Get("/ws/apps/:name/logs", okHandler)
+	})
+
+	cookies := loginAs(t, app, "route-user", config.RoleUser)
+
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		want   int
+	}{
+		{"apps list allowed by route-derived app grant", http.MethodGet, "/apps", fiber.StatusOK},
+		{"app detail allowed by route-derived app grant", http.MethodGet, "/apps/bar", fiber.StatusOK},
+		{"app nested ui allowed by route-derived app grant", http.MethodGet, "/apps/bar/logs", fiber.StatusOK},
+		{"app api allowed by route-derived app grant", http.MethodGet, "/api/apps/bar/details", fiber.StatusOK},
+		{"app ws allowed by route-derived app grant", http.MethodGet, "/ws/apps/bar/logs", fiber.StatusOK},
+		{"other app still forbidden", http.MethodGet, "/apps/baz", fiber.StatusForbidden},
+		{"other app api still forbidden", http.MethodGet, "/api/apps/baz/details", fiber.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := performRequest(t, app, tt.method, tt.path, cookies)
+			if resp.StatusCode != tt.want {
+				t.Fatalf("%s %s returned %d, want %d", tt.method, tt.path, resp.StatusCode, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuth_ScopedCustomRoutes_HonorExactAndWildcardPaths(t *testing.T) {
+	app := newAuthIntegrationApp(t, scopedUsersConfig(config.User{
 		Username: "custom-user",
+		Role:     config.RoleUser,
 		Routes: []string{
 			"/settings",
 			"/api/apps/foo/nginx/*",
@@ -64,7 +106,7 @@ func TestAuth_GitHubCustomRoutes_HonorExactAndWildcardPaths(t *testing.T) {
 		app.Post("/api/apps/:name/nginx/custom-config-path/reset", okHandler)
 	})
 
-	cookies := loginAs(t, app, "custom-user", "github")
+	cookies := loginAs(t, app, "custom-user", config.RoleUser)
 
 	tests := []struct {
 		name   string
@@ -90,9 +132,10 @@ func TestAuth_GitHubCustomRoutes_HonorExactAndWildcardPaths(t *testing.T) {
 	}
 }
 
-func TestAuth_GitHubServicePermissions_RestrictAccessByServiceAcrossRouteTypes(t *testing.T) {
-	app := newAuthIntegrationApp(t, githubOnlyConfig(config.GitHubUser{
+func TestAuth_ScopedServicePermissions_RestrictAccessByServiceAcrossRouteTypes(t *testing.T) {
+	app := newAuthIntegrationApp(t, scopedUsersConfig(config.User{
 		Username: "service-user",
+		Role:     config.RoleUser,
 		Services: map[string][]string{
 			"postgres": {"db1"},
 			"redis":    {"*"},
@@ -103,7 +146,7 @@ func TestAuth_GitHubServicePermissions_RestrictAccessByServiceAcrossRouteTypes(t
 		app.Get("/ws/services/:type/:name/console", okHandler)
 	})
 
-	cookies := loginAs(t, app, "service-user", "github")
+	cookies := loginAs(t, app, "service-user", config.RoleUser)
 
 	tests := []struct {
 		name   string
@@ -129,24 +172,103 @@ func TestAuth_GitHubServicePermissions_RestrictAccessByServiceAcrossRouteTypes(t
 	}
 }
 
-func TestAuth_GitHubSessionForRemovedUser_IsRevokedImmediately(t *testing.T) {
-	app := newAuthIntegrationApp(t, githubOnlyConfig(), func(app *fiber.App) {
+func TestAuth_ScopedServicePermissions_AllowFilteredAppsList(t *testing.T) {
+	app := newAuthIntegrationApp(t, scopedUsersConfig(config.User{
+		Username: "service-user",
+		Role:     config.RoleUser,
+		Services: map[string][]string{
+			"postgres": {"db1"},
+		},
+	}), func(app *fiber.App) {
+		app.Get("/api/apps/list", okHandler)
+		app.Get("/api/apps/list/detailed", okHandler)
+	})
+
+	cookies := loginAs(t, app, "service-user", config.RoleUser)
+
+	allowedResponse := performRequest(t, app, http.MethodGet, "/api/apps/list", cookies)
+	if allowedResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /api/apps/list returned %d, want %d", allowedResponse.StatusCode, fiber.StatusOK)
+	}
+
+	deniedResponse := performRequest(t, app, http.MethodGet, "/api/apps/list/detailed", cookies)
+	if deniedResponse.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("GET /api/apps/list/detailed returned %d, want %d", deniedResponse.StatusCode, fiber.StatusForbidden)
+	}
+}
+
+func TestAuth_SessionForRemovedUser_IsRevokedImmediately(t *testing.T) {
+	app := newAuthIntegrationApp(t, scopedUsersConfig(), func(app *fiber.App) {
 		app.Get("/apps/:name", okHandler)
 	})
 
-	cookies := loginAs(t, app, "ghost-user", "github")
+	cookies := loginAs(t, app, "ghost-user", config.RoleUser)
 
 	firstResponse := performRequest(t, app, http.MethodGet, "/apps/foo", cookies)
-	if firstResponse.StatusCode != fiber.StatusForbidden {
-		t.Fatalf("first request returned %d, want %d", firstResponse.StatusCode, fiber.StatusForbidden)
+	if firstResponse.StatusCode != fiber.StatusFound {
+		t.Fatalf("first request returned %d, want %d", firstResponse.StatusCode, fiber.StatusFound)
+	}
+	if firstResponse.Header.Get("Location") != "/login" {
+		t.Fatalf("first request redirected to %q, want %q", firstResponse.Header.Get("Location"), "/login")
+	}
+}
+
+func TestAuth_SessionForRemovedAdmin_IsRevokedImmediately(t *testing.T) {
+	app := newAuthIntegrationApp(t, scopedUsersConfig(), func(app *fiber.App) {
+		app.Get("/", okHandler)
+	})
+
+	cookies := loginAs(t, app, "admin", config.RoleAdmin)
+
+	response := performRequest(t, app, http.MethodGet, "/", cookies)
+	if response.StatusCode != fiber.StatusFound {
+		t.Fatalf("request returned %d, want %d", response.StatusCode, fiber.StatusFound)
+	}
+	if response.Header.Get("Location") != "/login" {
+		t.Fatalf("request redirected to %q, want %q", response.Header.Get("Location"), "/login")
+	}
+}
+
+func TestAuth_DemotedAdminSessionLosesAdminAccessImmediately(t *testing.T) {
+	app := newAuthIntegrationApp(t, scopedUsersConfig(config.User{
+		Username: "admin",
+		Role:     config.RoleAdmin,
+	}), func(app *fiber.App) {
+		app.Get("/settings", okHandler)
+		app.Get("/", okHandler)
+	})
+
+	cookies := loginAs(t, app, "admin", config.RoleAdmin)
+
+	config.UpdateConfig(scopedUsersConfig(config.User{
+		Username: "admin",
+		Role:     config.RoleUser,
+	}))
+
+	adminOnlyResponse := performRequest(t, app, http.MethodGet, "/settings", cookies)
+	if adminOnlyResponse.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("admin-only request returned %d, want %d", adminOnlyResponse.StatusCode, fiber.StatusForbidden)
 	}
 
-	secondResponse := performRequest(t, app, http.MethodGet, "/apps/foo", cookies)
-	if secondResponse.StatusCode != fiber.StatusFound {
-		t.Fatalf("second request returned %d, want %d", secondResponse.StatusCode, fiber.StatusFound)
+	authenticatedResponse := performRequest(t, app, http.MethodGet, "/", cookies)
+	if authenticatedResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("authenticated-user request returned %d, want %d", authenticatedResponse.StatusCode, fiber.StatusOK)
 	}
-	if secondResponse.Header.Get("Location") != "/login" {
-		t.Fatalf("second request redirected to %q, want %q", secondResponse.Header.Get("Location"), "/login")
+}
+
+func TestAuth_AuthenticatedDashboardRouteStillRequiresConfiguredUser(t *testing.T) {
+	app := newAuthIntegrationApp(t, scopedUsersConfig(), func(app *fiber.App) {
+		app.Get("/", okHandler)
+	})
+
+	cookies := loginAs(t, app, "ghost-user", config.RoleUser)
+
+	response := performRequest(t, app, http.MethodGet, "/", cookies)
+	if response.StatusCode != fiber.StatusFound {
+		t.Fatalf("request returned %d, want %d", response.StatusCode, fiber.StatusFound)
+	}
+	if response.Header.Get("Location") != "/login" {
+		t.Fatalf("request redirected to %q, want %q", response.Header.Get("Location"), "/login")
 	}
 }
 
@@ -162,7 +284,7 @@ func newAuthIntegrationApp(t *testing.T, cfg *config.Config, registerRoutes func
 	store = session.New()
 
 	app := fiber.New()
-	app.Get("/__test/login/:user/:type", func(c *fiber.Ctx) error {
+	app.Get("/__test/login/:user/:role", func(c *fiber.Ctx) error {
 		sess, err := store.Get(c)
 		if err != nil {
 			return err
@@ -171,7 +293,8 @@ func newAuthIntegrationApp(t *testing.T, cfg *config.Config, registerRoutes func
 		sess.Set("authenticated", true)
 		sess.Set("user", c.Params("user"))
 		sess.Set("username", c.Params("user"))
-		sess.Set("auth_type", c.Params("type"))
+		sess.Set("role", c.Params("role"))
+		sess.Set("auth_type", c.Params("role"))
 		if err := sess.Save(); err != nil {
 			return err
 		}
@@ -184,16 +307,14 @@ func newAuthIntegrationApp(t *testing.T, cfg *config.Config, registerRoutes func
 	return app
 }
 
-func githubOnlyConfig(users ...config.GitHubUser) *config.Config {
-	cfg := &config.Config{}
-	cfg.GitHub.Users = users
-	return cfg
+func scopedUsersConfig(users ...config.User) *config.Config {
+	return &config.Config{Users: users}
 }
 
-func loginAs(t *testing.T, app *fiber.App, user, authType string) []*http.Cookie {
+func loginAs(t *testing.T, app *fiber.App, user, role string) []*http.Cookie {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodGet, "/__test/login/"+user+"/"+authType, nil)
+	req := httptest.NewRequest(http.MethodGet, "/__test/login/"+user+"/"+role, nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("login request failed: %v", err)

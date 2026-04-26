@@ -147,7 +147,10 @@ func LogWithParams(c *fiber.Ctx, action string, params interface{}) error {
 	// Get session info
 	sess, _ := middleware.GetStore().Get(c)
 	user := sess.Get("user").(string)
-	authType := sess.Get("auth_type").(string)
+	authType, _ := sess.Get("role").(string)
+	if authType == "" {
+		authType, _ = sess.Get("auth_type").(string)
+	}
 
 	// Convert params to JSON
 	paramsJSON, err := json.Marshal(params)

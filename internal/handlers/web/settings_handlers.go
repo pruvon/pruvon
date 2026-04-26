@@ -17,7 +17,7 @@ func HandleSettings(c *fiber.Ctx) error {
 	data := GetSessionData(c)
 
 	// Only allow admin access
-	if data["AuthType"] != "admin" {
+	if data["AuthType"] != config.RoleAdmin {
 		return c.Redirect("/")
 	}
 
@@ -69,8 +69,6 @@ func HandleSettings(c *fiber.Ctx) error {
 	// Add settings to the template data
 	data["Title"] = "Settings"
 	data["ActivePage"] = "settings"
-	data["GithubClientID"] = cfg.GitHub.ClientID
-	data["GithubClientSecret"] = cfg.GitHub.ClientSecret
 	data["BaseURL"] = baseURL
 	data["DefaultDomain"] = currentDomain
 	data["CronMailfrom"] = cronMailfrom
@@ -117,49 +115,13 @@ func HandleSettings(c *fiber.Ctx) error {
 	return c.Type("html").SendString(out.String())
 }
 
-// HandleSaveGitHubSettings handles saving GitHub settings
-func HandleSaveGitHubSettings(c *fiber.Ctx) error {
-	// Get session data
-	data := GetSessionData(c)
-
-	// Only allow admin access
-	if data["AuthType"] != "admin" {
-		return c.Redirect("/")
-	}
-
-	// Get form values
-	clientID := c.FormValue("client_id")
-	clientSecret := c.FormValue("client_secret")
-
-	// Get current config
-	cfg := GetConfig()
-
-	// Update GitHub config
-	cfg.GitHub.ClientID = clientID
-	cfg.GitHub.ClientSecret = clientSecret
-
-	// Save config
-	err := saveConfig(cfg)
-	if err != nil {
-		// Set flash message for error
-		sess, _ := middleware.GetStore().Get(c)
-		sess.Set("flash_message", fmt.Sprintf("Failed to save configuration: %v", err))
-		sess.Set("flash_type", "error")
-		_ = sess.Save()
-		return c.Redirect("/settings")
-	}
-
-	// Redirect with success parameter
-	return c.Redirect("/settings?saved=true")
-}
-
 // HandleSaveDomainSettings handles saving domain settings
 func HandleSaveDomainSettings(c *fiber.Ctx) error {
 	// Get session data
 	data := GetSessionData(c)
 
 	// Only allow admin access
-	if data["AuthType"] != "admin" {
+	if data["AuthType"] != config.RoleAdmin {
 		return c.Redirect("/")
 	}
 
@@ -189,7 +151,7 @@ func HandleSaveCronSettings(c *fiber.Ctx) error {
 	data := GetSessionData(c)
 
 	// Only allow admin access
-	if data["AuthType"] != "admin" {
+	if data["AuthType"] != config.RoleAdmin {
 		return c.Redirect("/")
 	}
 
@@ -221,11 +183,4 @@ func HandleSaveCronSettings(c *fiber.Ctx) error {
 
 	// Redirect with success parameter
 	return c.Redirect("/settings?saved=true&tab=cron")
-}
-
-// saveConfig saves the configuration to the config file
-func saveConfig(cfg *config.Config) error {
-	// Use the package SaveConfig function which will save to the path
-	// from which the config was originally loaded
-	return config.SaveConfig(cfg)
 }

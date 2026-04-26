@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"github.com/pruvon/pruvon/internal/config"
 	"github.com/pruvon/pruvon/internal/dokku"
+	"github.com/pruvon/pruvon/internal/middleware"
 	"github.com/pruvon/pruvon/internal/models"
 	"github.com/pruvon/pruvon/internal/services/logs"
 	"github.com/pruvon/pruvon/internal/ssh"
-	"io"
-	"net/http"
 	"os"
 	"strings"
 
@@ -23,6 +22,10 @@ func SetupSshKeysRoutes(app *fiber.App) {
 }
 
 func handleSshKeyAdd(c *fiber.Ctx) error {
+	if !requireAdminSSHKeyAPI(c) {
+		return nil
+	}
+
 	var req models.SSHKeyRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -38,7 +41,7 @@ func handleSshKeyAdd(c *fiber.Ctx) error {
 	}
 
 	// SSH anahtar adının benzersiz olup olmadığını kontrol et
-	exists, err := ssh.IsKeyNameExists(req.Name, "/home/dokku/.ssh/authorized_keys")
+	exists, err := ssh.IsKeyNameExists(req.Name, ssh.AuthorizedKeysPath)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("SSH keys could not be checked: %v", err),
@@ -88,6 +91,10 @@ func handleSshKeyAdd(c *fiber.Ctx) error {
 }
 
 func handleSshKeyDelete(c *fiber.Ctx) error {
+	if !requireAdminSSHKeyAPI(c) {
+		return nil
+	}
+
 	name := c.Params("name")
 
 	_ = logs.LogWithParams(c, "delete_ssh_key", fiber.Map{
@@ -104,84 +111,25 @@ func handleSshKeyDelete(c *fiber.Ctx) error {
 }
 
 func handleSshKeySyncGithub(c *fiber.Ctx) error {
+	if !requireAdminSSHKeyAPI(c) {
+		return nil
+	}
+
 	_ = logs.LogWithParams(c, "sync_github_ssh_keys", nil)
 
 	cfg := c.Locals("config").(*config.Config)
-
-	existingKeys, err := ssh.ReadAuthorizedKeys("/home/dokku/.ssh/authorized_keys")
+	result, err := ssh.SyncGitHubKeys(cfg.Users, ssh.AuthorizedKeysPath, commandRunner, nil)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Could not read authorized keys"})
 	}
-
-	githubKeys := make(map[string]bool)
-
-	for _, user := range cfg.GitHub.Users {
-		username := user.Username
-		resp, err := http.Get(fmt.Sprintf("https://github.com/%s.keys", username))
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			continue
-		}
-
-		keys := strings.Split(string(body), "\n")
-		for i, key := range keys {
-			if key == "" {
-				continue
-			}
-
-			keyParts := strings.Fields(key)
-			if len(keyParts) < 2 {
-				continue
-			}
-
-			keyData := keyParts[1]
-			githubKeys[keyData] = true
-
-			exists := false
-			for _, existingKey := range existingKeys {
-				if existingKey.KeyData == keyData {
-					exists = true
-					break
-				}
-			}
-
-			if !exists {
-				keyName := fmt.Sprintf("%s-%d", username, i+1)
-				tmpfile, err := os.CreateTemp("", "ssh-key-*.pub")
-				if err != nil {
-					continue
-				}
-				defer os.Remove(tmpfile.Name())
-
-				if _, err := tmpfile.WriteString(key); err != nil {
-					tmpfile.Close()
-					continue
-				}
-				tmpfile.Close()
-
-				_, _ = commandRunner.RunCommand("dokku", "ssh-keys:add", keyName, tmpfile.Name())
-			}
-		}
-	}
-
-	for _, existingKey := range existingKeys {
-		if !githubKeys[existingKey.KeyData] {
-			_, _ = commandRunner.RunCommand("dokku", "ssh-keys:remove", existingKey.Name)
-		}
-	}
-
-	return c.JSON(fiber.Map{
-		"success":      true,
-		"synced_users": len(cfg.GitHub.Users),
-	})
+	return c.JSON(result)
 }
 
 func handleGetSshKeys(c *fiber.Ctx) error {
+	if !requireAdminSSHKeyAPI(c) {
+		return nil
+	}
+
 	keys, err := dokku.GetSSHKeys(commandRunner)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -192,4 +140,17 @@ func handleGetSshKeys(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"keys": keys,
 	})
+}
+
+func requireAdminSSHKeyAPI(c *fiber.Ctx) bool {
+	sess, _ := middleware.GetStore().Get(c)
+	role, _ := sess.Get("role").(string)
+	if role == "" {
+		role, _ = sess.Get("auth_type").(string)
+	}
+	if role == config.RoleAdmin {
+		return true
+	}
+	_ = c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Administrator access is required"})
+	return false
 }

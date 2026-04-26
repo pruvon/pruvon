@@ -182,7 +182,12 @@ func TestCheckListenAddress(t *testing.T) {
 
 func TestMainComposition_StaticRoutesRequireAuthentication(t *testing.T) {
 	originalConfig := config.GetConfig()
-	cfg := &config.Config{}
+	cfg := &config.Config{
+		Users: []config.User{{
+			Username: "admin",
+			Role:     config.RoleAdmin,
+		}},
+	}
 	config.UpdateConfig(cfg)
 	defer config.UpdateConfig(originalConfig)
 
@@ -212,6 +217,7 @@ func TestMainComposition_StaticRoutesRequireAuthentication(t *testing.T) {
 		sess.Set("authenticated", true)
 		sess.Set("user", "admin")
 		sess.Set("username", "admin")
+		sess.Set("role", config.RoleAdmin)
 		sess.Set("auth_type", "admin")
 		return sess.Save()
 	})

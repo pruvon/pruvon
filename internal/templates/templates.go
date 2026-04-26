@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/pruvon/pruvon/internal/config"
+	"github.com/pruvon/pruvon/internal/middleware/authz"
 	"html/template"
 	"io/fs"
 	"os"
@@ -211,62 +212,34 @@ func hasRouteAccess(username interface{}, route string, authType interface{}) bo
 		return true
 	}
 
-	// For GitHub users, check their routes
-	if authType == "github" {
-		// Handle nil username
-		if username == nil {
-			return false
+	user := lookupScopedUser(username)
+	if user != nil {
+		if route == "/apps" && userHasAnyAppAccess(user) {
+			return true
 		}
 
-		// Convert username to string
-		usernameStr := ""
-		switch v := username.(type) {
-		case string:
-			usernameStr = v
-		default:
-			return false
+		for _, r := range user.Routes {
+			if r == "*" || r == "/*" {
+				return true
+			}
+
+			if r == route {
+				return true
+			}
+
+			if strings.HasSuffix(r, "/*") && strings.HasPrefix(route, r[:len(r)-1]) {
+				return true
+			}
 		}
 
-		// Get config
-		cfg := config.GetConfig()
-		if cfg == nil {
-			return false
-		}
+		if strings.HasPrefix(route, "/apps/") {
+			appName := strings.TrimPrefix(route, "/apps/")
+			if strings.Contains(appName, "/") {
+				appName = strings.Split(appName, "/")[0]
+			}
 
-		// Check user permissions
-		for _, user := range cfg.GitHub.Users {
-			if user.Username == usernameStr {
-				// Check if the user has access to the route
-				for _, r := range user.Routes {
-					if r == "*" || r == "/*" {
-						return true
-					}
-
-					// Exact match
-					if r == route {
-						return true
-					}
-
-					// Wildcard match
-					// e.g. /apps/* matches /apps/myapp
-					if strings.HasSuffix(r, "/*") && strings.HasPrefix(route, r[:len(r)-1]) {
-						return true
-					}
-				}
-
-				// Check if the route is for an app the user has access to
-				if strings.HasPrefix(route, "/apps/") {
-					appName := strings.TrimPrefix(route, "/apps/")
-					if strings.Contains(appName, "/") {
-						appName = strings.Split(appName, "/")[0]
-					}
-
-					for _, app := range user.Apps {
-						if app == "*" || app == appName {
-							return true
-						}
-					}
-				}
+			if userHasExplicitAppAccess(user, appName) || userHasRouteDerivedAppAccess(user, appName) {
+				return true
 			}
 		}
 	}
@@ -290,56 +263,23 @@ func hasAppAccess(username interface{}, specificApp string, authType interface{}
 		return true
 	}
 
-	// For GitHub users, check their app permissions
-	if authType == "github" {
-		// Handle nil username
-		if username == nil {
-			return false
-		}
-
-		// Convert username to string
-		usernameStr := ""
-		switch v := username.(type) {
-		case string:
-			usernameStr = v
-		default:
-			return false
-		}
-
-		// Get config
-		cfg := config.GetConfig()
-		if cfg == nil {
-			return false
-		}
-
-		// Check user permissions
-		for _, user := range cfg.GitHub.Users {
-			if user.Username == usernameStr {
-				// Check for wildcard access in routes
-				for _, r := range user.Routes {
-					if r == "*" || r == "/*" || r == "/apps/*" {
-						return true
-					}
-				}
-
-				// Check if user has any app access
-				if len(user.Apps) > 0 {
-					// If no specific app is requested, any app permission is enough
-					if specificApp == "" {
-						return true
-					}
-
-					// If specific app requested, check if it's in the allowed list
-					for _, app := range user.Apps {
-						if app == "*" || app == specificApp {
-							return true
-						}
-					}
-				}
-
-				return false
+	user := lookupScopedUser(username)
+	if user != nil {
+		for _, r := range user.Routes {
+			if r == "*" || r == "/*" || r == "/apps/*" {
+				return true
 			}
 		}
+
+		if specificApp == "" {
+			return userHasAnyAppAccess(user)
+		}
+
+		if userHasExplicitAppAccess(user, specificApp) || userHasRouteDerivedAppAccess(user, specificApp) {
+			return true
+		}
+
+		return false
 	}
 
 	return false
@@ -352,75 +292,45 @@ func hasServiceAccess(username interface{}, specificType string, specificName st
 		return true
 	}
 
-	// For GitHub users, check their service permissions
-	if authType == "github" {
-		// Handle nil username
-		if username == nil {
-			return false
-		}
-
-		// Convert username to string
-		usernameStr := ""
-		switch v := username.(type) {
-		case string:
-			usernameStr = v
-		default:
-			return false
-		}
-
-		// Get config
-		cfg := config.GetConfig()
-		if cfg == nil {
-			return false
-		}
-
-		// Check user permissions
-		for _, user := range cfg.GitHub.Users {
-			if user.Username == usernameStr {
-				// Check for wildcard access in routes
-				for _, r := range user.Routes {
-					if r == "*" || r == "/*" || r == "/services/*" {
-						return true
-					}
-				}
-
-				// If no services defined, user has no access
-				if len(user.Services) == 0 {
-					return false
-				}
-
-				// If no specific service is requested, any service permission is enough
-				if specificType == "" && specificName == "" {
-					for _, svcList := range user.Services {
-						if len(svcList) > 0 {
-							return true
-						}
-					}
-					return false
-				}
-
-				// If specific type requested but no name, check if user has any service of that type
-				if specificType != "" && specificName == "" {
-					if svcList, ok := user.Services[specificType]; ok && len(svcList) > 0 {
-						return true
-					}
-					return false
-				}
-
-				// If specific service requested, check if it's in the allowed list
-				if specificType != "" && specificName != "" {
-					if svcList, ok := user.Services[specificType]; ok {
-						for _, svc := range svcList {
-							if svc == "*" || svc == specificName {
-								return true
-							}
-						}
-					}
-				}
-
-				return false
+	user := lookupScopedUser(username)
+	if user != nil {
+		for _, r := range user.Routes {
+			if r == "*" || r == "/*" || r == "/services/*" {
+				return true
 			}
 		}
+
+		if len(user.Services) == 0 {
+			return false
+		}
+
+		if specificType == "" && specificName == "" {
+			for _, svcList := range user.Services {
+				if len(svcList) > 0 {
+					return true
+				}
+			}
+			return false
+		}
+
+		if specificType != "" && specificName == "" {
+			if svcList, ok := user.Services[specificType]; ok && len(svcList) > 0 {
+				return true
+			}
+			return false
+		}
+
+		if specificType != "" && specificName != "" {
+			if svcList, ok := user.Services[specificType]; ok {
+				for _, svc := range svcList {
+					if svc == "*" || svc == specificName {
+						return true
+					}
+				}
+			}
+		}
+
+		return false
 	}
 
 	return false
@@ -433,92 +343,68 @@ func getUserAllowedApps(username interface{}, authType interface{}, allApps []st
 		return allApps
 	}
 
-	// For GitHub users, filter based on permissions
-	if authType == "github" {
-		// Handle nil username
-		if username == nil {
-			return []string{}
-		}
-
-		// Convert username to string
-		usernameStr, ok := username.(string)
-		if !ok {
-			return []string{}
-		}
-
-		// Get config
-		cfg := config.GetConfig()
-		if cfg == nil {
-			return []string{}
-		}
-
-		// Create a map for faster lookup of existing apps
-		existingAppsMap := make(map[string]bool)
-		for _, app := range allApps {
-			existingAppsMap[app] = true
-		}
-
-		// Find the user
-		for _, user := range cfg.GitHub.Users {
-			if user.Username == usernameStr {
-				// Check for wildcard access in routes or apps
-				for _, r := range user.Routes {
-					if r == "*" || r == "/*" || r == "/apps/*" {
-						return allApps
-					}
-				}
-
-				// Check if user has wildcard app access
-				for _, app := range user.Apps {
-					if app == "*" {
-						return allApps
-					}
-				}
-
-				// Initialize the allowed apps list
-				allowedApps := []string{}
-
-				// Add apps from the Apps property
-				if len(user.Apps) > 0 {
-					for _, app := range user.Apps {
-						if app != "*" {
-							// Add the app even if it doesn't exist yet - this handles the case
-							// where the app may be created later but permissions already exist
-							allowedApps = append(allowedApps, app)
-						}
-					}
-				}
-
-				// Also check routes for app-specific permissions
-				if len(user.Routes) > 0 {
-					for _, route := range user.Routes {
-						if strings.HasPrefix(route, "/apps/") && route != "/apps" && route != "/apps/*" {
-							// Extract app name from route
-							appName := strings.TrimPrefix(route, "/apps/")
-							// Remove trailing "/*" if present
-							appName = strings.TrimSuffix(appName, "/*")
-
-							// Check if this app isn't already in our list
-							alreadyExists := false
-							for _, allowed := range allowedApps {
-								if allowed == appName {
-									alreadyExists = true
-									break
-								}
-							}
-							if !alreadyExists && appName != "" {
-								allowedApps = append(allowedApps, appName)
-							}
-						}
-					}
-				}
-
-				return allowedApps
+	user := lookupScopedUser(username)
+	if user != nil {
+		for _, r := range user.Routes {
+			if r == "*" || r == "/*" || r == "/apps/*" {
+				return allApps
 			}
 		}
 
-		// User not found
-		return []string{}
+		for _, app := range user.Apps {
+			if app == "*" {
+				return allApps
+			}
+		}
+
+		allowedApps := make([]string, 0)
+		seenApps := make(map[string]bool)
+
+		for _, app := range user.Apps {
+			if app == "*" || app == "" || seenApps[app] {
+				continue
+			}
+			seenApps[app] = true
+			allowedApps = append(allowedApps, app)
+		}
+
+		for _, route := range user.Routes {
+			if !strings.HasPrefix(route, "/apps/") || route == "/apps" || route == "/apps/*" {
+				continue
+			}
+
+			appPattern := strings.TrimPrefix(route, "/apps/")
+			if appPattern == "" {
+				continue
+			}
+
+			if strings.HasSuffix(appPattern, "/*") {
+				exactApp := strings.TrimSuffix(appPattern, "/*")
+				if authz.RouteGrantsApp(route, exactApp) && !seenApps[exactApp] {
+					seenApps[exactApp] = true
+					allowedApps = append(allowedApps, exactApp)
+				}
+				continue
+			}
+
+			if strings.HasSuffix(appPattern, "*") {
+				for _, app := range allApps {
+					if app == "" || seenApps[app] || !authz.RouteGrantsApp(route, app) {
+						continue
+					}
+					seenApps[app] = true
+					allowedApps = append(allowedApps, app)
+				}
+				continue
+			}
+
+			if authz.RouteGrantsApp(route, appPattern) && !seenApps[appPattern] {
+				seenApps[appPattern] = true
+				allowedApps = append(allowedApps, appPattern)
+			}
+		}
+
+		return allowedApps
 	}
 
 	// Unknown auth type
@@ -537,71 +423,87 @@ func getUserAllowedServices(username interface{}, authType interface{}, svcType 
 		return allServices
 	}
 
-	// For GitHub users, filter based on permissions
-	if authType == "github" {
-		// Handle nil username
-		if username == nil {
-			return []string{}
+	user := lookupScopedUser(username)
+	if user != nil {
+		for _, r := range user.Routes {
+			if r == "*" || r == "/*" || r == "/services/*" {
+				return allServices
+			}
 		}
 
-		// Convert username to string
-		usernameStr, ok := username.(string)
-		if !ok {
-			return []string{}
-		}
-
-		// Get config
-		cfg := config.GetConfig()
-		if cfg == nil {
-			return []string{}
-		}
-
-		// Find the user
-		for _, user := range cfg.GitHub.Users {
-			if user.Username == usernameStr {
-				// Check for wildcard access in routes
-				for _, r := range user.Routes {
-					if r == "*" || r == "/*" || r == "/services/*" {
+		if user.Services != nil {
+			if svcList, ok := user.Services[svcType]; ok {
+				for _, svc := range svcList {
+					if svc == "*" {
 						return allServices
 					}
 				}
 
-				// Check service permissions
-				if user.Services != nil { // Services use the same Services field for permissions
-					// Check if user has wildcard access to this service type
-					if svcList, ok := user.Services[svcType]; ok {
-						for _, svc := range svcList {
-							if svc == "*" {
-								return allServices
-							}
-						}
-
-						// User has specific service permissions, return those services
-						allowedSvcs := []string{}
-
-						// Include all services from user permissions
-						for _, svc := range svcList {
-							if svc != "*" {
-								// Add the service even if it doesn't exist yet in the system
-								allowedSvcs = append(allowedSvcs, svc)
-							}
-						}
-
-						return allowedSvcs
+				allowedSvcs := []string{}
+				for _, svc := range svcList {
+					if svc != "*" {
+						allowedSvcs = append(allowedSvcs, svc)
 					}
 				}
 
-				// If we reach here, the user has no service permissions for this type
-				return []string{}
+				return allowedSvcs
 			}
 		}
 
-		// User not found
 		return []string{}
 	}
 
 	// Unknown auth type
 	return []string{}
+}
+
+func lookupScopedUser(username interface{}) *config.User {
+	if username == nil {
+		return nil
+	}
+	usernameStr, ok := username.(string)
+	if !ok || usernameStr == "" {
+		return nil
+	}
+	user := config.FindUserByUsername(usernameStr)
+	if user == nil || user.Disabled {
+		return nil
+	}
+	return user
+}
+
+func userHasAnyAppAccess(user *config.User) bool {
+	if len(user.Apps) > 0 {
+		return true
+	}
+
+	for _, route := range user.Routes {
+		if authz.RouteGrantsAnyApp(route) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func userHasExplicitAppAccess(user *config.User, appName string) bool {
+	for _, app := range user.Apps {
+		if app == "*" || app == appName {
+			return true
+		}
+	}
+
+	return false
+}
+
+func userHasRouteDerivedAppAccess(user *config.User, appName string) bool {
+	for _, route := range user.Routes {
+		if authz.RouteGrantsApp(route, appName) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // GetUserAllowedServices is an exported wrapper for getUserAllowedServices

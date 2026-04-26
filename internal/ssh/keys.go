@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var AuthorizedKeysPath = "/home/dokku/.ssh/authorized_keys"
+
 type SSHKey struct {
 	Name    string
 	KeyType string

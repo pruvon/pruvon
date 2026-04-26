@@ -34,8 +34,6 @@ func SetupRoutes(app *fiber.App, cfg *config.Config) {
 func setupPublicRoutes(app *fiber.App) {
 	app.Get("/login", web.HandleLogin)
 	app.Post("/api/login", web.HandleLoginAPI)
-	app.Get("/auth/github", web.HandleGithubAuth)
-	app.Get("/auth/github/callback", web.HandleGithubCallback)
 }
 
 // setupAuthenticatedRoutes configures routes that require authentication
@@ -97,7 +95,6 @@ func setupSystemRoutes(app *fiber.App) {
 // setupSettingsRoutes configures settings routes
 func setupSettingsRoutes(app *fiber.App) {
 	app.Get("/settings", web.HandleSettings)
-	app.Post("/settings/github", web.HandleSaveGitHubSettings)
 	app.Post("/settings/domain", web.HandleSaveDomainSettings)
 	app.Post("/settings/cron", web.HandleSaveCronSettings)
 }

@@ -3,14 +3,14 @@ package api
 import (
 	"errors"
 	"fmt"
+	"github.com/pruvon/pruvon/internal/config"
 	"github.com/pruvon/pruvon/internal/docker"
 	"github.com/pruvon/pruvon/internal/services/logs"
-	"github.com/pruvon/pruvon/internal/system"
+	"github.com/pruvon/pruvon/internal/templates"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/pruvon/pruvon/internal/config"
 	"github.com/pruvon/pruvon/internal/dokku"
 	"github.com/pruvon/pruvon/internal/handlers/common"
 	"github.com/pruvon/pruvon/internal/middleware"
@@ -685,100 +685,20 @@ func handleAppsList(c *fiber.Ctx) error {
 
 	// Get session info
 	sess, _ := middleware.GetStore().Get(c)
-	authType := sess.Get("auth_type")
+	authType := sess.Get("role")
+	if authType == nil {
+		authType = sess.Get("auth_type")
+	}
 	username := sess.Get("username")
 	if username == nil {
 		username = sess.Get("user")
 	}
 
-	// Admin can see all apps
-	var allowedApps []string
-	if authType == "admin" {
-		allowedApps = allApps
-	} else if authType == "github" {
-		// For GitHub users, filter apps based on their permissions
-		cfg := config.GetConfig()
-		if cfg == nil {
-			return c.Status(500).JSON(fiber.Map{
-				"error": "Configuration not available",
-			})
-		}
-
-		// Find user's permissions
-		for _, user := range cfg.GitHub.Users {
-			if user.Username == username.(string) {
-				// First check direct app permissions (new feature)
-				if len(user.Apps) > 0 {
-					// Check if user has wildcard access for apps
-					for _, app := range user.Apps {
-						if app == "*" {
-							allowedApps = allApps
-							break
-						}
-					}
-
-					// If no wildcard, add individual apps
-					if len(allowedApps) == 0 {
-						allowedAppsMap := make(map[string]bool)
-						for _, app := range user.Apps {
-							if system.Contains(allApps, app) {
-								allowedAppsMap[app] = true
-							}
-						}
-
-						// Convert map to slice
-						for app := range allowedAppsMap {
-							allowedApps = append(allowedApps, app)
-						}
-					}
-				}
-
-				// If direct app permissions didn't give access, check route-based permissions
-				if len(allowedApps) == 0 {
-					// If user has wildcard access, show all apps
-					for _, route := range user.Routes {
-						if route == "*" || route == "/*" || route == "/apps/*" {
-							allowedApps = allApps
-							break
-						}
-
-						// Check app-specific permissions
-						if strings.HasPrefix(route, "/apps/") {
-							appName := strings.TrimPrefix(route, "/apps/")
-							// Handle wildcard for specific app prefix
-							if strings.HasSuffix(appName, "*") {
-								prefix := strings.TrimSuffix(appName, "*")
-								for _, app := range allApps {
-									if strings.HasPrefix(app, prefix) {
-										allowedApps = append(allowedApps, app)
-									}
-								}
-							} else {
-								// Exact app match
-								if system.Contains(allApps, appName) {
-									allowedApps = append(allowedApps, appName)
-								}
-							}
-						}
-					}
-				}
-
-				// Deduplicate the app list
-				if len(allowedApps) > 0 {
-					uniqueApps := make(map[string]bool)
-					for _, app := range allowedApps {
-						uniqueApps[app] = true
-					}
-
-					allowedApps = make([]string, 0, len(uniqueApps))
-					for app := range uniqueApps {
-						allowedApps = append(allowedApps, app)
-					}
-				}
-
-				break
-			}
-		}
+	allowedApps, err := resolveAllowedAppsForSession(username, authType, allApps)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	return c.JSON(fiber.Map{
@@ -796,51 +716,20 @@ func handleAppsListDetailed(c *fiber.Ctx) error {
 
 	// Get session info
 	sess, _ := middleware.GetStore().Get(c)
-	authType := sess.Get("auth_type")
+	authType := sess.Get("role")
+	if authType == nil {
+		authType = sess.Get("auth_type")
+	}
 	username := sess.Get("username")
 	if username == nil {
 		username = sess.Get("user")
 	}
 
-	// Get allowed apps first
-	var allowedApps []string
-	if authType == "admin" {
-		allowedApps = allApps
-	} else if authType == "github" {
-		cfg := config.GetConfig()
-		if cfg == nil {
-			return c.Status(500).JSON(fiber.Map{
-				"error": "Configuration not available",
-			})
-		}
-
-		for _, user := range cfg.GitHub.Users {
-			if user.Username == username.(string) {
-				for _, route := range user.Routes {
-					if route == "*" || route == "/*" || route == "/apps/*" {
-						allowedApps = allApps
-						break
-					}
-
-					if strings.HasPrefix(route, "/apps/") {
-						appName := strings.TrimPrefix(route, "/apps/")
-						if strings.HasSuffix(appName, "*") {
-							prefix := strings.TrimSuffix(appName, "*")
-							for _, app := range allApps {
-								if strings.HasPrefix(app, prefix) {
-									allowedApps = append(allowedApps, app)
-								}
-							}
-						} else {
-							if system.Contains(allApps, appName) {
-								allowedApps = append(allowedApps, appName)
-							}
-						}
-					}
-				}
-				break
-			}
-		}
+	allowedApps, err := resolveAllowedAppsForSession(username, authType, allApps)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	// Now process only the allowed apps
@@ -897,6 +786,18 @@ func handleAppsListDetailed(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"apps": detailedApps,
 	})
+}
+
+func resolveAllowedAppsForSession(username interface{}, authType interface{}, allApps []string) ([]string, error) {
+	if authType == config.RoleAdmin {
+		return allApps, nil
+	}
+
+	if config.GetConfig() == nil {
+		return nil, fmt.Errorf("Configuration not available")
+	}
+
+	return templates.GetUserAllowedApps(username, authType, allApps), nil
 }
 
 func handleAppResource(c *fiber.Ctx) error {

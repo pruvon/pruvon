@@ -8,10 +8,6 @@ import (
 	servicelogs "github.com/pruvon/pruvon/internal/services/logs"
 	"github.com/pruvon/pruvon/internal/ssh"
 	"github.com/pruvon/pruvon/internal/templates"
-	"io"
-	"net/http"
-	"os"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -69,6 +65,10 @@ func handleClearTemplateCache(c *fiber.Ctx) error {
 
 // handleSSHKeyDelete handles SSH key deletion from settings page
 func handleSSHKeyDelete(c *fiber.Ctx, deps *appdeps.Dependencies) error {
+	if !isAdminSettingsSession(c) {
+		return c.Redirect("/")
+	}
+
 	name := c.Params("name")
 
 	_, err := deps.DokkuRunner.RunCommand("dokku", "ssh-keys:remove", name)
@@ -91,9 +91,13 @@ func handleSSHKeyDelete(c *fiber.Ctx, deps *appdeps.Dependencies) error {
 
 // handleGitHubSSHKeySync handles SSH key synchronization with GitHub
 func handleGitHubSSHKeySync(c *fiber.Ctx, deps *appdeps.Dependencies, cfg *config.Config) error {
+	if !isAdminSettingsSession(c) {
+		return c.Redirect("/")
+	}
+
 	_ = servicelogs.LogWithParams(c, "sync_github_ssh_keys", nil)
 
-	existingKeys, err := ssh.ReadAuthorizedKeys("/home/dokku/.ssh/authorized_keys")
+	result, err := ssh.SyncGitHubKeys(cfg.Users, ssh.AuthorizedKeysPath, deps.DokkuRunner, nil)
 	if err != nil {
 		// Set error flash message
 		sess, _ := middleware.GetStore().Get(c)
@@ -103,82 +107,20 @@ func handleGitHubSSHKeySync(c *fiber.Ctx, deps *appdeps.Dependencies, cfg *confi
 		return c.Redirect("/settings?tab=ssh-keys")
 	}
 
-	githubKeys := make(map[string]bool)
-
-	for _, user := range cfg.GitHub.Users {
-		username := user.Username
-		resp, err := http.Get(fmt.Sprintf("https://github.com/%s.keys", username))
-		if err != nil {
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			continue
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			continue
-		}
-
-		keys := strings.Split(string(body), "\n")
-		for i, key := range keys {
-			if key == "" {
-				continue
-			}
-
-			keyParts := strings.Fields(key)
-			if len(keyParts) < 2 {
-				continue
-			}
-
-			keyData := keyParts[1]
-			githubKeys[keyData] = true
-
-			exists := false
-			for _, existingKey := range existingKeys {
-				if existingKey.KeyData == keyData {
-					exists = true
-					break
-				}
-			}
-
-			if !exists {
-				keyName := fmt.Sprintf("%s-%d", username, i+1)
-				tmpfile, err := os.CreateTemp("", "ssh-key-*.pub")
-				if err != nil {
-					continue
-				}
-				tmpfilePath := tmpfile.Name()
-
-				if _, err := tmpfile.WriteString(key); err != nil {
-					tmpfile.Close()
-					_ = os.Remove(tmpfilePath)
-					continue
-				}
-				if err := tmpfile.Close(); err != nil {
-					_ = os.Remove(tmpfilePath)
-					continue
-				}
-
-				_, _ = deps.DokkuRunner.RunCommand("dokku", "ssh-keys:add", keyName, tmpfilePath)
-				_ = os.Remove(tmpfilePath)
-			}
-		}
-	}
-
-	for _, existingKey := range existingKeys {
-		if !githubKeys[existingKey.KeyData] {
-			_, _ = deps.DokkuRunner.RunCommand("dokku", "ssh-keys:remove", existingKey.Name)
-		}
-	}
-
 	// Set success flash message
 	sess, _ := middleware.GetStore().Get(c)
-	sess.Set("flash_message", "SSH keys successfully synchronized with GitHub")
+	sess.Set("flash_message", fmt.Sprintf("GitHub SSH sync completed. Added %d keys, removed %d keys, failed users: %d.", result.AddedKeys, result.RemovedKeys, len(result.FailedUsers)))
 	sess.Set("flash_type", "success")
 	_ = sess.Save()
 
 	return c.Redirect("/settings?tab=ssh-keys")
+}
+
+func isAdminSettingsSession(c *fiber.Ctx) bool {
+	sess, _ := middleware.GetStore().Get(c)
+	role, _ := sess.Get("role").(string)
+	if role == "" {
+		role, _ = sess.Get("auth_type").(string)
+	}
+	return role == config.RoleAdmin
 }

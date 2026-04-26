@@ -436,7 +436,7 @@ rotate_example_admin_password() {
         die "could not locate admin password field in ${CONFIG_PATH}"
     fi
 
-    install -o root -g "${APP_GROUP}" -m 0640 "${temp_file}" "${CONFIG_PATH}"
+    install -o "${APP_USER}" -g "${APP_GROUP}" -m 0600 "${temp_file}" "${CONFIG_PATH}"
     rm -f "${temp_file}"
     GENERATED_ADMIN_PASSWORD="${admin_password}"
 }
@@ -573,8 +573,8 @@ create_config_if_missing() {
         if [[ -n "${PRUVON_LISTEN}" ]]; then
             warn "ignoring PRUVON_LISTEN because ${CONFIG_PATH} already exists"
         fi
-        chown root:"${APP_GROUP}" "${CONFIG_PATH}"
-        chmod 0640 "${CONFIG_PATH}"
+        chown "${APP_USER}":"${APP_GROUP}" "${CONFIG_PATH}"
+        chmod 0600 "${CONFIG_PATH}"
         return
     fi
 
@@ -609,7 +609,7 @@ create_config_if_missing() {
         die "could not locate pruvon.listen field in ${template_path}"
     fi
 
-    install -o root -g "${APP_GROUP}" -m 0640 "${temp_file}" "${CONFIG_PATH}"
+    install -o "${APP_USER}" -g "${APP_GROUP}" -m 0600 "${temp_file}" "${CONFIG_PATH}"
     rm -f "${temp_file}"
     GENERATED_ADMIN_PASSWORD="${admin_password}"
 }

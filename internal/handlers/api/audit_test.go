@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHandleAuditOverviewUsesAppScopedDataForGitHubUser(t *testing.T) {
+func TestHandleAuditOverviewUsesAppScopedDataForScopedUser(t *testing.T) {
 	runner := &dokku.MockCommandRunner{
 		OutputMap: map[string]string{
 			"dokku plugin:list": "=====> Installed plugins\naudit 0.2.0\n",
@@ -28,13 +28,14 @@ func TestHandleAuditOverviewUsesAppScopedDataForGitHubUser(t *testing.T) {
 		ErrorMap: map[string]error{},
 	}
 
-	app := newAuditTestApp(t, githubAuditConfig(config.GitHubUser{
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{
 		Username: "octo",
+		Role:     config.RoleUser,
 		Apps:     []string{"allowed-app"},
 		Routes:   []string{"/api/apps/*"},
 	}), runner)
 
-	cookies := loginAuditUser(t, app, "octo", "github")
+	cookies := loginAuditUser(t, app, "octo", config.RoleUser)
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/audit/overview", cookies)
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -74,7 +75,7 @@ func TestHandleAuditOverviewIncludesHostHealthForAdmin(t *testing.T) {
 		ErrorMap: map[string]error{},
 	}
 
-	app := newAuditTestApp(t, githubAuditConfig(), runner)
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{Username: "admin", Role: config.RoleAdmin}), runner)
 
 	cookies := loginAuditUser(t, app, "admin", "admin")
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/audit/overview", cookies)
@@ -103,7 +104,7 @@ func TestHandleAuditOverviewEnrichesDeployActorsForAdmin(t *testing.T) {
 		ErrorMap: map[string]error{},
 	}
 
-	app := newAuditTestApp(t, githubAuditConfig(), runner)
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{Username: "admin", Role: config.RoleAdmin}), runner)
 
 	cookies := loginAuditUser(t, app, "admin", "admin")
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/audit/overview", cookies)
@@ -120,7 +121,7 @@ func TestHandleAuditOverviewEnrichesDeployActorsForAdmin(t *testing.T) {
 	assert.Equal(t, "git:push", overview.Deploys[0].Meta["triggered_by_subcommand"])
 }
 
-func TestHandleAuditEventDeniedForUnauthorizedGitHubUser(t *testing.T) {
+func TestHandleAuditEventDeniedForUnauthorizedScopedUser(t *testing.T) {
 	runner := &dokku.MockCommandRunner{
 		OutputMap: map[string]string{
 			"dokku plugin:list":                 "=====> Installed plugins\naudit 0.2.0\n",
@@ -130,13 +131,14 @@ func TestHandleAuditEventDeniedForUnauthorizedGitHubUser(t *testing.T) {
 		ErrorMap: map[string]error{},
 	}
 
-	app := newAuditTestApp(t, githubAuditConfig(config.GitHubUser{
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{
 		Username: "octo",
+		Role:     config.RoleUser,
 		Apps:     []string{"allowed-app"},
 		Routes:   []string{"/api/apps/*"},
 	}), runner)
 
-	cookies := loginAuditUser(t, app, "octo", "github")
+	cookies := loginAuditUser(t, app, "octo", config.RoleUser)
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/audit/events/99", cookies)
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
@@ -159,7 +161,7 @@ func TestHandleAuditEventEnrichesDeployMetadata(t *testing.T) {
 		ErrorMap: map[string]error{},
 	}
 
-	app := newAuditTestApp(t, githubAuditConfig(), runner)
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{Username: "admin", Role: config.RoleAdmin}), runner)
 
 	cookies := loginAuditUser(t, app, "admin", "admin")
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/audit/events/159", cookies)
@@ -174,7 +176,7 @@ func TestHandleAuditEventEnrichesDeployMetadata(t *testing.T) {
 	assert.Equal(t, "git push yoklama", event.Meta["triggered_by_command"])
 }
 
-func TestHandleAppAuditDeniedForUnauthorizedGitHubUser(t *testing.T) {
+func TestHandleAppAuditDeniedForUnauthorizedScopedUser(t *testing.T) {
 	runner := &dokku.MockCommandRunner{
 		OutputMap: map[string]string{
 			"dokku apps:list": "=====> My Apps\nallowed-app\nblocked-app\n",
@@ -182,13 +184,14 @@ func TestHandleAppAuditDeniedForUnauthorizedGitHubUser(t *testing.T) {
 		ErrorMap: map[string]error{},
 	}
 
-	app := newAuditTestApp(t, githubAuditConfig(config.GitHubUser{
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{
 		Username: "octo",
+		Role:     config.RoleUser,
 		Apps:     []string{"allowed-app"},
 		Routes:   []string{"/api/apps/*"},
 	}), runner)
 
-	cookies := loginAuditUser(t, app, "octo", "github")
+	cookies := loginAuditUser(t, app, "octo", config.RoleUser)
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/apps/blocked-app/audit", cookies)
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
@@ -198,7 +201,7 @@ func TestHandleAppAuditDeniedForUnauthorizedGitHubUser(t *testing.T) {
 	assert.Equal(t, "Access denied", payload["error"])
 }
 
-func TestHandleAppAuditExportDeniedForUnauthorizedGitHubUser(t *testing.T) {
+func TestHandleAppAuditExportDeniedForUnauthorizedScopedUser(t *testing.T) {
 	runner := &dokku.MockCommandRunner{
 		OutputMap: map[string]string{
 			"dokku apps:list": "=====> My Apps\nallowed-app\nblocked-app\n",
@@ -206,13 +209,14 @@ func TestHandleAppAuditExportDeniedForUnauthorizedGitHubUser(t *testing.T) {
 		ErrorMap: map[string]error{},
 	}
 
-	app := newAuditTestApp(t, githubAuditConfig(config.GitHubUser{
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{
 		Username: "octo",
+		Role:     config.RoleUser,
 		Apps:     []string{"allowed-app"},
 		Routes:   []string{"/api/apps/*"},
 	}), runner)
 
-	cookies := loginAuditUser(t, app, "octo", "github")
+	cookies := loginAuditUser(t, app, "octo", config.RoleUser)
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/apps/blocked-app/audit/export", cookies)
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
@@ -222,7 +226,7 @@ func TestHandleAppAuditExportDeniedForUnauthorizedGitHubUser(t *testing.T) {
 	assert.Equal(t, "Access denied", payload["error"])
 }
 
-func TestHandleAppAuditExportAllowsAuthorizedGitHubUser(t *testing.T) {
+func TestHandleAppAuditExportAllowsAuthorizedScopedUser(t *testing.T) {
 	runner := &dokku.MockCommandRunner{
 		OutputMap: map[string]string{
 			"dokku apps:list":   "=====> My Apps\nallowed-app\nblocked-app\n",
@@ -232,12 +236,13 @@ func TestHandleAppAuditExportAllowsAuthorizedGitHubUser(t *testing.T) {
 		ErrorMap: map[string]error{},
 	}
 
-	app := newAuditTestApp(t, githubAuditConfig(config.GitHubUser{
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{
 		Username: "octo",
+		Role:     config.RoleUser,
 		Apps:     []string{"allowed-app"},
 	}), runner)
 
-	cookies := loginAuditUser(t, app, "octo", "github")
+	cookies := loginAuditUser(t, app, "octo", config.RoleUser)
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/apps/allowed-app/audit/export", cookies)
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -272,12 +277,13 @@ func TestMergeAuditMetaDoesNotMutateBaseMap(t *testing.T) {
 }
 
 func TestHandleAuditExportRequiresAdminEvenWithExplicitRoute(t *testing.T) {
-	app := newAuditTestApp(t, githubAuditConfig(config.GitHubUser{
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{
 		Username: "octo",
+		Role:     config.RoleUser,
 		Routes:   []string{"/api/audit/export"},
 	}), &dokku.MockCommandRunner{OutputMap: map[string]string{}, ErrorMap: map[string]error{}})
 
-	cookies := loginAuditUser(t, app, "octo", "github")
+	cookies := loginAuditUser(t, app, "octo", config.RoleUser)
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/audit/export", cookies)
 
 	require.Equal(t, fiber.StatusForbidden, resp.StatusCode)
@@ -302,15 +308,16 @@ func TestHandleServiceAuditReturnsLinkedAppActivity(t *testing.T) {
 		ErrorMap: map[string]error{},
 	}
 
-	app := newAuditTestApp(t, githubAuditConfig(config.GitHubUser{
+	app := newAuditTestApp(t, scopedAuditConfig(config.User{
 		Username: "octo",
+		Role:     config.RoleUser,
 		Apps:     []string{"allowed-app", "linked-app"},
 		Services: map[string][]string{
 			"postgres": {"db1"},
 		},
 	}), runner)
 
-	cookies := loginAuditUser(t, app, "octo", "github")
+	cookies := loginAuditUser(t, app, "octo", config.RoleUser)
 	resp := performAuditRequest(t, app, http.MethodGet, "/api/services/postgres/db1/audit", cookies)
 
 	require.Equal(t, fiber.StatusOK, resp.StatusCode)
@@ -352,7 +359,7 @@ func newAuditTestApp(t *testing.T, cfg *config.Config, runner dokku.CommandRunne
 }
 
 func registerAuditTestLoginRoute(app *fiber.App) {
-	app.Get("/__test/login/:user/:type", func(c *fiber.Ctx) error {
+	app.Get("/__test/login/:user/:role", func(c *fiber.Ctx) error {
 		sess, err := middleware.GetStore().Get(c)
 		if err != nil {
 			return err
@@ -361,7 +368,8 @@ func registerAuditTestLoginRoute(app *fiber.App) {
 		sess.Set("authenticated", true)
 		sess.Set("user", c.Params("user"))
 		sess.Set("username", c.Params("user"))
-		sess.Set("auth_type", c.Params("type"))
+		sess.Set("role", c.Params("role"))
+		sess.Set("auth_type", c.Params("role"))
 		if err := sess.Save(); err != nil {
 			return err
 		}
@@ -370,16 +378,14 @@ func registerAuditTestLoginRoute(app *fiber.App) {
 	})
 }
 
-func githubAuditConfig(users ...config.GitHubUser) *config.Config {
-	cfg := &config.Config{}
-	cfg.GitHub.Users = users
-	return cfg
+func scopedAuditConfig(users ...config.User) *config.Config {
+	return &config.Config{Users: users}
 }
 
-func loginAuditUser(t *testing.T, app *fiber.App, user, authType string) []*http.Cookie {
+func loginAuditUser(t *testing.T, app *fiber.App, user, role string) []*http.Cookie {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodGet, "/__test/login/"+user+"/"+authType, nil)
+	req := httptest.NewRequest(http.MethodGet, "/__test/login/"+user+"/"+role, nil)
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	require.Equal(t, fiber.StatusNoContent, resp.StatusCode)

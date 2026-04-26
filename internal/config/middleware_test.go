@@ -11,8 +11,11 @@ import (
 func TestConfigMiddleware(t *testing.T) {
 	// Create a test config
 	testConfig := &Config{}
-	testConfig.Admin.Username = "testuser"
-	testConfig.Admin.Password = "testpass"
+	testConfig.Users = []User{{
+		Username: "testuser",
+		Password: "testpass",
+		Role:     RoleAdmin,
+	}}
 	testConfig.Pruvon.Listen = ":8080"
 
 	// Create a Fiber app
@@ -27,7 +30,7 @@ func TestConfigMiddleware(t *testing.T) {
 		if !ok {
 			return c.Status(500).SendString("Config not found in context")
 		}
-		return c.SendString(cfg.Admin.Username)
+		return c.SendString(cfg.Users[0].Username)
 	})
 
 	// Test the middleware
@@ -56,7 +59,14 @@ func TestConfigMiddleware_ConfigInContext(t *testing.T) {
 	// Create a test config with specific values
 	testConfig := &Config{}
 	testConfig.Pruvon.Listen = ":8080"
-	testConfig.GitHub.ClientID = "test-client-id"
+	testConfig.Users = []User{{
+		Username: "test-client-user",
+		Password: "hash",
+		Role:     RoleUser,
+		GitHub: &UserGitHub{
+			Username: "test-client-id",
+		},
+	}}
 
 	// Create a Fiber app
 	app := fiber.New()
@@ -75,8 +85,8 @@ func TestConfigMiddleware_ConfigInContext(t *testing.T) {
 			return c.Status(500).SendString("Wrong listen address")
 		}
 
-		if cfg.GitHub.ClientID != "test-client-id" {
-			return c.Status(500).SendString("Wrong client ID")
+		if cfg.Users[0].GitHub == nil || cfg.Users[0].GitHub.Username != "test-client-id" {
+			return c.Status(500).SendString("Wrong GitHub metadata")
 		}
 
 		return c.SendString("OK")
@@ -134,7 +144,11 @@ func TestConfigMiddleware_NextCalled(t *testing.T) {
 func TestConfigMiddleware_MultipleRoutes(t *testing.T) {
 	// Create a test config
 	testConfig := &Config{}
-	testConfig.Admin.Username = "admin"
+	testConfig.Users = []User{{
+		Username: "admin",
+		Password: "hash",
+		Role:     RoleAdmin,
+	}}
 
 	// Create a Fiber app
 	app := fiber.New()
@@ -145,12 +159,12 @@ func TestConfigMiddleware_MultipleRoutes(t *testing.T) {
 	// Create multiple routes
 	app.Get("/route1", func(c *fiber.Ctx) error {
 		cfg := c.Locals("config").(*Config)
-		return c.SendString(cfg.Admin.Username)
+		return c.SendString(cfg.Users[0].Username)
 	})
 
 	app.Get("/route2", func(c *fiber.Ctx) error {
 		cfg := c.Locals("config").(*Config)
-		return c.SendString(cfg.Admin.Username)
+		return c.SendString(cfg.Users[0].Username)
 	})
 
 	// Test route1

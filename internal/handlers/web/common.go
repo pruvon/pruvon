@@ -48,11 +48,17 @@ func GetSessionData(c *fiber.Ctx) fiber.Map {
 	}
 
 	return fiber.Map{
-		"HideNavigation":   false,
-		"User":             username,
-		"Username":         username,
-		"username":         username,
-		"AuthType":         sess.Get("auth_type"),
+		"HideNavigation": false,
+		"User":           username,
+		"Username":       username,
+		"username":       username,
+		"AuthType": func() interface{} {
+			role := sess.Get("role")
+			if role != nil {
+				return role
+			}
+			return sess.Get("auth_type")
+		}(),
 		"FlashMessage":     flashMessage,
 		"FlashType":        flashType,
 		"Version":          version,

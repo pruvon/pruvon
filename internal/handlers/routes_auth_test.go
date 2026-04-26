@@ -52,10 +52,8 @@ func TestSetupRoutes_AllProtectedRoutesRequireAuthentication(t *testing.T) {
 	app := newRouteProtectionTestApp(t)
 
 	publicRoutes := map[string]bool{
-		"/login":                true,
-		"/api/login":            true,
-		"/auth/github":          true,
-		"/auth/github/callback": true,
+		"/login":     true,
+		"/api/login": true,
 	}
 
 	for _, route := range app.GetRoutes(true) {

@@ -30,6 +30,63 @@ const sshKeysSettingsComponent = () => ({
         {{end}}
     ],
     viewMode: 'table',
+    syncSummary: null,
+
+    handleEscape() {
+        if (this.isLoading || this.isSyncing || this.isDeletingKey) {
+            return;
+        }
+        if (this.showDeleteModal) {
+            this.showDeleteModal = false;
+            return;
+        }
+        if (this.showSyncModal) {
+            this.showSyncModal = false;
+            return;
+        }
+        if (this.showAddModal) {
+            this.showAddModal = false;
+        }
+    },
+
+    replaceKeys(keys) {
+        this.keys = Array.isArray(keys) ? keys.map((key) => ({
+            name: key.name || '',
+            allowed: key.SSHCOMMAND_ALLOWED_KEYS || key.allowed || '',
+        })) : [];
+    },
+
+    buildSyncMessage(data) {
+        const syncedUsers = Array.isArray(data.synced_users) ? data.synced_users : [];
+        const skippedUsers = Array.isArray(data.skipped_users) ? data.skipped_users : [];
+        const failedUsers = Array.isArray(data.failed_users) ? data.failed_users : [];
+
+        const parts = [
+            `Added ${data.added_keys || 0} keys`,
+            `removed ${data.removed_keys || 0} keys`,
+            `${syncedUsers.length} synced users`,
+        ];
+
+        if (skippedUsers.length > 0) {
+            parts.push(`${skippedUsers.length} skipped users`);
+        }
+
+        if (failedUsers.length > 0) {
+            parts.push(`${failedUsers.length} failed users`);
+        }
+
+        return `Sync finished. ${parts.join(', ')}.`;
+    },
+
+    async refreshKeys() {
+        const response = await fetch('/api/settings/ssh-keys');
+        if (!response.ok) {
+            throw new Error('Failed to refresh SSH keys');
+        }
+
+        const data = await response.json();
+        this.replaceKeys(data.keys || []);
+    },
 
     destroy() {
         if (this.flashTimeout) {
@@ -95,14 +152,18 @@ const sshKeysSettingsComponent = () => ({
             });
 
             if (response.ok) {
-                window.location.reload();
+                await this.refreshKeys();
+                this.showAddModal = false;
+                this.keyName = '';
+                this.keyContent = '';
+                this.showFlashMessage('SSH key added successfully.', 'success');
             } else {
                 const errorData = await response.json();
 
                 if (errorData.error) {
-                    if (errorData.error.includes('Geçersiz SSH anahtarı')) {
+                    if (errorData.error.includes('Invalid SSH key')) {
                         this.errors.keyContent = errorData.error;
-                    } else if (errorData.error.includes('adlı bir SSH anahtarı zaten mevcut')) {
+                    } else if (errorData.error.includes('already exists')) {
                         this.errors.keyName = errorData.error;
                     } else {
                         this.errors.general = errorData.error;
@@ -110,7 +171,7 @@ const sshKeysSettingsComponent = () => ({
                 }
             }
         } catch (error) {
-            this.errors.general = 'Bir hata oluştu: ' + error.message;
+            this.errors.general = 'An error occurred: ' + error.message;
         } finally {
             this.isLoading = false;
         }
@@ -129,9 +190,15 @@ const sshKeysSettingsComponent = () => ({
                 method: 'DELETE'
             });
 
-            if (response.ok) {
-                window.location.reload();
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to delete key');
             }
+
+            await this.refreshKeys();
+            this.showFlashMessage('SSH key deleted successfully.', 'success');
+        } catch (error) {
+            this.showFlashMessage(error.message || 'Failed to delete key.', 'error');
         } finally {
             this.isDeletingKey = false;
             this.showDeleteModal = false;
@@ -146,11 +213,18 @@ const sshKeysSettingsComponent = () => ({
                 method: 'POST'
             });
 
-            if (response.ok) {
-                window.location.reload();
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to sync keys');
             }
+
+            const data = await response.json();
+            this.syncSummary = data;
+            await this.refreshKeys();
+            this.showFlashMessage(this.buildSyncMessage(data), data.success ? 'success' : 'error');
         } catch (error) {
             console.error('Error syncing keys:', error);
+            this.showFlashMessage(error.message || 'Failed to sync keys.', 'error');
         } finally {
             this.isSyncing = false;
             this.showSyncModal = false;
@@ -189,7 +263,7 @@ if (window.Alpine) {
 }
 </script>
 
-<div x-data="sshKeysSettings" class="space-y-6">
+<div x-data="sshKeysSettings" @keydown.escape.window="handleEscape" class="space-y-6">
     <div x-show="showFlash && flashMessage"
          x-cloak
           x-transition:enter="transition ease-out duration-300"
@@ -198,7 +272,7 @@ if (window.Alpine) {
          x-transition:leave="transition ease-in duration-200"
          x-transition:leave-start="opacity-100 transform translate-y-0"
          x-transition:leave-end="opacity-0 transform -translate-y-2"
-         class="fixed top-4 right-4 z-50"
+         class="fixed top-4 right-4 z-[9999]"
          @click="showFlash = false">
         <div :class="{
             'border-status-success/30 bg-status-success-bg text-status-success': flashMessage?.type === 'success',
@@ -222,7 +296,7 @@ if (window.Alpine) {
                 </svg>
                 <div>
                     <h1 class="text-sm font-semibold text-text-primary">SSH Keys</h1>
-                    <p class="mt-0.5 text-xs text-text-secondary">Manage server access keys and GitHub synchronization.</p>
+                    <p class="mt-0.5 text-xs text-text-secondary">Manage server access keys and sync public keys from configured GitHub usernames.</p>
                 </div>
             </div>
             <div class="flex space-x-2">
@@ -240,7 +314,7 @@ if (window.Alpine) {
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                     </template>
-                    <span x-text="isSyncing ? 'Syncing...' : 'Sync with GitHub'"></span>
+                    <span x-text="isSyncing ? 'Processing...' : 'Sync with GitHub'"></span>
                 </button>
                 <button @click="showAddModal = true"
                         class="inline-flex h-8 items-center rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white hover:bg-brand-hover focus:outline-none focus:ring-1 focus:ring-brand-primary transition-colors duration-150">
@@ -252,6 +326,65 @@ if (window.Alpine) {
                     </div>
                 </button>
             </div>
+    </div>
+
+    <div x-show="syncSummary" x-cloak class="rounded-md border border-border bg-surface p-4">
+        <div class="flex items-start justify-between gap-3">
+            <div>
+                <h2 class="text-sm font-semibold text-text-primary">Last GitHub Sync</h2>
+                <p class="mt-0.5 text-xs text-text-secondary" x-text="buildSyncMessage(syncSummary || {})"></p>
+            </div>
+            <span :class="syncSummary?.success ? 'bg-status-success-bg text-status-success' : 'bg-status-warning-bg text-status-warning'" class="inline-flex rounded-sm px-2 py-0.5 text-xs font-medium" x-text="syncSummary?.success ? 'Successful' : 'Completed with issues'"></span>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+                <h3 class="text-xs font-medium uppercase tracking-wide text-text-secondary">Synced Users</h3>
+                <div class="mt-2 space-y-2 text-xs text-text-secondary">
+                    <template x-if="!syncSummary?.synced_users || syncSummary.synced_users.length === 0">
+                        <p>No users synced.</p>
+                    </template>
+                    <template x-for="user in (syncSummary?.synced_users || [])" :key="user.username">
+                        <div class="rounded border border-border bg-card px-3 py-2">
+                            <div class="font-medium text-text-primary" x-text="user.username"></div>
+                            <div class="mt-0.5 font-mono text-[13px]" x-text="user.github_username"></div>
+                            <div class="mt-1" x-text="`Added ${user.added}, removed ${user.removed}`"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-xs font-medium uppercase tracking-wide text-text-secondary">Skipped Users</h3>
+                <div class="mt-2 space-y-2 text-xs text-text-secondary">
+                    <template x-if="!syncSummary?.skipped_users || syncSummary.skipped_users.length === 0">
+                        <p>No skipped users.</p>
+                    </template>
+                    <template x-for="user in (syncSummary?.skipped_users || [])" :key="user.username + user.reason">
+                        <div class="rounded border border-border bg-card px-3 py-2">
+                            <div class="font-medium text-text-primary" x-text="user.username"></div>
+                            <div class="mt-1" x-text="user.reason"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-xs font-medium uppercase tracking-wide text-text-secondary">Failed Users</h3>
+                <div class="mt-2 space-y-2 text-xs text-text-secondary">
+                    <template x-if="!syncSummary?.failed_users || syncSummary.failed_users.length === 0">
+                        <p>No failed users.</p>
+                    </template>
+                    <template x-for="user in (syncSummary?.failed_users || [])" :key="user.username + user.error">
+                        <div class="rounded border border-status-danger/30 bg-status-danger-bg/30 px-3 py-2">
+                            <div class="font-medium text-text-primary" x-text="user.username"></div>
+                            <div class="mt-0.5 font-mono text-[13px]" x-show="user.github_username" x-text="user.github_username"></div>
+                            <div class="mt-1 text-status-danger" x-text="user.error"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
     </div>
 
 
@@ -372,6 +505,7 @@ if (window.Alpine) {
                         <h3 class="text-base font-semibold text-text-primary">Add New SSH Key</h3>
                     </div>
                     <button @click="showAddModal = false"
+                            :disabled="isLoading"
                             class="text-text-tertiary hover:text-text-primary p-1 rounded hover:bg-surface transition-colors duration-150">
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -476,11 +610,11 @@ if (window.Alpine) {
                     </button>
                 </div>
 
-                <div class="bg-surface border border-border rounded-md p-3">
-                    <p class="text-xs text-text-secondary">
-                        This will sync SSH keys from GitHub for all allowed users. Existing keys will be preserved.
-                    </p>
-                </div>
+                 <div class="bg-surface border border-border rounded-md p-3">
+                     <p class="text-xs text-text-secondary">
+                        This syncs keys for every user with a GitHub username in User Management, including admins. Manually added keys are preserved.
+                     </p>
+                 </div>
 
                 <div class="flex justify-end space-x-2 pt-3 border-t border-border-subtle">
                     <button @click="showSyncModal = false"
@@ -497,7 +631,7 @@ if (window.Alpine) {
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                         </template>
-                        <span x-text="isSyncing ? 'Syncing...' : 'Sync Keys'"></span>
+                        <span x-text="isSyncing ? 'Processing...' : 'Sync Keys'"></span>
                     </button>
                 </div>
             </div>
@@ -570,7 +704,7 @@ if (window.Alpine) {
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            Deleting...
+                            Processing...
                         </span>
                     </button>
                 </div>

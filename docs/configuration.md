@@ -12,8 +12,7 @@ sudo systemctl restart pruvon
 
 | Section | Purpose |
 | --- | --- |
-| `admin` | Local admin login credentials |
-| `github` | GitHub OAuth settings and authorized users |
+| `users` | Local users, roles, scoped access, and optional GitHub usernames for SSH key sync |
 | `pruvon` | Runtime settings (listen address) |
 | `backup` | Backup schedule, included database types, and retention policy |
 | `dokku` | Reserved for future use |
@@ -22,14 +21,22 @@ sudo systemctl restart pruvon
 ## Full example
 
 ```yaml
-admin:
-  username: admin
-  password: "$2a$10$...your-bcrypt-hash..."
-
-github:
-  client_id: ""
-  client_secret: ""
-  users: []
+users:
+  - username: admin
+    password: "$2a$10$...your-bcrypt-hash..."
+    role: admin
+  - username: operator
+    password: "$2a$10$...your-bcrypt-hash..."
+    role: user
+    routes:
+      - "/apps/*"
+    apps:
+      - "example-app"
+    services:
+      postgres:
+        - "example-db"
+    github:
+      username: "octocat"
 
 pruvon:
   listen: 127.0.0.1:8080
@@ -54,9 +61,9 @@ backup:
 
 ## Admin login
 
-`admin.username` is the local admin username. Default is `admin`.
+Admin users live under `users:` with `role: admin`.
 
-`admin.password` must be a bcrypt hash, not a plain-text password.
+Each user's `password` must be a bcrypt hash, not plain text.
 
 ### Change the admin password
 
@@ -73,7 +80,7 @@ Open the config file:
 sudoedit /etc/pruvon.yml
 ```
 
-Replace the value under `admin.password` with the new hash, then restart:
+Replace the admin user's `password` value with the new hash, then restart:
 
 ```bash
 sudo systemctl restart pruvon
@@ -88,55 +95,48 @@ Avoid `htpasswd -b` -- it exposes the plain-text password in shell history and p
 If you can no longer log in:
 
 1. Generate a new bcrypt hash with the command above.
-2. Replace `admin.password` in `/etc/pruvon.yml` with the new hash.
+2. Replace the admin user's `password` in `/etc/pruvon.yml` with the new hash.
 3. Restart the service with `sudo systemctl restart pruvon`.
 
-## GitHub authentication
+## Users and scoped access
 
-GitHub login is optional. To enable it, register a GitHub OAuth App and add the credentials to the config.
+Pruvon supports only local username/password login.
 
-```yaml
-github:
-  client_id: "your-github-oauth-client-id"
-  client_secret: "your-github-oauth-client-secret"
-  users: []
-```
-
-### Managing GitHub users
-
-`github.users` is a list of user objects with granular access controls:
+Non-admin users also live under `users:` and can have granular route, app, and service access:
 
 | Field | Type | Purpose |
 | --- | --- | --- |
-| `username` | string | GitHub username (required) |
+| `username` | string | Local login username |
+| `password` | string | Optional bcrypt hash for local login |
+| `role` | string | `admin` or `user` |
 | `routes` | string list | Allowed URL route patterns |
 | `apps` | string list | Allowed Dokku app names |
 | `services` | map of string lists | Allowed services, grouped by type |
+| `github.username` | string | Optional GitHub username used only for SSH key sync |
 
 Example with full access:
 
 ```yaml
-github:
-  client_id: "your-github-oauth-client-id"
-  client_secret: "your-github-oauth-client-secret"
-  users:
-    - username: "alice"
-      routes:
-        - "/*"
-      apps:
+users:
+  - username: "alice"
+    password: "$2a$10$...bcrypt-hash..."
+    role: user
+    routes:
+      - "/*"
+    apps:
+      - "*"
+    services:
+      postgres:
         - "*"
-      services:
-        postgres:
-          - "*"
-        redis:
-          - "*"
+      redis:
+        - "*"
+    github:
+      username: "alice"
 ```
-
-For most setups, the simpler path is to sign in as the local admin, enable GitHub OAuth in the Pruvon UI, and manage GitHub user permissions from there.
 
 ### Access enforcement
 
-GitHub users are revalidated against the config on every request. Removing a user from `github.users` and restarting the service revokes their access immediately.
+Configured users are revalidated against the config on every request. Removing or disabling a user and restarting the service revokes their access immediately.
 
 ## Listen address
 

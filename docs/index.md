@@ -17,11 +17,11 @@ features:
   - title: Install
     details: One command sets up the binary, systemd service, backup schedule, and log rotation on your Dokku host.
   - title: Configure
-    details: A single YAML file at /etc/pruvon.yml controls the admin account, GitHub OAuth, listen address, and backup policy.
+    details: A single YAML file at /etc/pruvon.yml controls local users, listen address, scoped access, and backup policy.
   - title: Operate
     details: Manage the service with systemctl, read logs with journalctl, and trigger backups on demand.
   - title: Secure
-    details: Keep Pruvon on localhost behind a VPN or reverse proxy. Control access with local credentials or GitHub OAuth.
+    details: Keep Pruvon on localhost behind a VPN or reverse proxy. Control access with local credentials and scoped local users.
 ---
 
 ## What is Pruvon?
@@ -37,7 +37,7 @@ Follow these pages in order if you are setting up Pruvon for the first time:
 | Page | What it covers |
 | --- | --- |
 | [Install](/install) | Running the installer, first login, and what gets placed on the system |
-| [Configuration](/configuration) | Editing `/etc/pruvon.yml`: admin credentials, GitHub OAuth, listen address, and backup settings |
+| [Configuration](/configuration) | Editing `/etc/pruvon.yml`: users, scoped access, listen address, and backup settings |
 | [Operations](/operations) | Starting, stopping, and updating Pruvon; reading logs; running backups |
 | [Security](/security) | Recommended access controls and credential practices |
 | [Behind a Reverse Proxy](/behind-proxy) | Nginx configuration for proxying Pruvon with IP restrictions |

@@ -55,29 +55,25 @@ func HandleApps(c *fiber.Ctx) error {
 	// Add apps specific data
 	sessionData["Title"] = "Applications"
 
-	// Get username and auth type
+	// Get username and role
 	username := sessionData["Username"]
 	if username == nil {
 		// Try alternate key (for backward compatibility)
 		username = sessionData["User"]
 	}
-	authType := sessionData["AuthType"]
+	role := sessionData["AuthType"]
 
 	// The template will handle filtering using the getUserAllowedApps function
 	sessionData["AppNames"] = apps
 	sessionData["AllAppNames"] = apps // Store all apps for reference
 
 	// Add information about user permissions and apps
-	if cfg := c.Locals("config").(*config.Config); cfg != nil && authType == "github" {
-		// Find user in config
+	if cfg := c.Locals("config").(*config.Config); cfg != nil && role != config.RoleAdmin {
 		if usernameStr, ok := username.(string); ok {
-			for _, user := range cfg.GitHub.Users {
-				if user.Username == usernameStr {
-					sessionData["UserHasApps"] = len(user.Apps) > 0
-					sessionData["UserApps"] = user.Apps
-					sessionData["UserRoutes"] = user.Routes
-					break
-				}
+			if user := cfg.FindUser(usernameStr); user != nil {
+				sessionData["UserHasApps"] = len(user.Apps) > 0
+				sessionData["UserApps"] = user.Apps
+				sessionData["UserRoutes"] = user.Routes
 			}
 		}
 	}

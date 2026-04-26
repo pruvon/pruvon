@@ -7,7 +7,7 @@ import (
 // User represents the authenticated user information
 type User struct {
 	Username string
-	AuthType string
+	Role     string
 }
 
 // AuthChecker defines the interface for authorization checkers

@@ -12,10 +12,10 @@ func TestAdminAuthChecker_CheckAccess(t *testing.T) {
 		path string
 		user User
 	}{
-		{"Admin user any path", "/apps", User{Username: "admin", AuthType: "admin"}},
-		{"Admin user API", "/api/apps/list", User{Username: "admin", AuthType: "admin"}},
-		{"Admin user services", "/services/postgres/db", User{Username: "admin", AuthType: "admin"}},
-		{"Admin user settings", "/settings", User{Username: "admin", AuthType: "admin"}},
+		{"Admin user any path", "/apps", User{Username: "admin", Role: "admin"}},
+		{"Admin user API", "/api/apps/list", User{Username: "admin", Role: "admin"}},
+		{"Admin user services", "/services/postgres/db", User{Username: "admin", Role: "admin"}},
+		{"Admin user settings", "/settings", User{Username: "admin", Role: "admin"}},
 	}
 
 	for _, tt := range tests {

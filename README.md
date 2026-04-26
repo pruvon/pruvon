@@ -86,6 +86,7 @@ sudo env PRUVON_BINARY=builds/pruvon-linux-amd64 ./install.sh
 - create `/etc/pruvon.yml` if it does not exist
 - generate a random local admin password for a fresh install and store only its bcrypt hash in config
 - rotate the bundled example admin password hash if an existing config still contains it
+- ensure `/etc/pruvon.yml` is owned by the `pruvon` service user with `0600` permissions so settings changes can be persisted from the UI
 - install the systemd unit, sudoers policy, daily backup cron script, and logrotate policy
 - enable and start the `pruvon` systemd service
 
@@ -137,10 +138,11 @@ If you edit `/etc/systemd/system/pruvon.service` directly or create an override 
 
 On an installed system, the main config file lives at `/etc/pruvon.yml`.
 
+The installer keeps that file owned by the `pruvon` service user with `0600` permissions so runtime settings changes can be written back safely.
+
 Top-level sections:
 
-- `admin`: Local fallback login. `admin.password` must be a bcrypt hash.
-- `github`: Optional GitHub OAuth settings and allowed GitHub users.
+- `users`: Local users, bcrypt password hashes, roles, scoped access, and optional GitHub usernames for SSH key sync.
 - `pruvon`: Runtime settings such as the bind address.
 - `backup`: Backup storage, schedule, database types, and retention.
 - `dokku`: Reserved for future Dokku-specific settings. Leave it as `{}`.
@@ -155,7 +157,7 @@ sudo systemctl status pruvon
 
 ## Change The Local Admin Password
 
-If you want to rotate the local admin password, generate a new bcrypt hash and replace `admin.password` in `/etc/pruvon.yml`.
+If you want to rotate the local admin password, generate a new bcrypt hash and replace the admin user's `password` in `/etc/pruvon.yml`.
 
 Generate a hash interactively:
 
@@ -173,9 +175,10 @@ sudoedit /etc/pruvon.yml
 Example:
 
 ```yaml
-admin:
-  username: admin
-  password: "$2a$10$...your-new-hash..."
+users:
+  - username: admin
+    password: "$2a$10$...your-new-hash..."
+    role: admin
 ```
 
 Apply the change:

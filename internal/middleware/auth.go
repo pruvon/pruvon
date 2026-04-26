@@ -23,7 +23,7 @@ func GetStore() *session.Store {
 func Auth() fiber.Handler {
 	// Initialize authorization checkers
 	adminChecker := authz.NewAdminAuthChecker()
-	githubChecker := authz.NewGitHubAuthChecker()
+	scopedChecker := authz.NewScopedUserAuthChecker()
 
 	return func(c *fiber.Ctx) error {
 		currentPath := c.Path()
@@ -55,13 +55,9 @@ func Auth() fiber.Handler {
 			return handleUnauthenticated(c, currentPath, "User information missing", "Could not retrieve username from session")
 		}
 
-		authType := sess.Get("auth_type")
-		if authType == nil {
-			return handleUnauthenticated(c, currentPath, "Authentication type missing", "Could not retrieve auth_type from session")
-		}
-		authTypeStr, ok := authType.(string)
-		if !ok {
-			return handleUnauthenticated(c, currentPath, "Authentication type invalid", "auth_type is not a string")
+		role, valid := syncConfiguredUser(sess, username)
+		if !valid {
+			return handleUnauthenticated(c, currentPath, "Authentication required", "The configured user is no longer available")
 		}
 
 		// 5. Check if route is accessible to any authenticated user
@@ -72,25 +68,19 @@ func Auth() fiber.Handler {
 		// 6. Create user object for authorization checking
 		user := authz.User{
 			Username: username,
-			AuthType: authTypeStr,
+			Role:     role,
 		}
 
 		// 7. Delegate to appropriate authorization checker
 		var checker authz.AuthChecker
-		switch authTypeStr {
-		case "admin":
+		switch role {
+		case config.RoleAdmin:
 			checker = adminChecker
-		case "github":
-			// Validate GitHub user is in config before proceeding
-			if !validateGitHubUser(sess, username) {
-				return handleAccessDenied(c, currentPath, "Access denied - User not authorized in configuration", fiber.Map{
-					"detail": "Please contact administrator",
-				})
-			}
-			checker = githubChecker
+		case config.RoleUser:
+			checker = scopedChecker
 		default:
 			return handleAccessDenied(c, currentPath, "Access denied - Unknown auth type", fiber.Map{
-				"auth_type": authType,
+				"role": role,
 			})
 		}
 
@@ -105,6 +95,15 @@ func Auth() fiber.Handler {
 			"path": currentPath,
 		})
 	}
+}
+
+func getRoleFromSession(sess *session.Session) string {
+	role, _ := sess.Get("role").(string)
+	if role != "" {
+		return role
+	}
+	authType, _ := sess.Get("auth_type").(string)
+	return authType
 }
 
 // getUsernameFromSession retrieves username from session with backward compatibility
@@ -123,36 +122,38 @@ func getUsernameFromSession(sess *session.Session) string {
 	return s
 }
 
-// validateGitHubUser validates that a GitHub user exists in the configuration
-func validateGitHubUser(sess *session.Session, username string) bool {
+// syncConfiguredUser validates that the session user still exists and is enabled,
+// and returns the current configured role for authorization decisions.
+func syncConfiguredUser(sess *session.Session, username string) (string, bool) {
 	cfg := config.GetConfig()
 	if cfg == nil {
-		return false
+		return "", false
 	}
 
-	// Check if user is in config
-	userFound := false
-	if cfg.GitHub.Users != nil {
-		for _, user := range cfg.GitHub.Users {
-			if user.Username == username {
-				userFound = true
-				break
-			}
-		}
-	}
+	user := cfg.FindUser(username)
+	userFound := user != nil && !user.Disabled
 
 	if !userFound {
 		sess.Delete("authenticated")
 		sess.Delete("username")
 		sess.Delete("user")
+		sess.Delete("role")
 		sess.Delete("auth_type")
 		if err := sess.Save(); err != nil {
 			// If we can't save the session deletion, destroy it entirely
 			_ = sess.Destroy()
 		}
+		return "", false
 	}
 
-	return userFound
+	configuredRole := user.Role
+	if sess.Get("role") != configuredRole || sess.Get("auth_type") != configuredRole {
+		sess.Set("role", configuredRole)
+		sess.Set("auth_type", configuredRole)
+		_ = sess.Save()
+	}
+
+	return configuredRole, true
 }
 
 // handleUnauthenticated handles unauthenticated requests
@@ -199,7 +200,7 @@ func renderForbiddenPage(c *fiber.Ctx, message string, details map[string]interf
 		"BackText":       "Back to Dashboard",
 		"HideNavigation": false,
 		"User":           sess.Get("user"),
-		"AuthType":       sess.Get("auth_type"),
+		"AuthType":       getRoleFromSession(sess),
 	}
 
 	var out bytes.Buffer

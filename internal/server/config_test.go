@@ -46,13 +46,32 @@ func TestCreateDefaultConfig(t *testing.T) {
 		t.Fatalf("Failed to unmarshal config: %v", err)
 	}
 
-	// Check admin section
-	admin, ok := cfg["admin"].(map[interface{}]interface{})
+	// Check users section
+	users, ok := cfg["users"].([]interface{})
 	if !ok {
-		t.Fatal("admin section missing or invalid")
+		t.Fatal("users section missing or invalid")
+	}
+	if len(users) != 1 {
+		t.Fatalf("expected one default user, got %d", len(users))
+	}
+	for _, entry := range users {
+		userMap, ok := entry.(map[interface{}]interface{})
+		if !ok {
+			t.Fatalf("unexpected user entry: %#v", entry)
+		}
+		if userMap["username"] != "admin" {
+			t.Fatalf("fresh default config should only contain admin, got %#v", userMap["username"])
+		}
+	}
+	admin, ok := users[0].(map[interface{}]interface{})
+	if !ok {
+		t.Fatal("default user missing or invalid")
 	}
 	if admin["username"] != "admin" {
 		t.Errorf("Expected admin username 'admin', got %v", admin["username"])
+	}
+	if admin["role"] != "admin" {
+		t.Errorf("Expected admin role 'admin', got %v", admin["role"])
 	}
 
 	// Check password is hashed (bcrypt hash is longer than plain "admin")
@@ -81,6 +100,14 @@ func TestCreateDefaultConfig(t *testing.T) {
 	// Check backup section exists
 	if _, ok := cfg["backup"]; !ok {
 		t.Fatal("backup section missing")
+	}
+
+	fileInfo, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("failed to stat config file: %v", err)
+	}
+	if fileInfo.Mode().Perm() != 0600 {
+		t.Fatalf("expected config file mode 0600, got %o", fileInfo.Mode().Perm())
 	}
 
 	// Test 2: Call again when file exists - should not overwrite

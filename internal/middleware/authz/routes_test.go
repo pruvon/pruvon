@@ -13,8 +13,6 @@ func TestIsPublicRoute(t *testing.T) {
 		{"Login page", "/login", true},
 		{"API login", "/api/login", true},
 		{"Logout", "/logout", false},
-		{"GitHub auth", "/auth/github", true},
-		{"GitHub callback", "/auth/github/callback", true},
 		{"Private route", "/apps", false},
 		{"API route", "/api/apps/list", false},
 	}
@@ -39,10 +37,11 @@ func TestIsAuthenticatedUserRoute(t *testing.T) {
 		{"Metrics API", "/api/metrics", true},
 		{"Server info API", "/api/server/info", true},
 		{"Docker stats API", "/api/docker/stats", true},
+		{"Filtered apps list API", "/api/apps/list", true},
 		{"Audit overview API", "/api/audit/overview", true},
 		{"Audit event API", "/api/audit/events/42", true},
 		{"Apps page", "/apps", false},
-		{"Random API", "/api/apps/list", false},
+		{"Detailed apps list API still scoped", "/api/apps/list/detailed", false},
 	}
 
 	for _, tt := range tests {
@@ -150,6 +149,60 @@ func TestGenerateAppRoutes(t *testing.T) {
 		if route != expected[i] {
 			t.Errorf("GenerateAppRoutes(%q)[%d] = %q, want %q", appName, i, route, expected[i])
 		}
+	}
+}
+
+func TestRouteGrantsAnyApp(t *testing.T) {
+	tests := []struct {
+		name     string
+		route    string
+		expected bool
+	}{
+		{"Apps wildcard", "/apps/*", true},
+		{"Exact app detail route", "/apps/foo", true},
+		{"Exact app nested wildcard", "/apps/foo/*", true},
+		{"Prefix wildcard app selector", "/apps/foo*", true},
+		{"Create page is not an app", "/apps/create", false},
+		{"Create page wildcard is not an app", "/apps/create/*", false},
+		{"Nested custom route is not route-derived app access", "/apps/foo/logs", false},
+		{"Nested custom wildcard is not route-derived app access", "/apps/foo/logs/*", false},
+		{"API route does not count", "/api/apps/foo/*", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := RouteGrantsAnyApp(tt.route)
+			if result != tt.expected {
+				t.Errorf("RouteGrantsAnyApp(%q) = %v, want %v", tt.route, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRouteGrantsApp(t *testing.T) {
+	tests := []struct {
+		name     string
+		route    string
+		appName  string
+		expected bool
+	}{
+		{"Apps wildcard", "/apps/*", "foo", true},
+		{"Exact app detail route", "/apps/foo", "foo", true},
+		{"Exact app nested wildcard", "/apps/foo/*", "foo", true},
+		{"Prefix wildcard app selector", "/apps/foo*", "foobar", true},
+		{"Different app denied", "/apps/foo/*", "bar", false},
+		{"Create page is not an app", "/apps/create", "create", false},
+		{"Nested custom route is not an app grant", "/apps/foo/logs", "foo", false},
+		{"Nested custom wildcard is not an app grant", "/apps/foo/logs/*", "foo", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := RouteGrantsApp(tt.route, tt.appName)
+			if result != tt.expected {
+				t.Errorf("RouteGrantsApp(%q, %q) = %v, want %v", tt.route, tt.appName, result, tt.expected)
+			}
+		})
 	}
 }
 

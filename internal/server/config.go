@@ -7,7 +7,6 @@ import (
 	"github.com/pruvon/pruvon/internal/config"
 
 	"golang.org/x/crypto/bcrypt"
-	"gopkg.in/yaml.v2"
 )
 
 // CreateDefaultConfig creates a default config file with bcrypt hashed admin password
@@ -41,11 +40,13 @@ func CreateDefaultConfig(path string) error {
 	}
 
 	// Create default config
-	cfg := &config.Config{}
-
-	// Admin settings
-	cfg.Admin.Username = "admin"
-	cfg.Admin.Password = string(hashedPassword)
+	cfg := &config.Config{
+		Users: []config.User{{
+			Username: "admin",
+			Password: string(hashedPassword),
+			Role:     config.RoleAdmin,
+		}},
+	}
 
 	// Pruvon settings
 	cfg.Pruvon.Listen = "127.0.0.1:8080"
@@ -61,14 +62,8 @@ func CreateDefaultConfig(path string) error {
 		KeepMonthlyNum: 3, // Keep 3 months of monthly backups
 	}
 
-	// Convert to YAML
-	yamlData, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("error marshaling default config: %v", err)
-	}
-
 	// Write to file
-	if err := os.WriteFile(path, yamlData, 0644); err != nil {
+	if err := config.WriteConfigFile(path, cfg); err != nil {
 		return fmt.Errorf("error writing default config file: %v", err)
 	}
 

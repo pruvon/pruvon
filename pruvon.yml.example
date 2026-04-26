@@ -1,16 +1,25 @@
-# Local fallback login.
-# `install.sh` replaces the bundled example hash with a random password on first install.
-admin:
-  username: admin
-  # Must be a bcrypt hash, not a plain-text password.
-  password: "$2a$10$Pm8hoUAYMIgL9PWb..KzOeveml0.48arbqds4Qr.r7B38IjJjPQNa"
+# File-based users.
+# `install.sh` creates a fresh config with a random admin password on first install.
+users:
+  - username: admin
+    # Must be a bcrypt hash, not a plain-text password.
+    password: "$2a$10$Pm8hoUAYMIgL9PWb..KzOeveml0.48arbqds4Qr.r7B38IjJjPQNa"
+    role: admin
 
-# Optional GitHub OAuth login.
-# `users` is a list of objects with `username`, optional `routes`, optional `apps`, and optional `services`.
-github:
-  client_id: ""
-  client_secret: ""
-  users: []
+# Example scoped user with optional GitHub metadata for SSH key sync.
+# Copy, uncomment, and replace the password hash if you need an additional local user.
+#   - username: operator
+#     password: "$2a$10$replace-with-your-own-bcrypt-hash"
+#     role: user
+#     routes:
+#       - "/apps/*"
+#     apps:
+#       - "example-app"
+#     services:
+#       postgres:
+#         - "example-db"
+#     github:
+#       username: "octocat"
 
 # Keep this on localhost unless you are intentionally putting Pruvon behind a proxy or private network overlay.
 pruvon:

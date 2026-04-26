@@ -8,8 +8,6 @@ import (
 var PublicRoutes = []string{
 	"/login",
 	"/api/login",
-	"/auth/github",
-	"/auth/github/callback",
 }
 
 // AuthenticatedUserRoutes defines routes accessible to any authenticated user
@@ -18,6 +16,7 @@ var AuthenticatedUserRoutes = []string{
 	"/api/metrics",
 	"/api/server/info",
 	"/api/docker/stats",
+	"/api/apps/list",
 	"/api/audit/overview",
 	"/api/audit/events/*",
 }
@@ -118,6 +117,78 @@ func GenerateAppRoutes(appName string) []string {
 		"/api/apps/" + appName + "/*", // API endpoints
 		"/ws/apps/" + appName + "/*",  // WebSocket endpoints
 	}
+}
+
+// IsReservedAppPathSegment reports whether the path segment names an app-area route
+// that is not an actual app identifier.
+func IsReservedAppPathSegment(segment string) bool {
+	switch segment {
+	case "", "create":
+		return true
+	default:
+		return false
+	}
+}
+
+// RouteGrantsAnyApp reports whether a configured route implies access to at least
+// one real app detail area, which in turn should surface generic app navigation.
+func RouteGrantsAnyApp(route string) bool {
+	if route == "/apps/*" {
+		return true
+	}
+
+	if !strings.HasPrefix(route, "/apps/") {
+		return false
+	}
+
+	appPattern := strings.TrimPrefix(route, "/apps/")
+	if appPattern == "" {
+		return false
+	}
+
+	if strings.HasSuffix(appPattern, "/*") {
+		appPattern = strings.TrimSuffix(appPattern, "/*")
+		return appPattern != "" && !strings.Contains(appPattern, "/") && !IsReservedAppPathSegment(appPattern)
+	}
+
+	if strings.HasSuffix(appPattern, "*") {
+		prefix := strings.TrimSuffix(appPattern, "*")
+		return prefix != "" && !strings.Contains(prefix, "/")
+	}
+
+	if appPattern == "" || strings.Contains(appPattern, "/") {
+		return false
+	}
+
+	return !IsReservedAppPathSegment(appPattern)
+}
+
+// RouteGrantsApp reports whether a configured route maps to the given concrete app name.
+func RouteGrantsApp(route, appName string) bool {
+	if route == "/apps/*" {
+		return true
+	}
+
+	if !strings.HasPrefix(route, "/apps/") {
+		return false
+	}
+
+	appPattern := strings.TrimPrefix(route, "/apps/")
+	if appPattern == "" {
+		return false
+	}
+
+	if strings.HasSuffix(appPattern, "/*") {
+		exactApp := strings.TrimSuffix(appPattern, "/*")
+		return exactApp != "" && !strings.Contains(exactApp, "/") && !IsReservedAppPathSegment(exactApp) && exactApp == appName
+	}
+
+	if strings.HasSuffix(appPattern, "*") {
+		prefix := strings.TrimSuffix(appPattern, "*")
+		return prefix != "" && !strings.Contains(prefix, "/") && strings.HasPrefix(appName, prefix)
+	}
+
+	return appPattern == appName && !strings.Contains(appPattern, "/") && !IsReservedAppPathSegment(appPattern)
 }
 
 // GenerateServiceRoutes generates all necessary routes for a given service type and name

@@ -763,8 +763,11 @@ func getSessionIdentity(c *fiber.Ctx) (string, string) {
 	if username == "" {
 		username, _ = sess.Get("user").(string)
 	}
-	authType, _ := sess.Get("auth_type").(string)
-	return username, authType
+	role, _ := sess.Get("role").(string)
+	if role == "" {
+		role, _ = sess.Get("auth_type").(string)
+	}
+	return username, role
 }
 
 func getAuditTimelineForApps(appNames []string, perAppLimit int, finalLimit int) ([]models.AuditEvent, error) {

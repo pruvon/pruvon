@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pruvon/pruvon/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -90,6 +91,31 @@ func TestJsonFunc(t *testing.T) {
 }
 
 func TestHasAppAccess(t *testing.T) {
+	originalConfig := config.GetConfig()
+	config.UpdateConfig(&config.Config{Users: []config.User{
+		{
+			Username: "normal_user",
+			Role:     config.RoleUser,
+			Apps:     []string{"my_app"},
+		},
+		{
+			Username: "route_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/apps/bar/*"},
+		},
+		{
+			Username: "create_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/apps/create"},
+		},
+		{
+			Username: "nested_route_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/apps/foo/logs"},
+		},
+	}})
+	defer config.UpdateConfig(originalConfig)
+
 	tests := []struct {
 		name        string
 		username    interface{}
@@ -116,7 +142,7 @@ func TestHasAppAccess(t *testing.T) {
 			username:    "normal_user",
 			specificApp: "my_app",
 			authType:    "user",
-			expected:    false, // Bu implementasyona bağlı
+			expected:    true,
 		},
 		{
 			name:        "Nil username",
@@ -130,6 +156,34 @@ func TestHasAppAccess(t *testing.T) {
 			username:    "user",
 			specificApp: "app",
 			authType:    nil,
+			expected:    false,
+		},
+		{
+			name:        "Route-derived erişim apps navigation gösterir",
+			username:    "route_user",
+			specificApp: "",
+			authType:    "user",
+			expected:    true,
+		},
+		{
+			name:        "Route-derived erişim belirli uygulama gösterir",
+			username:    "route_user",
+			specificApp: "bar",
+			authType:    "user",
+			expected:    true,
+		},
+		{
+			name:        "Create route apps navigation göstermez",
+			username:    "create_user",
+			specificApp: "",
+			authType:    "user",
+			expected:    false,
+		},
+		{
+			name:        "Nested custom route apps navigation göstermez",
+			username:    "nested_route_user",
+			specificApp: "",
+			authType:    "user",
 			expected:    false,
 		},
 	}
@@ -146,6 +200,31 @@ func TestHasAppAccess(t *testing.T) {
 }
 
 func TestHasRouteAccess(t *testing.T) {
+	originalConfig := config.GetConfig()
+	config.UpdateConfig(&config.Config{Users: []config.User{
+		{
+			Username: "user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/apps/*"},
+		},
+		{
+			Username: "wildcard_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"*"},
+		},
+		{
+			Username: "route_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/apps/bar/*"},
+		},
+		{
+			Username: "create_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/apps/create"},
+		},
+	}})
+	defer config.UpdateConfig(originalConfig)
+
 	tests := []struct {
 		name     string
 		username interface{}
@@ -161,11 +240,53 @@ func TestHasRouteAccess(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "Normal kullanıcı public route'a erişebilir",
+			name:     "Apps wildcard route apps navigation gösterir",
 			username: "user",
 			route:    "/apps",
 			authType: "user",
-			expected: false, // Implementasyona bağlı
+			expected: true,
+		},
+		{
+			name:     "Normal kullanıcı wildcard route'a erişebilir",
+			username: "user",
+			route:    "/apps/test",
+			authType: "user",
+			expected: true,
+		},
+		{
+			name:     "Wildcard route docker erişimini de verir",
+			username: "wildcard_user",
+			route:    "/docker",
+			authType: "user",
+			expected: true,
+		},
+		{
+			name:     "Route-derived erişim apps navigation gösterir",
+			username: "route_user",
+			route:    "/apps",
+			authType: "user",
+			expected: true,
+		},
+		{
+			name:     "Route-derived erişim app detail route gösterir",
+			username: "route_user",
+			route:    "/apps/bar",
+			authType: "user",
+			expected: true,
+		},
+		{
+			name:     "Create route apps navigation göstermez",
+			username: "create_user",
+			route:    "/apps",
+			authType: "user",
+			expected: false,
+		},
+		{
+			name:     "Create route exact path gösterir",
+			username: "create_user",
+			route:    "/apps/create",
+			authType: "user",
+			expected: true,
 		},
 		{
 			name:     "Nil kullanıcı",
@@ -185,6 +306,28 @@ func TestHasRouteAccess(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetUserAllowedApps_IgnoresReservedAndNestedAppRoutes(t *testing.T) {
+	originalConfig := config.GetConfig()
+	config.UpdateConfig(&config.Config{Users: []config.User{
+		{
+			Username: "create_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/apps/create"},
+		},
+		{
+			Username: "nested_route_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/apps/foo/logs"},
+		},
+	}})
+	defer config.UpdateConfig(originalConfig)
+
+	allApps := []string{"foo", "bar", "create"}
+
+	assert.Empty(t, getUserAllowedApps("create_user", "user", allApps))
+	assert.Empty(t, getUserAllowedApps("nested_route_user", "user", allApps))
 }
 
 func TestInitialize(t *testing.T) {
