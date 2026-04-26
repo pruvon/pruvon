@@ -7,6 +7,23 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-27
+
+### Added
+- add auditEventTitle helper for descriptive audit event titles
+- add env var edit modal with loading state
+
+### Fixed
+- show status before action for deploy audit events
+
+### Changed
+- refactor(auth): replace GitHub OAuth with canonical scoped-user model
+- feat(audit): add service audit export and improve audit UI
+- feat(apps): add download button for environment variables
+- add loading states to domain and redirect modal actions
+- feat(domains): auto-enable SSL when adding domain if Let's Encrypt is active
+
+
 ## [0.1.5] - 2026-04-12
 
 ### Changed
