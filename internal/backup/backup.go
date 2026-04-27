@@ -14,6 +14,26 @@ import (
 	"time"
 )
 
+// datePattern matches YYYY-MM-DD anywhere in a filename.
+var datePattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
+
+// extractDateFromFilename finds the last YYYY-MM-DD date in a filename.
+// Using the last match avoids false positives when a database name itself
+// contains a year-like sequence, since the backup timestamp follows the name.
+func extractDateFromFilename(fileName string) (time.Time, bool) {
+	matches := datePattern.FindAllString(fileName, -1)
+	if len(matches) == 0 {
+		return time.Time{}, false
+	}
+	// Use the last match because the backup timestamp follows the database name.
+	last := matches[len(matches)-1]
+	t, err := time.Parse("2006-01-02", last)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
 // BackupConfig holds the configuration for backup operations
 type BackupConfig struct {
 	BackupDir      string   `yaml:"backup_dir"`
@@ -419,28 +439,9 @@ func cleanupDailyBackups(backupDir string, dbTypes []string, keepDays int) error
 				fileName := file.Name()
 				filePath := filepath.Join(dbPath, fileName)
 
-				// Extract date from filename (format: database_name_YYYY-MM-DD_HHhMMm.DayOfWeek.ext.gz)
-				// We're looking for the date part which is after the first underscore
-				parts := strings.Split(fileName, "_")
-				if len(parts) < 2 {
-					continue
-				}
-
-				// Try to find a date part in the format YYYY-MM-DD
-				var fileDate time.Time
-				var parseErr error
-				for _, part := range parts {
-					if len(part) >= 10 && strings.Count(part[:10], "-") == 2 {
-						// This looks like a date part
-						fileDate, parseErr = time.Parse("2006-01-02", part[:10])
-						if parseErr == nil {
-							break
-						}
-					}
-				}
-
-				if parseErr != nil {
-					// Couldn't parse a date from this filename
+				// Extract date from filename using regex (matches YYYY-MM-DD)
+				fileDate, ok := extractDateFromFilename(fileName)
+				if !ok {
 					continue
 				}
 
@@ -512,28 +513,9 @@ func cleanupMonthlyBackups(backupDir string, dbTypes []string, keepMonths int) e
 				fileName := file.Name()
 				filePath := filepath.Join(dbPath, fileName)
 
-				// Extract date from filename
-				// Format is typically: db_name_monthly.Month.YYYY-MM-DD_HHhMMm.ext.gz
-				parts := strings.Split(fileName, "_")
-				if len(parts) < 2 {
-					continue
-				}
-
-				// Try to find a date part in the format YYYY-MM-DD
-				var fileDate time.Time
-				var parseErr error
-				for _, part := range parts {
-					if len(part) >= 10 && strings.Count(part[:10], "-") == 2 {
-						// This looks like a date part
-						fileDate, parseErr = time.Parse("2006-01-02", part[:10])
-						if parseErr == nil {
-							break
-						}
-					}
-				}
-
-				if parseErr != nil {
-					// Couldn't parse a date from this filename
+				// Extract date from filename using regex (matches YYYY-MM-DD)
+				fileDate, ok := extractDateFromFilename(fileName)
+				if !ok {
 					continue
 				}
 

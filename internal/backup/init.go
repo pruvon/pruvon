@@ -22,7 +22,19 @@ func InitBackupConfig(cfg *config.Config) error {
 			KeepMonthlyNum: 3, // Keep last 3 monthly backups
 		}
 	} else {
-		// Set default values for rotation settings if not specified
+		// Set default values for any missing backup settings
+		if cfg.Backup.BackupDir == "" {
+			cfg.Backup.BackupDir = config.DefaultBackupDir
+		}
+		if cfg.Backup.DoMonthly <= 0 {
+			cfg.Backup.DoMonthly = 1
+		}
+		if cfg.Backup.DoWeekly < 0 {
+			cfg.Backup.DoWeekly = 7
+		}
+		if len(cfg.Backup.DBTypes) == 0 {
+			cfg.Backup.DBTypes = append([]string(nil), config.DefaultBackupDBTypes...)
+		}
 		if cfg.Backup.KeepDailyDays <= 0 {
 			cfg.Backup.KeepDailyDays = 7
 		}
