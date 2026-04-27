@@ -1817,14 +1817,14 @@
 
                     this.exportUrl = data.export_url;
 
-                    // Otomatik indirme için
+                    // For automatic download
                     if (this.exportUrl) {
-                        // Kısa bir gecikme ile indirmeyi başlat
+                        // Start download with a short delay
                         setTimeout(() => {
                             const link = document.createElement('a');
                             link.href = this.exportUrl;
 
-                            // Tarih formatını oluştur: YYYY-MM-DD-HHMM
+                            // Build date format: YYYY-MM-DD-HHMM
                             const now = new Date();
                             const year = now.getFullYear();
                             const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -1832,7 +1832,7 @@
                             const hours = String(now.getHours()).padStart(2, '0');
                             const minutes = String(now.getMinutes()).padStart(2, '0');
 
-                            // Dosya adını oluştur: servis-adı-tarih.dump.gz
+                            // Build filename: service-name-date.dump.gz
                             const filename = `{{.Name}}-${year}-${month}-${day}-${hours}${minutes}.dump.gz`;
 
                             link.download = filename;
@@ -1902,7 +1902,7 @@
                 this.terminal.open(terminalElement);
                 this.fitAddon.fit();
 
-                // Başlangıç mesajını göster
+                // Show startup message
                 this.terminal.writeln('\x1b[90m# {{.Type}} service console for {{.Name}}\x1b[0m');
                 this.terminal.writeln('\x1b[90m# Click the Connect button to start a terminal session\x1b[0m');
                 this.terminal.writeln('\x1b[90m# Type exit to close the console session\x1b[0m');

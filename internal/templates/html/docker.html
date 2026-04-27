@@ -890,9 +890,9 @@
 
 <script>
 document.addEventListener('alpine:init', () => {
-    // Alpine.js'in başlatıldığını doğrulamak için basit bir log.
-    // Bu event, tüm Alpine bileşenleri initialize olmadan *önce* tetiklenir,
-    // bu yüzden burada doğrudan bileşen verilerine erişmek genellikle önerilmez.
+    // Simple log to confirm Alpine.js has started.
+    // This event fires *before* all Alpine components initialize,
+    // so accessing component data directly here is generally not recommended.
     console.log('Alpine initialized.');
 });
 </script>

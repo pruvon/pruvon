@@ -17,7 +17,7 @@ type CommandRunner = exec.CommandRunner
 // DefaultCommandRunner is the default command runner instance
 var DefaultCommandRunner CommandRunner = exec.NewCommandRunner()
 
-// OsStat, os.Stat fonksiyonunu test için değiştirmek üzere kullanılacak
+// OsStat is used to replace os.Stat for testing
 var OsStat = os.Stat
 
 // GetDockerStats returns Docker statistics
@@ -25,11 +25,11 @@ func GetDockerStats(runner CommandRunner) (models.DockerStats, error) {
 	var info models.DockerInfo
 	output, err := runner.RunCommand("docker", "info", "--format", "{{json .}}")
 	if err != nil {
-		return models.DockerStats{}, fmt.Errorf("docker bilgisi alınamadı: %v", err)
+		return models.DockerStats{}, fmt.Errorf("docker info could not be retrieved: %v", err)
 	}
 
 	if err := json.Unmarshal([]byte(output), &info); err != nil {
-		return models.DockerStats{}, fmt.Errorf("docker bilgisi ayrıştırılamadı: %v", err)
+		return models.DockerStats{}, fmt.Errorf("docker info could not be parsed: %v", err)
 	}
 
 	return models.DockerStats{
@@ -44,7 +44,7 @@ func GetDockerStats(runner CommandRunner) (models.DockerStats, error) {
 func getAppContainers(runner CommandRunner, appName string) ([]models.Container, error) {
 	output, err := runner.RunCommand("docker", "ps", "--format", "{{.ID}}\t{{.Image}}\t{{.Command}}\t{{.Status}}\t{{.Ports}}\t{{.Names}}")
 	if err != nil {
-		return nil, fmt.Errorf("container listesi alınamadı: %v", err)
+		return nil, fmt.Errorf("container list could not be retrieved: %v", err)
 	}
 
 	var containers []models.Container

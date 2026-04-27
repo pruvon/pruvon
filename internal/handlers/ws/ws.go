@@ -127,7 +127,7 @@ func handleAppTerminal(c *websocket.Conn) {
 	// Set the environment variable for the terminal
 	os.Setenv("TERM", "xterm-256color")
 
-	// Burada commandRunner.StartPTY kullanıyoruz
+	// Use commandRunner.StartPTY here
 	ptmx, err := wsCommandRunner.StartPTY("dokku", "enter", appName, "web", "bash")
 	if err != nil {
 		_ = servicelogs.LogActivity(models.ActivityLog{
@@ -290,7 +290,7 @@ func handleAppCreate(c *websocket.Conn) {
 	user := c.Locals("user").(string)
 	authType := c.Locals("auth_type").(string)
 
-	// WebSocket'ten form verilerini al
+	// Get form data from WebSocket
 	_, msg, err := c.ReadMessage()
 	if err != nil {
 		errorMsg, _ := json.Marshal(models.StepResult{
@@ -302,7 +302,7 @@ func handleAppCreate(c *websocket.Conn) {
 		return
 	}
 
-	// Form verilerini ayrıştır
+	// Parse form data
 	var formData struct {
 		Name     string `json:"name"`
 		Image    string `json:"image"`
@@ -338,7 +338,7 @@ func handleAppCreate(c *websocket.Conn) {
 		return
 	}
 
-	// Uygulama adını al
+	// Get the app name
 	appName := formData.Name
 	if appName == "" {
 		errorMsg, _ := json.Marshal(models.StepResult{
@@ -350,7 +350,7 @@ func handleAppCreate(c *websocket.Conn) {
 		return
 	}
 
-	// İlerleme durumunu bildir
+	// Report progress
 	progressMsg, _ := json.Marshal(models.StepResult{
 		Message:  "Creating application...",
 		Progress: 10,
@@ -370,7 +370,7 @@ func handleAppCreate(c *websocket.Conn) {
 		StatusCode: 200,
 	})
 
-	// Uygulama oluşturma komutunu çalıştır
+	// Run the app creation command
 	output, err := wsCommandRunner.RunCommand("dokku", "apps:create", appName)
 	if err != nil {
 		_ = servicelogs.LogActivity(models.ActivityLog{
@@ -386,7 +386,7 @@ func handleAppCreate(c *websocket.Conn) {
 			StatusCode: 500,
 		})
 
-		// Hata mesajını JSON formatında gönder
+		// Send error message in JSON format
 		errorMsg, _ := json.Marshal(models.StepResult{
 			Message:  "Application creation error",
 			Progress: 0,
@@ -396,7 +396,7 @@ func handleAppCreate(c *websocket.Conn) {
 		return
 	}
 
-	// Veritabanı oluşturma
+	// Database creation
 	if len(formData.Services) > 0 {
 		for _, service := range formData.Services {
 			progressMsg, _ := json.Marshal(models.StepResult{
@@ -405,7 +405,7 @@ func handleAppCreate(c *websocket.Conn) {
 			})
 			_ = c.WriteMessage(websocket.TextMessage, progressMsg)
 
-			// Servis adı boş ise hata ver
+			// Return error if service name is empty
 			if service.Name == "" {
 				_ = servicelogs.LogActivity(models.ActivityLog{
 					Time:       time.Now(),
@@ -429,7 +429,7 @@ func handleAppCreate(c *websocket.Conn) {
 				continue
 			}
 
-			// Kullanıcının belirttiği servis adını kullan, boşsa hata ver
+			// Use the service name specified by the user, error if empty
 			if service.ServiceName == "" {
 				_ = servicelogs.LogActivity(models.ActivityLog{
 					Time:       time.Now(),
@@ -453,20 +453,20 @@ func handleAppCreate(c *websocket.Conn) {
 				continue
 			}
 
-			// Servis adını doğrudan kullan, -db eklemeden
+			// Use the service name directly, without adding -db
 			serviceName := service.ServiceName
 
 			var createArgs []string
 
-			// Temel komut oluşturma: dokku <service>:create <service-name>
+			// Build base command: dokku <service>:create <service-name>
 			if service.Image != "" && service.ImageVersion != "" {
-				// Eğer image ve version belirtilmişse: dokku postgres:create <service-name> --image <image> --image-version <version>
+				// If image and version are specified: dokku postgres:create <service-name> --image <image> --image-version <version>
 				createArgs = []string{fmt.Sprintf("%s:create", service.Name), serviceName, "--image", service.Image, "--image-version", service.ImageVersion}
 			} else if service.Image != "" {
-				// Sadece image belirtilmişse: dokku postgres:create <service-name> --image <image>
+				// If only image is specified: dokku postgres:create <service-name> --image <image>
 				createArgs = []string{fmt.Sprintf("%s:create", service.Name), serviceName, "--image", service.Image}
 			} else {
-				// Hiçbiri belirtilmemişse: dokku postgres:create <service-name>
+				// If none specified: dokku postgres:create <service-name>
 				createArgs = []string{fmt.Sprintf("%s:create", service.Name), serviceName}
 			}
 
@@ -485,16 +485,16 @@ func handleAppCreate(c *websocket.Conn) {
 					StatusCode: 500,
 				})
 
-				// Hata mesajını JSON formatında gönder
+				// Send error message in JSON format
 				errorMsg, _ := json.Marshal(models.StepResult{
 					Message:  fmt.Sprintf("Error creating %s service", service.Name),
 					Progress: 30,
 					Error:    err.Error(),
 				})
 				_ = c.WriteMessage(websocket.TextMessage, errorMsg)
-				// Hata durumunda da devam et, sadece log ve bildirim yap
+				// Continue on error, just log and notify
 			} else {
-				// Servisi uygulamaya bağla
+				// Link the service to the app
 				progressMsg, _ := json.Marshal(models.StepResult{
 					Message:  fmt.Sprintf("Linking %s service to application...", service.Name),
 					Progress: 40,
@@ -516,14 +516,14 @@ func handleAppCreate(c *websocket.Conn) {
 						StatusCode: 500,
 					})
 
-					// Hata mesajını JSON formatında gönder
+					// Send error message in JSON format
 					errorMsg, _ := json.Marshal(models.StepResult{
 						Message:  fmt.Sprintf("Error linking %s service", service.Name),
 						Progress: 40,
 						Error:    err.Error(),
 					})
 					_ = c.WriteMessage(websocket.TextMessage, errorMsg)
-					// Hata durumunda da devam et, sadece log ve bildirim yap
+					// Continue on error, just log and notify
 				}
 			}
 		}
@@ -538,7 +538,7 @@ func handleAppCreate(c *websocket.Conn) {
 		_ = c.WriteMessage(websocket.TextMessage, progressMsg)
 
 		for _, env := range formData.Env {
-			// Boş anahtar veya değerleri atla
+			// Skip empty keys or values
 			if env.Key == "" || env.Value == "" {
 				continue
 			}
@@ -558,19 +558,19 @@ func handleAppCreate(c *websocket.Conn) {
 					StatusCode: 500,
 				})
 
-				// Hata mesajını JSON formatında gönder
+				// Send error message in JSON format
 				errorMsg, _ := json.Marshal(models.StepResult{
 					Message:  fmt.Sprintf("Error setting environment variable: %s", env.Key),
 					Progress: 70,
 					Error:    err.Error(),
 				})
 				_ = c.WriteMessage(websocket.TextMessage, errorMsg)
-				// Hata durumunda da devam et, sadece log ve bildirim yap
+				// Continue on error, just log and notify
 			}
 		}
 	}
 
-	// Domain ayarla
+	// Set domain
 	if formData.Domain != "" {
 		progressMsg, _ := json.Marshal(models.StepResult{
 			Message:  "Setting up domain...",
@@ -578,7 +578,7 @@ func handleAppCreate(c *websocket.Conn) {
 		})
 		_ = c.WriteMessage(websocket.TextMessage, progressMsg)
 
-		// Varsayılan domaini hesapla ve kaldır
+		// Calculate and remove the default domain
 		vhostContent, err := wsCommandRunner.RunCommand("cat", "/home/dokku/VHOST")
 		if err != nil {
 			_ = servicelogs.LogActivity(models.ActivityLog{
@@ -593,15 +593,15 @@ func handleAppCreate(c *websocket.Conn) {
 				Parameters: json.RawMessage(fmt.Sprintf(`{"name":"%s","error":"%s"}`, appName, err.Error())),
 				StatusCode: 500,
 			})
-			// VHOST okunamazsa, varsayılan domain kaldırma işlemini atla
+			// If VHOST cannot be read, skip default domain removal
 		} else {
-			// VHOST içeriğinden boşlukları temizle
+			// Trim whitespace from VHOST content
 			vhostDomain := strings.TrimSpace(vhostContent)
 			if vhostDomain != "" {
-				// Varsayılan domaini hesapla: <app>.<VHOST>
+				// Calculate default domain: <app>.<VHOST>
 				defaultDomain := fmt.Sprintf("%s.%s", appName, vhostDomain)
 
-				// Önce varsayılan domaini kaldır
+				// First remove the default domain
 				_, err := wsCommandRunner.RunCommand("dokku", "domains:remove", appName, defaultDomain)
 				if err != nil {
 					_ = servicelogs.LogActivity(models.ActivityLog{
@@ -616,12 +616,12 @@ func handleAppCreate(c *websocket.Conn) {
 						Parameters: json.RawMessage(fmt.Sprintf(`{"name":"%s","domain":"%s","error":"%s"}`, appName, defaultDomain, err.Error())),
 						StatusCode: 500,
 					})
-					// Hata durumunda da devam et, sadece log ve bildirim yap
+					// Continue on error, just log and notify
 				}
 			}
 		}
 
-		// Kullanıcının belirttiği domaini ekle
+		// Add the domain specified by the user
 		_, err = wsCommandRunner.RunCommand("dokku", "domains:add", appName, formData.Domain)
 		if err != nil {
 			_ = servicelogs.LogActivity(models.ActivityLog{
@@ -637,18 +637,18 @@ func handleAppCreate(c *websocket.Conn) {
 				StatusCode: 500,
 			})
 
-			// Hata mesajını JSON formatında gönder
+			// Send error message in JSON format
 			errorMsg, _ := json.Marshal(models.StepResult{
 				Message:  "Error setting domain",
 				Progress: 80,
 				Error:    err.Error(),
 			})
 			_ = c.WriteMessage(websocket.TextMessage, errorMsg)
-			// Hata durumunda da devam et, sadece log ve bildirim yap
+			// Continue on error, just log and notify
 		}
 	}
 
-	// Port ayarı
+	// Port configuration
 	if formData.Port.Host != "" && formData.Port.Container != "" {
 		progressMsg, _ := json.Marshal(models.StepResult{
 			Message:  "Configuring ports...",
@@ -672,18 +672,18 @@ func handleAppCreate(c *websocket.Conn) {
 				StatusCode: 500,
 			})
 
-			// Hata mesajını JSON formatında gönder
+			// Send error message in JSON format
 			errorMsg, _ := json.Marshal(models.StepResult{
 				Message:  "Error configuring port",
 				Progress: 85,
 				Error:    err.Error(),
 			})
 			_ = c.WriteMessage(websocket.TextMessage, errorMsg)
-			// Hata durumunda da devam et, sadece log ve bildirim yap
+			// Continue on error, just log and notify
 		}
 	}
 
-	// SSL etkinleştir - port ayarlarından SONRA
+	// Enable SSL - AFTER port configuration
 	if formData.Domain != "" && formData.SSL {
 		progressMsg, _ := json.Marshal(models.StepResult{
 			Message:  "Enabling SSL...",
@@ -725,7 +725,7 @@ func handleAppCreate(c *websocket.Conn) {
 		}
 	}
 
-	// Storage mount işlemi
+	// Storage mount operation
 	if len(formData.Mounts) > 0 {
 		progressMsg, _ := json.Marshal(models.StepResult{
 			Message:  "Setting up storage mounts...",
@@ -733,7 +733,7 @@ func handleAppCreate(c *websocket.Conn) {
 		})
 		_ = c.WriteMessage(websocket.TextMessage, progressMsg)
 
-		// Önce temel depolama dizinini oluştur
+		// First create the base storage directory
 		baseStorageDir := fmt.Sprintf("/var/lib/dokku/data/storage/%s", appName)
 		err := os.MkdirAll(baseStorageDir, 0755)
 		if err != nil {
@@ -757,7 +757,7 @@ func handleAppCreate(c *websocket.Conn) {
 			})
 			_ = c.WriteMessage(websocket.TextMessage, errorMsg)
 		} else {
-			// İzinleri ayarla
+			// Set permissions
 			_, err = wsCommandRunner.RunCommand("chown", "-R", "dokku:dokku", baseStorageDir)
 			if err != nil {
 				_ = servicelogs.LogActivity(models.ActivityLog{
@@ -774,17 +774,17 @@ func handleAppCreate(c *websocket.Conn) {
 				})
 			}
 
-			// Her bir mount noktası için işlem yap
+			// Process each mount point
 			for _, mount := range formData.Mounts {
-				// Boş kaynak veya hedef dizinleri atla
+				// Skip empty source or destination directories
 				if mount.Source == "" || mount.Destination == "" {
 					continue
 				}
 
-				// Kaynak dizini oluştur
+				// Create source directory
 				sourceDir := mount.Source
 				if !strings.HasPrefix(sourceDir, "/") {
-					// Tam yol değilse, tam yol oluştur
+					// If not a full path, create the full path
 					sourceDir = fmt.Sprintf("/var/lib/dokku/data/storage/%s/%s", appName, sourceDir)
 				}
 
@@ -803,10 +803,10 @@ func handleAppCreate(c *websocket.Conn) {
 						StatusCode: 500,
 					})
 
-					continue // Bu mount noktasını atlayıp diğerlerine devam et
+					continue // Skip this mount point and continue with others
 				}
 
-				// İzinleri ayarla
+				// Set permissions
 				_, err = wsCommandRunner.RunCommand("chown", "-R", "dokku:dokku", sourceDir)
 				if err != nil {
 					_ = servicelogs.LogActivity(models.ActivityLog{
@@ -823,7 +823,7 @@ func handleAppCreate(c *websocket.Conn) {
 					})
 				}
 
-				// Mount işlemi yap: dokku storage:mount app source:destination
+				// Perform mount: dokku storage:mount app source:destination
 				mountArg := fmt.Sprintf("%s:%s", sourceDir, mount.Destination)
 				_, err = wsCommandRunner.RunCommand("dokku", "storage:mount", appName, mountArg)
 				if err != nil {
@@ -875,7 +875,7 @@ func handleAppCreate(c *websocket.Conn) {
 				StatusCode: 500,
 			})
 
-			// Hata mesajını JSON formatında gönder
+			// Send error message in JSON format
 			errorMsg, _ := json.Marshal(models.StepResult{
 				Message:  "Error creating application from image",
 				Progress: 98,
@@ -892,7 +892,7 @@ func handleAppCreate(c *websocket.Conn) {
 		}
 	}
 
-	// Başarılı yanıtı JSON formatında gönder
+	// Send success response in JSON format
 	successMsg, _ := json.Marshal(models.StepResult{
 		Message:  "Application Created Successfully",
 		Progress: 100,
@@ -1281,10 +1281,10 @@ func handleServiceConsole(c *websocket.Conn) {
 		StatusCode: 200,
 	})
 
-	// Set the environment variable for the terminal (yalnızca sistem düzeyinde)
+	// Set the environment variable for the terminal (system level only)
 	os.Setenv("TERM", "xterm-256color")
 
-	// Servis tipine göre uygun komutu seç
+	// Select the appropriate command based on the service type
 	var command string
 	var args []string
 
@@ -1310,11 +1310,11 @@ func handleServiceConsole(c *websocket.Conn) {
 			AuthType:   authType,
 			Action:     "service_console_error",
 			Route:      "/ws/services/" + svcType + "/" + svcName + "/console",
-			Error:      "Desteklenmeyen servis tipi",
-			Parameters: json.RawMessage(fmt.Sprintf(`{"type":"%s","name":"%s","error":"Desteklenmeyen servis tipi"}`, svcType, svcName)),
+			Error:      "Unsupported service type",
+			Parameters: json.RawMessage(fmt.Sprintf(`{"type":"%s","name":"%s","error":"Unsupported service type"}`, svcType, svcName)),
 			StatusCode: 400,
 		})
-		_ = c.WriteMessage(websocket.TextMessage, []byte("Hata: Desteklenmeyen servis tipi"))
+		_ = c.WriteMessage(websocket.TextMessage, []byte("Error: Unsupported service type"))
 		return
 	}
 
@@ -1337,7 +1337,7 @@ func handleServiceConsole(c *websocket.Conn) {
 	}
 	defer ptmx.Close()
 
-	// Terminal boyutunu ayarla
+	// Set terminal size
 	_ = pty.Setsize(ptmx, &pty.Winsize{
 		Rows: 30,
 		Cols: 100,

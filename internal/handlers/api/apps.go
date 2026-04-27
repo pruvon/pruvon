@@ -275,7 +275,7 @@ func handleContainerKill(c *fiber.Ctx) error {
 	containerID := c.Params("id")
 	if err := appService.KillContainer(containerID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Konteyner durdurulamadı: %v", err),
+			"error": fmt.Sprintf("Container could not be stopped: %v", err),
 		})
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -286,7 +286,7 @@ func handleAppCron(c *fiber.Ctx) error {
 	jobs, err := appService.GetCronJobs(appName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Cron görevleri alınamadı: %v", err),
+			"error": fmt.Sprintf("Cron jobs could not be retrieved: %v", err),
 		})
 	}
 	return c.JSON(fiber.Map{
@@ -300,7 +300,7 @@ func handleAppStart(c *fiber.Ctx) error {
 
 	if err := appService.StartApp(appName, processType); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama başlatılamadı: %v", err),
+			"error": fmt.Sprintf("Application could not be started: %v", err),
 		})
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -312,7 +312,7 @@ func handleAppStop(c *fiber.Ctx) error {
 
 	if err := appService.StopApp(appName, processType); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama durdurulamadı: %v", err),
+			"error": fmt.Sprintf("Application could not be stopped: %v", err),
 		})
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -324,7 +324,7 @@ func handleAppRestart(c *fiber.Ctx) error {
 
 	if err := appService.RestartApp(appName, processType); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama yeniden başlatılamadı: %v", err),
+			"error": fmt.Sprintf("Application could not be restarted: %v", err),
 		})
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -396,7 +396,7 @@ func handleAppRebuild(c *fiber.Ctx) error {
 
 	if err := appService.RebuildApp(appName, processType); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama yeniden oluşturulamadı: %v", err),
+			"error": fmt.Sprintf("Application could not be rebuilt: %v", err),
 		})
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -407,7 +407,7 @@ func handleAppStatus(c *fiber.Ctx) error {
 	status, err := appService.GetStatus(appName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama durumu alınamadı: %v", err),
+			"error": fmt.Sprintf("Application status could not be retrieved: %v", err),
 		})
 	}
 
@@ -430,7 +430,7 @@ func handleAppDomainAdd(c *fiber.Ctx) error {
 	output, err := appService.AddDomain(appName, req.Domain)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Domain eklenemedi: %v", err),
+			"error": fmt.Sprintf("Domain could not be added: %v", err),
 		})
 	}
 
@@ -486,7 +486,7 @@ func handleAppDomainRemove(c *fiber.Ctx) error {
 	output, err := appService.RemoveDomain(appName, domain)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Domain kaldırılamadı: %v", err),
+			"error": fmt.Sprintf("Domain could not be removed: %v", err),
 		})
 	}
 	return c.JSON(fiber.Map{"output": output})
@@ -497,7 +497,7 @@ func handleAppRedirects(c *fiber.Ctx) error {
 	redirects, installed, err := appService.GetRedirects(appName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Yönlendirmeler alınamadı: %v", err),
+			"error": fmt.Sprintf("Redirects could not be retrieved: %v", err),
 		})
 	}
 
@@ -521,7 +521,7 @@ func handleAppRedirectSet(c *fiber.Ctx) error {
 	output, err := appService.SetRedirect(appName, redirect)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Yönlendirme ayarlanamadı: %v", err),
+			"error": fmt.Sprintf("Redirect could not be set: %v", err),
 		})
 	}
 
@@ -543,7 +543,7 @@ func handleAppRedirectUnset(c *fiber.Ctx) error {
 	output, err := appService.UnsetRedirect(appName, redirect)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Yönlendirme kaldırılamadı: %v", err),
+			"error": fmt.Sprintf("Redirect could not be removed: %v", err),
 		})
 	}
 
@@ -559,7 +559,7 @@ func handleAppPortAdd(c *fiber.Ctx) error {
 
 	if err := appService.AddPortMapping(appName, port); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Port eklenemedi: %v", err),
+			"error": fmt.Sprintf("Port could not be added: %v", err),
 		})
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -574,7 +574,7 @@ func handleAppPortRemove(c *fiber.Ctx) error {
 
 	if err := appService.RemovePortMapping(appName, port); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Port kaldırılamadı: %v", err),
+			"error": fmt.Sprintf("Port could not be removed: %v", err),
 		})
 	}
 	return c.SendStatus(fiber.StatusOK)
@@ -590,7 +590,7 @@ func handleAppScale(c *fiber.Ctx) error {
 	output, err := appService.ScaleApp(appName, req)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Ölçeklendirme yapılamadı: %v", err),
+			"error": fmt.Sprintf("Scaling could not be performed: %v", err),
 		})
 	}
 
@@ -619,7 +619,7 @@ func handleAppSSLInfo(c *fiber.Ctx) error {
 	sslInfo, err := appService.GetSSLInfo(appName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("SSL bilgisi alınamadı: %v", err),
+			"error": fmt.Sprintf("SSL information could not be retrieved: %v", err),
 		})
 	}
 	return c.JSON(sslInfo)
@@ -666,7 +666,7 @@ func handleAppCheck(c *fiber.Ctx) error {
 	exists, err := appService.AppExists(appName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Application list could not be retrieved: %v", err),
 		})
 	}
 
@@ -679,7 +679,7 @@ func handleAppsList(c *fiber.Ctx) error {
 	allApps, err := appService.ListApps()
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Application list could not be retrieved: %v", err),
 		})
 	}
 
@@ -710,7 +710,7 @@ func handleAppsListDetailed(c *fiber.Ctx) error {
 	allApps, err := dokku.GetDokkuApps(commandRunner)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Application list could not be retrieved: %v", err),
 		})
 	}
 
@@ -741,7 +741,7 @@ func handleAppsListDetailed(c *fiber.Ctx) error {
 
 		output, err := commandRunner.RunCommand("dokku", "ps:report", appName)
 		if err != nil {
-			// Hata durumunda bu uygulamayı atla ve devam et
+			// On error, skip this app and continue
 			continue
 		}
 
@@ -805,13 +805,13 @@ func handleAppResource(c *fiber.Ctx) error {
 	output, err := commandRunner.RunCommand("dokku", "resource:limit", appName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Kaynak limitleri alınamadı: %v", err),
+			"error": fmt.Sprintf("Resource limits could not be retrieved: %v", err),
 		})
 	}
 
 	limits := models.ResourceLimits{}
 
-	// Her bir satırı parse et
+	// Parse each line
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "=====>") || strings.HasPrefix(line, "       ") {
@@ -844,10 +844,10 @@ func handleAppResourceSet(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&req); err != nil {
-		_ = middleware.SetFlashMessage(c, "Geçersiz istek verisi", "error")
+		_ = middleware.SetFlashMessage(c, "Invalid request data", "error")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":      "Invalid request data",
-			"message":    "Geçersiz istek verisi",
+			"message":    "Invalid request data",
 			"flash_type": "error",
 		})
 	}
@@ -855,7 +855,7 @@ func handleAppResourceSet(c *fiber.Ctx) error {
 	// Get containers for the app
 	containers, err := dokku.GetAppContainers(commandRunner, appName)
 	if err != nil || len(containers) == 0 {
-		errorMsg := fmt.Sprintf("%s uygulaması için çalışan konteyner bulunamadı", appName)
+		errorMsg := fmt.Sprintf("No running containers found for app %s", appName)
 		_ = middleware.SetFlashMessage(c, errorMsg, "error")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":      fmt.Sprintf("No running containers found for app %s: %v", appName, err),
@@ -873,7 +873,7 @@ func handleAppResourceSet(c *fiber.Ctx) error {
 		if strings.Contains(strings.ToLower(container.Status), "running") {
 			err := docker.UpdateContainerResourceLimits(commandRunner, container.ID, req.CPU, req.Memory)
 			if err != nil {
-				errorMsg := fmt.Sprintf("%s konteynerinin kaynak limitleri güncellenirken hata oluştu", container.ID)
+				errorMsg := fmt.Sprintf("Error updating resource limits for container %s", container.ID)
 				_ = middleware.SetFlashMessage(c, errorMsg, "error")
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error":      fmt.Sprintf("Failed to update resource limits for container %s: %v", container.ID, err),
@@ -896,10 +896,10 @@ func handleAppResourceSet(c *fiber.Ctx) error {
 
 	output, err := commandRunner.RunCommand("dokku", args...)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Dokku kaynak limitleri ayarlanamadı: %v", err)
+		errorMsg := fmt.Sprintf("Dokku resource limits could not be set: %v", err)
 		_ = middleware.SetFlashMessage(c, errorMsg, "error")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":      fmt.Sprintf("Dokku kaynak limitleri ayarlanamadı: %v", err),
+			"error":      fmt.Sprintf("Dokku resource limits could not be set: %v", err),
 			"message":    errorMsg,
 			"flash_type": "error",
 		})
@@ -915,7 +915,7 @@ func handleAppResourceSet(c *fiber.Ctx) error {
 	}
 
 	// Set success message
-	successMsg := fmt.Sprintf("%s uygulaması için kaynak limitleri güncellendi", appName)
+	successMsg := fmt.Sprintf("Resource limits for app %s have been updated", appName)
 	_ = middleware.SetFlashMessage(c, successMsg, "success")
 
 	return c.JSON(fiber.Map{
@@ -951,7 +951,7 @@ func handleAppDelete(c *fiber.Ctx) error {
 		config, err := commandRunner.RunCommand("dokku", "config", appName)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": fmt.Sprintf("Uygulama yapılandırması alınamadı: %v", err),
+				"error": fmt.Sprintf("Application configuration could not be retrieved: %v", err),
 			})
 		}
 
@@ -1015,37 +1015,37 @@ func handleAppDelete(c *fiber.Ctx) error {
 			}
 		}
 
-		// Ayrıca <app>-db formatındaki veritabanlarını da kontrol et ve sil
+		// Also check and delete databases in <app>-db format
 		dbName := fmt.Sprintf("%s-db", appName)
 
-		// Postgres veritabanını kontrol et ve sil
+		// Check and delete Postgres database
 		_, err = commandRunner.RunCommand("dokku", "postgres:info", dbName)
 		if err == nil {
-			// Veritabanı mevcut, önce unlink yap sonra sil
+			// Database exists, unlink first then delete
 			_, _ = commandRunner.RunCommand("dokku", "postgres:unlink", dbName, appName)
 			_, _ = commandRunner.RunCommand("dokku", "postgres:destroy", dbName, "-f")
 		}
 
-		// MariaDB veritabanını kontrol et ve sil
+		// Check and delete MariaDB database
 		_, err = commandRunner.RunCommand("dokku", "mariadb:info", dbName)
 		if err == nil {
-			// Veritabanı mevcut, önce unlink yap sonra sil
+			// Database exists, unlink first then delete
 			_, _ = commandRunner.RunCommand("dokku", "mariadb:unlink", dbName, appName)
 			_, _ = commandRunner.RunCommand("dokku", "mariadb:destroy", dbName, "-f")
 		}
 
-		// MongoDB veritabanını kontrol et ve sil
+		// Check and delete MongoDB database
 		_, err = commandRunner.RunCommand("dokku", "mongo:info", dbName)
 		if err == nil {
-			// Veritabanı mevcut, önce unlink yap sonra sil
+			// Database exists, unlink first then delete
 			_, _ = commandRunner.RunCommand("dokku", "mongo:unlink", dbName, appName)
 			_, _ = commandRunner.RunCommand("dokku", "mongo:destroy", dbName, "-f")
 		}
 
-		// Redis veritabanını kontrol et ve sil
+		// Check and delete Redis database
 		_, err = commandRunner.RunCommand("dokku", "redis:info", dbName)
 		if err == nil {
-			// Redis mevcut, önce unlink yap sonra sil
+			// Redis exists, unlink first then delete
 			_, _ = commandRunner.RunCommand("dokku", "redis:unlink", dbName, appName)
 			_, _ = commandRunner.RunCommand("dokku", "redis:destroy", dbName, "-f")
 		}
@@ -1055,7 +1055,7 @@ func handleAppDelete(c *fiber.Ctx) error {
 	output, err := commandRunner.RunCommand("dokku", "apps:destroy", appName, "--force")
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama silinemedi: %v", err),
+			"error": fmt.Sprintf("Application could not be deleted: %v", err),
 		})
 	}
 
@@ -1075,13 +1075,13 @@ func handleAppDelete(c *fiber.Ctx) error {
 		}
 	}
 
-	// Flash mesajı ekle
-	_ = middleware.SetFlashMessage(c, fmt.Sprintf("Uygulama '%s' başarıyla silindi", appName), "success")
+	// Add flash message
+	_ = middleware.SetFlashMessage(c, fmt.Sprintf("Application '%s' successfully deleted", appName), "success")
 
-	// Flash mesajını API yanıtında da döndür
+	// Also return flash message in API response
 	return c.JSON(fiber.Map{
 		"success": true,
-		"message": fmt.Sprintf("Uygulama '%s' başarıyla silindi", appName),
+		"message": fmt.Sprintf("Application '%s' successfully deleted", appName),
 		"type":    "success",
 	})
 }
@@ -1091,12 +1091,12 @@ func handleAppDetails(c *fiber.Ctx) error {
 	output, err := commandRunner.RunCommand("dokku", "ps:report", appName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama detayları alınamadı: %v", err),
+			"error": fmt.Sprintf("Application details could not be retrieved: %v", err),
 		})
 	}
 
 	// Default status values
-	var running interface{} = false // interface{} olarak tanımla
+	var running interface{} = false // declare as interface{}
 	deployed := false
 	processes := make(map[string]int)
 

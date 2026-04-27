@@ -135,7 +135,7 @@ func handlePluginInstall(c *fiber.Ctx) error {
 		})
 	}
 
-	// Plugin'i yükle
+	// Install the plugin
 	output, err := commandRunner.RunCommand("dokku", "plugin:install", req.URL)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

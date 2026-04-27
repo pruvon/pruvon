@@ -37,7 +37,7 @@ func SearchLogs(params models.LogSearchParams) (models.LogSearchResult, error) {
 	}
 	defer file.Close()
 
-	// Tüm logları oku ve zamanına göre sırala
+	// Read all logs and sort by time
 	var allLogs []models.ActivityLog
 	reader := bufio.NewReader(file)
 	for {
@@ -65,28 +65,28 @@ func SearchLogs(params models.LogSearchParams) (models.LogSearchResult, error) {
 		allLogs = append(allLogs, log)
 	}
 
-	// En son loglar başta olacak şekilde sırala
+	// Sort with most recent logs first
 	sort.Slice(allLogs, func(i, j int) bool {
 		return allLogs[i].Time.After(allLogs[j].Time)
 	})
 
-	// Son 100 log ile sınırla
+	// Limit to last 100 logs
 	if len(allLogs) > 100 {
 		allLogs = allLogs[:100]
 	}
 
-	// Sayfalama işlemi
+	// Pagination process
 	totalLogs := len(allLogs)
 	result.TotalLogs = totalLogs
 
-	// Sayfa başına düşen kayıt sayısına göre toplam sayfa sayısını hesapla
+	// Calculate total page count based on records per page
 	if totalLogs == 0 {
 		result.TotalPages = 1
 	} else {
 		result.TotalPages = (totalLogs + params.PerPage - 1) / params.PerPage
 	}
 
-	// Geçerli sayfa numarası kontrolü
+	// Validate current page number
 	if params.Page < 1 {
 		params.Page = 1
 	}
@@ -94,7 +94,7 @@ func SearchLogs(params models.LogSearchParams) (models.LogSearchResult, error) {
 		params.Page = result.TotalPages
 	}
 
-	// Sayfa sınırlarını hesapla
+	// Calculate page boundaries
 	start := (params.Page - 1) * params.PerPage
 	end := start + params.PerPage
 	if end > totalLogs {

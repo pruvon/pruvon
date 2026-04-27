@@ -947,7 +947,7 @@ func generateDatabaseKey(url string, dbType string) string {
 
 func isValidDatabaseURL(url string, dbType string) bool {
 	errorIndicators := []string{
-		"kural dışı", "illegal", "Already linked", "already linked",
+		"illegal", "Already linked", "already linked",
 		"error", "Error", "ERROR",
 		"!", "usage:", "Usage:", "USAGE:",
 		"/var/lib/dokku/plugins",

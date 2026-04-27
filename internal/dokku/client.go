@@ -6,10 +6,10 @@ import (
 	execpkg "github.com/pruvon/pruvon/internal/exec"
 )
 
-// OsReadFile, os.ReadFile fonksiyonunu test için değiştirmek üzere kullanılacak
+// OsReadFile is used to replace os.ReadFile for testing
 var OsReadFile = os.ReadFile
 
-// OsStat, os.Stat fonksiyonunu test için değiştirmek üzere kullanılacak
+// OsStat is used to replace os.Stat for testing
 var OsStat = os.Stat
 
 // CommandRunner interface for command execution - imported from internal/exec

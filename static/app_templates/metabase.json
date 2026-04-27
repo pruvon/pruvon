@@ -6,8 +6,8 @@
         "name": "metabase",
         "image": "metabase/metabase:v0.50.30.1",
         "env": [
-          "MB_SITE_NAME=Örnek Metabase",
-          "MB_APPLICATION_NAME=Örnek Metabase",
+          "MB_SITE_NAME=Example Metabase",
+          "MB_APPLICATION_NAME=Example Metabase",
           "MB_DB_FILE=/metabase-data/metabase.db"
         ],
         "services": [

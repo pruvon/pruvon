@@ -41,7 +41,7 @@ func GetPlugins(runner CommandRunner) ([]models.Plugin, error) {
 		}
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
-			// Eğer plugin sürümü dokku sürümünden farklıysa listeye ekle
+			// If the plugin version differs from the dokku version, add to the list
 			if parts[1] != dokkuVersion {
 				plugins = append(plugins, models.Plugin{
 					Name:    parts[0],

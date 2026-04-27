@@ -94,12 +94,12 @@ func TestHandleAuditOverviewIncludesHostHealthForAdmin(t *testing.T) {
 func TestHandleAuditOverviewEnrichesDeployActorsForAdmin(t *testing.T) {
 	runner := &dokku.MockCommandRunner{
 		OutputMap: map[string]string{
-			"dokku plugin:list":                                     "=====> Installed plugins\naudit 0.2.0\n",
-			"dokku audit:status":                                    "plugin version: 0.2.0\ntotal events: 42\n",
-			"dokku audit:doctor":                                    "ok: sqlite3 executable available\n",
-			"dokku audit:recent --limit 10 --format json":           `[{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}]`,
-			"dokku audit:last-deploys --limit 10 --format json":     `[{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}]`,
-			"dokku audit:timeline yoklama --limit 48 --format json": `[{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"user","actor_name":"admin","actor_label":"ssh-key:admin","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push","ssh_name":"admin","triggered_by_subcommand":"git:push"}}]`,
+			"dokku plugin:list":                                        "=====> Installed plugins\naudit 0.2.0\n",
+			"dokku audit:status":                                       "plugin version: 0.2.0\ntotal events: 42\n",
+			"dokku audit:doctor":                                       "ok: sqlite3 executable available\n",
+			"dokku audit:recent --limit 10 --format json":              `[{"id":159,"ts":"2026-04-11T10:34:39Z","app":"attendance","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}]`,
+			"dokku audit:last-deploys --limit 10 --format json":        `[{"id":159,"ts":"2026-04-11T10:34:39Z","app":"attendance","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}]`,
+			"dokku audit:timeline attendance --limit 48 --format json": `[{"id":159,"ts":"2026-04-11T10:34:39Z","app":"attendance","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"user","actor_name":"admin","actor_label":"ssh-key:admin","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push","ssh_name":"admin","triggered_by_subcommand":"git:push"}}]`,
 		},
 		ErrorMap: map[string]error{},
 	}
@@ -152,10 +152,10 @@ func TestHandleAuditEventEnrichesDeployMetadata(t *testing.T) {
 	runner := &dokku.MockCommandRunner{
 		OutputMap: map[string]string{
 			"dokku plugin:list":                  "=====> Installed plugins\naudit 0.2.0\n",
-			"dokku audit:show 159 --format json": `{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}`,
-			"dokku audit:timeline yoklama --limit 250 --format json": `[
-				{"id":158,"ts":"2026-04-11T10:34:38Z","app":"yoklama","category":"deploy","action":"receive-app","status":"success","classification":"source_deploy","actor_type":"user","actor_name":"admin","actor_label":"ssh-key:admin","correlation_id":"corr-1","message":"source deploy received","meta":{"ssh_name":"admin","triggered_by_command":"git push yoklama","triggered_by_subcommand":"git:push"}},
-				{"id":159,"ts":"2026-04-11T10:34:39Z","app":"yoklama","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}
+			"dokku audit:show 159 --format json": `{"id":159,"ts":"2026-04-11T10:34:39Z","app":"attendance","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}`,
+			"dokku audit:timeline attendance --limit 250 --format json": `[
+				{"id":158,"ts":"2026-04-11T10:34:38Z","app":"attendance","category":"deploy","action":"receive-app","status":"success","classification":"source_deploy","actor_type":"user","actor_name":"admin","actor_label":"ssh-key:admin","correlation_id":"corr-1","message":"source deploy received","meta":{"ssh_name":"admin","triggered_by_command":"git push attendance","triggered_by_subcommand":"git:push"}},
+				{"id":159,"ts":"2026-04-11T10:34:39Z","app":"attendance","category":"deploy","action":"finish","status":"success","classification":"source_deploy","actor_type":"system","actor_label":"dokku-system","correlation_id":"corr-1","message":"source deploy finished","meta":{"image_tag":"latest","source_type":"git-push"}}
 			]`,
 		},
 		ErrorMap: map[string]error{},
@@ -173,7 +173,7 @@ func TestHandleAuditEventEnrichesDeployMetadata(t *testing.T) {
 	assert.Equal(t, "ssh-key:admin", event.ActorLabel)
 	assert.Equal(t, "admin", event.Meta["ssh_name"])
 	assert.Equal(t, "git:push", event.Meta["triggered_by_subcommand"])
-	assert.Equal(t, "git push yoklama", event.Meta["triggered_by_command"])
+	assert.Equal(t, "git push attendance", event.Meta["triggered_by_command"])
 }
 
 func TestHandleAppAuditDeniedForUnauthorizedScopedUser(t *testing.T) {

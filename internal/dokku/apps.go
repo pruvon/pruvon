@@ -48,8 +48,8 @@ func GetAppContainers(runner CommandRunner, appName string) ([]models.Container,
 		}
 
 		containerName := parts[5]
-		// Dokku konteyner isimlendirme formatı: <app-name>.<process-type>.<index>
-		// veya daha kesin bir şekilde filtreleme için: <app-name>. ile başlayan veya tam olarak <app-name> olan
+		// Dokku container naming format: <app-name>.<process-type>.<index>
+		// or for more precise filtering: starts with <app-name>. or exactly <app-name>
 		if strings.HasPrefix(containerName, appName+".") || containerName == appName {
 			container := models.Container{
 				ID:      parts[0],

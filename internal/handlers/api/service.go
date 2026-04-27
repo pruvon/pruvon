@@ -58,7 +58,7 @@ func handleServiceList(c *fiber.Ctx) error {
 		})
 	}
 
-	// Önce bu servis tipi geçerli mi diye kontrol edelim
+	// First, check if this service type is valid
 	isValidServiceType := false
 	allTypes := dokku.GetServicePluginList()
 	for _, t := range allTypes {
@@ -69,7 +69,7 @@ func handleServiceList(c *fiber.Ctx) error {
 	}
 
 	if !isValidServiceType {
-		// Geçersiz servis tipi için boş liste dön
+		// Return empty list for invalid service type
 		return c.JSON(fiber.Map{
 			"services": []models.Service{},
 			"message":  fmt.Sprintf("Invalid service type: %s", svcType),
@@ -182,7 +182,7 @@ func handleServiceInfo(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, svcType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service list could not be retrieved: %v", err),
 		})
 	}
 
@@ -309,7 +309,7 @@ func handleServiceExport(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, svcType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service list could not be retrieved: %v", err),
 		})
 	}
 
@@ -331,14 +331,14 @@ func handleServiceExport(c *fiber.Ctx) error {
 
 	if !hasAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu servisi dışa aktarmak için izniniz yok",
+			"error": "You do not have permission to export this service",
 		})
 	}
 
 	filename, err := dokku.ExportService(commandRunner, svcType, svcName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis dışa aktarılamadı: %v", err),
+			"error": fmt.Sprintf("Service export failed: %v", err),
 		})
 	}
 
@@ -356,7 +356,7 @@ func handleServiceAvailable(c *fiber.Ctx) error {
 	availableTypes, err := dokku.GetAvailableServicePluginList(commandRunner)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Eklenti listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Plugin list could not be retrieved: %v", err),
 		})
 	}
 
@@ -386,7 +386,7 @@ func handleServiceCreate(c *fiber.Ctx) error {
 	// Only admin users can create services
 	if authType != "admin" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Servis oluşturmak için yönetici haklarına sahip olmanız gerekiyor",
+			"error": "Admin privileges are required to create a service",
 		})
 	}
 
@@ -448,7 +448,7 @@ func handleServiceLink(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, req.Type)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service list could not be retrieved: %v", err),
 		})
 	}
 
@@ -470,7 +470,7 @@ func handleServiceLink(c *fiber.Ctx) error {
 
 	if !hasSvcAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu servisi uygulamalara bağlamak için izniniz yok",
+			"error": "You do not have permission to link this service to apps",
 		})
 	}
 
@@ -478,7 +478,7 @@ func handleServiceLink(c *fiber.Ctx) error {
 	allApps, err := dokku.GetDokkuApps(commandRunner)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Application list could not be retrieved: %v", err),
 		})
 	}
 
@@ -493,7 +493,7 @@ func handleServiceLink(c *fiber.Ctx) error {
 
 	if !hasAppAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu uygulamaya erişim izniniz yok",
+			"error": "You do not have access permission for this application",
 		})
 	}
 
@@ -506,7 +506,7 @@ func handleServiceLink(c *fiber.Ctx) error {
 	output, err := commandRunner.RunCommand("dokku", fmt.Sprintf("%s:link", req.Type), req.Service, req.App)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis bağlanamadı: %v", err),
+			"error": fmt.Sprintf("Service link failed: %v", err),
 		})
 	}
 
@@ -540,7 +540,7 @@ func handleServiceUnlink(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, req.Type)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service list could not be retrieved: %v", err),
 		})
 	}
 
@@ -562,7 +562,7 @@ func handleServiceUnlink(c *fiber.Ctx) error {
 
 	if !hasSvcAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu servis bağlantısını kaldırmak için izniniz yok",
+			"error": "You do not have permission to remove this service link",
 		})
 	}
 
@@ -570,7 +570,7 @@ func handleServiceUnlink(c *fiber.Ctx) error {
 	allApps, err := dokku.GetDokkuApps(commandRunner)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Uygulama listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Application list could not be retrieved: %v", err),
 		})
 	}
 
@@ -585,7 +585,7 @@ func handleServiceUnlink(c *fiber.Ctx) error {
 
 	if !hasAppAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu uygulamaya erişim izniniz yok",
+			"error": "You do not have access permission for this application",
 		})
 	}
 
@@ -598,7 +598,7 @@ func handleServiceUnlink(c *fiber.Ctx) error {
 	output, err := commandRunner.RunCommand("dokku", fmt.Sprintf("%s:unlink", req.Type), req.Service, req.App)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis bağlantısı kaldırılamadı: %v", err),
+			"error": fmt.Sprintf("Service unlink failed: %v", err),
 		})
 	}
 
@@ -624,7 +624,7 @@ func handleServiceDelete(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, svcType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service list could not be retrieved: %v", err),
 		})
 	}
 
@@ -646,7 +646,7 @@ func handleServiceDelete(c *fiber.Ctx) error {
 
 	if !hasAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu servisi silmek için izniniz yok",
+			"error": "You do not have permission to delete this service",
 		})
 	}
 
@@ -654,7 +654,7 @@ func handleServiceDelete(c *fiber.Ctx) error {
 	linkedApps, err := dokku.GetLinkedApps(commandRunner, svcType, svcName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Bağlı uygulamalar kontrol edilemedi: %v", err),
+			"error": fmt.Sprintf("Linked apps check failed: %v", err),
 		})
 	}
 
@@ -672,7 +672,7 @@ func handleServiceDelete(c *fiber.Ctx) error {
 	output, err := commandRunner.RunCommand("dokku", fmt.Sprintf("%s:destroy", svcType), svcName, "-f")
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis silinemedi: %v", err),
+			"error": fmt.Sprintf("Service could not be deleted: %v", err),
 		})
 	}
 
@@ -698,7 +698,7 @@ func handleServiceGetConfig(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, svcType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service list could not be retrieved: %v", err),
 		})
 	}
 
@@ -720,7 +720,7 @@ func handleServiceGetConfig(c *fiber.Ctx) error {
 
 	if !hasAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu servis yapılandırmasına erişim izniniz yok",
+			"error": "You do not have access permission for this service configuration",
 		})
 	}
 
@@ -732,7 +732,7 @@ func handleServiceGetConfig(c *fiber.Ctx) error {
 		// Check if the data directory exists
 		if _, err := os.Stat(dataDir); os.IsNotExist(err) {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Veri dizini bulunamadı: " + dataDir,
+				"error": "Data directory not found: " + dataDir,
 			})
 		}
 
@@ -746,7 +746,7 @@ func handleServiceGetConfig(c *fiber.Ctx) error {
 			data, err := os.ReadFile(customConfPath)
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": fmt.Sprintf("custom.conf dosyası okunamadı: %v", err),
+					"error": fmt.Sprintf("custom.conf file could not be read: %v", err),
 				})
 			}
 			configContent = string(data)
@@ -762,7 +762,7 @@ func handleServiceGetConfig(c *fiber.Ctx) error {
 	output, err := commandRunner.RunCommand("dokku", fmt.Sprintf("%s:info", svcType), svcName, "--config")
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis yapılandırması alınamadı: %v", err),
+			"error": fmt.Sprintf("Service configuration could not be retrieved: %v", err),
 		})
 	}
 
@@ -796,7 +796,7 @@ func handleServiceSaveConfig(c *fiber.Ctx) error {
 	// Only admin users can modify service configuration
 	if authType != "admin" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Servis yapılandırmasını değiştirmek için yönetici haklarına sahip olmanız gerekiyor",
+			"error": "Admin privileges are required to modify service configuration",
 		})
 	}
 
@@ -808,7 +808,7 @@ func handleServiceSaveConfig(c *fiber.Ctx) error {
 		// Check if the data directory exists
 		if _, err := os.Stat(dataDir); os.IsNotExist(err) {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Veri dizini bulunamadı: " + dataDir,
+				"error": "Data directory not found: " + dataDir,
 			})
 		}
 
@@ -821,7 +821,7 @@ func handleServiceSaveConfig(c *fiber.Ctx) error {
 		}
 		if err := c.BodyParser(&requestBody); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Geçersiz istek verisi",
+				"error": "Invalid request data",
 			})
 		}
 
@@ -829,7 +829,7 @@ func handleServiceSaveConfig(c *fiber.Ctx) error {
 		err := os.WriteFile(customConfPath, []byte(requestBody.Config), 0644)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": fmt.Sprintf("custom.conf dosyası oluşturulamadı: %v", err),
+				"error": fmt.Sprintf("custom.conf file could not be created: %v", err),
 			})
 		}
 
@@ -837,7 +837,7 @@ func handleServiceSaveConfig(c *fiber.Ctx) error {
 		output, err := commandRunner.RunCommand("dokku", "postgres:restart", svcName)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": fmt.Sprintf("Konfigürasyon değişiklikleri uygulandı fakat servis yeniden başlatılamadı: %v", err),
+				"error": fmt.Sprintf("Configuration changes applied but service restart failed: %v", err),
 			})
 		}
 
@@ -859,7 +859,7 @@ func handleServiceSaveConfig(c *fiber.Ctx) error {
 		_, err := commandRunner.RunCommand("dokku", fmt.Sprintf("%s:set", svcType), svcName, key, value)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": fmt.Sprintf("Yapılandırma kaydedilemedi: %v", err),
+				"error": fmt.Sprintf("Configuration could not be saved: %v", err),
 			})
 		}
 	}
@@ -1008,20 +1008,20 @@ func handleServiceResourceSet(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&req); err != nil {
-		_ = middleware.SetFlashMessage(c, "Geçersiz istek verisi", "error")
+		_ = middleware.SetFlashMessage(c, "Invalid request data", "error")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":      "Invalid request data",
-			"message":    "Geçersiz istek verisi",
+			"message":    "Invalid request data",
 			"flash_type": "error",
 		})
 	}
 
 	// Check if at least one resource limit is provided
 	if req.CPU == "" && req.Memory == "" {
-		_ = middleware.SetFlashMessage(c, "En az bir kaynak limiti belirtilmelidir (CPU veya Memory)", "error")
+		_ = middleware.SetFlashMessage(c, "At least one resource limit must be specified (CPU or Memory)", "error")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":      "At least one resource limit must be provided (CPU or Memory)",
-			"message":    "En az bir kaynak limiti belirtilmelidir (CPU veya Memory)",
+			"message":    "At least one resource limit must be provided (CPU or Memory)",
 			"flash_type": "error",
 		})
 	}
@@ -1031,7 +1031,7 @@ func handleServiceResourceSet(c *fiber.Ctx) error {
 	if sessionData == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":      "Unauthorized access",
-			"message":    "Yetkisiz erişim",
+			"message":    "Unauthorized access",
 			"flash_type": "error",
 		})
 	}
@@ -1043,8 +1043,8 @@ func handleServiceResourceSet(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, svcType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":      fmt.Sprintf("Servis listesi alınamadı: %v", err),
-			"message":    fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error":      fmt.Sprintf("Service list could not be retrieved: %v", err),
+			"message":    fmt.Sprintf("Service list could not be retrieved: %v", err),
 			"flash_type": "error",
 		})
 	}
@@ -1067,8 +1067,8 @@ func handleServiceResourceSet(c *fiber.Ctx) error {
 
 	if !hasAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error":      "Bu servisin kaynak limitlerini değiştirmek için izniniz yok",
-			"message":    "Bu servisin kaynak limitlerini değiştirmek için izniniz yok",
+			"error":      "You do not have permission to change resource limits for this service",
+			"message":    "You do not have permission to change resource limits for this service",
 			"flash_type": "error",
 		})
 	}
@@ -1076,7 +1076,7 @@ func handleServiceResourceSet(c *fiber.Ctx) error {
 	// Get service info to get container ID
 	serviceInfo, err := dokku.GetServiceInfo(commandRunner, svcType, svcName)
 	if err != nil {
-		errorMsg := fmt.Sprintf("%s servisi bilgileri alınamadı", svcName)
+		errorMsg := fmt.Sprintf("Service %s information could not be retrieved", svcName)
 		_ = middleware.SetFlashMessage(c, errorMsg, "error")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":      fmt.Sprintf("Failed to get service info for %s: %v", svcName, err),
@@ -1087,7 +1087,7 @@ func handleServiceResourceSet(c *fiber.Ctx) error {
 
 	// Check if we have a container ID
 	if serviceInfo.ContainerID == "" {
-		errorMsg := fmt.Sprintf("%s servisi için konteyner kimliği bulunamadı", svcName)
+		errorMsg := fmt.Sprintf("Container ID not found for service %s", svcName)
 		_ = middleware.SetFlashMessage(c, errorMsg, "error")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":      fmt.Sprintf("Container ID not found for service %s", svcName),
@@ -1099,7 +1099,7 @@ func handleServiceResourceSet(c *fiber.Ctx) error {
 	// Update resource limits using the Docker update command
 	err = docker.UpdateContainerResourceLimits(commandRunner, serviceInfo.ContainerID, req.CPU, req.Memory)
 	if err != nil {
-		errorMsg := fmt.Sprintf("%s konteynerinin kaynak limitleri güncellenirken hata oluştu: %v", serviceInfo.ContainerID, err)
+		errorMsg := fmt.Sprintf("Error updating resource limits for container %s: %v", serviceInfo.ContainerID, err)
 		_ = middleware.SetFlashMessage(c, errorMsg, "error")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":      fmt.Sprintf("Failed to update resource limits for container %s: %v", serviceInfo.ContainerID, err),
@@ -1109,7 +1109,7 @@ func handleServiceResourceSet(c *fiber.Ctx) error {
 	}
 
 	// Set success message
-	successMsg := fmt.Sprintf("%s servisi için kaynak limitleri güncellendi", svcName)
+	successMsg := fmt.Sprintf("Resource limits for service %s have been updated", svcName)
 	_ = middleware.SetFlashMessage(c, successMsg, "success")
 
 	return c.JSON(fiber.Map{
@@ -1133,7 +1133,7 @@ func handleServiceBasicInfo(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, svcType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service list could not be retrieved: %v", err),
 		})
 	}
 
@@ -1155,7 +1155,7 @@ func handleServiceBasicInfo(c *fiber.Ctx) error {
 
 	if !hasAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu servise erişim izniniz yok",
+			"error": "You do not have access permission for this service",
 		})
 	}
 
@@ -1163,7 +1163,7 @@ func handleServiceBasicInfo(c *fiber.Ctx) error {
 	info, err := dokku.GetServiceBasicInfo(commandRunner, svcType, svcName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis temel bilgisi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service basic info could not be retrieved: %v", err),
 		})
 	}
 
@@ -1189,7 +1189,7 @@ func handleServiceResourceInfo(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, svcType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service list could not be retrieved: %v", err),
 		})
 	}
 
@@ -1211,7 +1211,7 @@ func handleServiceResourceInfo(c *fiber.Ctx) error {
 
 	if !hasAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu servise erişim izniniz yok",
+			"error": "You do not have access permission for this service",
 		})
 	}
 
@@ -1219,7 +1219,7 @@ func handleServiceResourceInfo(c *fiber.Ctx) error {
 	resourceInfo, err := dokku.GetServiceResourceInfo(commandRunner, svcType, svcName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis kaynak bilgisi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service resource info could not be retrieved: %v", err),
 		})
 	}
 	return c.JSON(fiber.Map{
@@ -1241,7 +1241,7 @@ func handleServiceLinksInfo(c *fiber.Ctx) error {
 	allSvcs, err := dokku.GetServices(commandRunner, svcType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Servis listesi alınamadı: %v", err),
+			"error": fmt.Sprintf("Service list could not be retrieved: %v", err),
 		})
 	}
 
@@ -1263,7 +1263,7 @@ func handleServiceLinksInfo(c *fiber.Ctx) error {
 
 	if !hasAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Bu servise erişim izniniz yok",
+			"error": "You do not have access permission for this service",
 		})
 	}
 
@@ -1271,7 +1271,7 @@ func handleServiceLinksInfo(c *fiber.Ctx) error {
 	linkedApps, err := dokku.GetLinkedApps(commandRunner, svcType, svcName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Bağlı uygulamalar alınamadı: %v", err),
+			"error": fmt.Sprintf("Linked apps could not be retrieved: %v", err),
 		})
 	}
 	return c.JSON(fiber.Map{

@@ -11,11 +11,11 @@ import (
 func GetSessionData(c *fiber.Ctx) fiber.Map {
 	sess, _ := middleware.GetStore().Get(c)
 
-	// Flash mesajlarını session'dan al
+	// Get flash messages from the session
 	flashMessage := sess.Get("flash_message")
 	flashType := sess.Get("flash_type")
 
-	// Flash mesajlarını kullandıktan sonra session'dan temizle
+	// Clear flash messages from session after reading
 	if flashMessage != nil {
 		sess.Delete("flash_message")
 		sess.Delete("flash_type")

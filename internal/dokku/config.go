@@ -82,7 +82,7 @@ func ParsePorts(output string) []models.PortMapping {
 func ParseProcessInfo(output string) []models.ProcessInfo {
 	var info []models.ProcessInfo
 	lines := strings.Split(output, "\n")
-	processTypes := make(map[string]int) // Her process tipi için sayı tutacak
+	processTypes := make(map[string]int) // Will keep count for each process type
 
 	for _, line := range lines {
 		if strings.Contains(line, ":") && !strings.Contains(line, "=====") {
@@ -107,15 +107,15 @@ func ParseProcessInfo(output string) []models.ProcessInfo {
 					})
 				}
 
-				// Status ile başlayan satırları özel olarak işle
+				// Process lines starting with Status specially
 				if strings.HasPrefix(name, "Status ") {
-					// Process tipini ve numarasını ayır (örn: "Status web 1" -> "web")
+					// Extract process type and number (e.g.: "Status web 1" -> "web")
 					nameParts := strings.Fields(name)
 					if len(nameParts) >= 3 {
 						processType := nameParts[1]
 						isRunning := strings.Contains(value, "running") // Fix: contains -> Contains
 
-						// Process tipinin sayısını artır
+						// Increment process type count
 						if _, exists := processTypes[processType]; !exists {
 							processTypes[processType] = 0
 						}
@@ -128,7 +128,7 @@ func ParseProcessInfo(output string) []models.ProcessInfo {
 		}
 	}
 
-	// Her process tipi için bilgileri oluştur
+	// Build information for each process type
 	for processType, count := range processTypes {
 		var status string
 		if count > 0 {

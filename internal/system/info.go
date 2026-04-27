@@ -22,7 +22,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-// readFileFunc, os.ReadFile fonksiyonunu mock'lamak için değişken
+// readFileFunc is a variable to mock os.ReadFile
 var readFileFunc = os.ReadFile
 
 var systemCommandRunner = exec.NewCommandRunner()
@@ -97,7 +97,7 @@ func CalculateCPUUsage() float64 {
 		return 0
 	}
 
-	// Kısa bir bekleme süresi
+	// A short wait period
 	time.Sleep(200 * time.Millisecond)
 
 	stat2, err := ReadCPUStats()
@@ -105,7 +105,7 @@ func CalculateCPUUsage() float64 {
 		return 0
 	}
 
-	// CPU zamanlarındaki değişimi hesapla
+	// Calculate change in CPU times
 	idle := float64(stat2.Idle - stat1.Idle + stat2.Iowait - stat1.Iowait)
 	total := float64(
 		(stat2.User + stat2.Nice + stat2.System + stat2.Idle + stat2.Iowait +

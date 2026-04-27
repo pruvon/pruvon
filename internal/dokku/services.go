@@ -179,7 +179,7 @@ func GetServices(runner CommandRunner, svcType string) ([]models.Service, error)
 	// Check if the plugin is installed
 	installedPlugins, err := GetInstalledPluginsMap(runner)
 	if err != nil {
-		return nil, fmt.Errorf("plugin durumu kontrol edilemedi: %v", err)
+		return nil, fmt.Errorf("plugin status could not be checked: %v", err)
 	}
 
 	if !installedPlugins[svcType] {
@@ -462,12 +462,12 @@ func ExportService(runner CommandRunner, svcType string, svcName string) (string
 	// Check if gz file is empty
 	if gzInfo.Size() == 0 {
 		os.Remove(finalPath)
-		return "", fmt.Errorf("gz dosyası boş olarak oluşturuldu")
+		return "", fmt.Errorf("gz file was created empty")
 	}
 
 	// Ensure file has proper permissions for reading
 	if err := os.Chmod(finalPath, 0644); err != nil {
-		return "", fmt.Errorf("dosya izinleri ayarlanamadı: %v", err)
+		return "", fmt.Errorf("file permissions could not be set: %v", err)
 	}
 
 	// Return the name of the gz file
@@ -508,7 +508,7 @@ func GetServiceBasicInfo(runner CommandRunner, svcType string, svcName string) (
 	// Run the appropriate info command based on service type
 	output, err = runner.RunCommand("dokku", svcType+":info", svcName)
 	if err != nil {
-		return info, fmt.Errorf("servis bilgisi alınamadı: %v", err)
+		return info, fmt.Errorf("service info could not be retrieved: %v", err)
 	}
 
 	lines := strings.Split(output, "\n")
@@ -630,7 +630,7 @@ func GetServiceResourceInfo(runner CommandRunner, svcType string, svcName string
 func getServiceContainerId(runner CommandRunner, svcType string, svcName string) (string, error) {
 	output, err := runner.RunCommand("dokku", svcType+":info", svcName)
 	if err != nil {
-		return "", fmt.Errorf("servis bilgisi alınamadı: %v", err)
+		return "", fmt.Errorf("service info could not be retrieved: %v", err)
 	}
 
 	lines := strings.Split(output, "\n")
@@ -708,13 +708,13 @@ func GetServiceNamesOnly(runner CommandRunner, svcType string) ([]string, error)
 
 	// Return error if service type is not valid
 	if !isValidType {
-		return nil, fmt.Errorf("geçersiz servis tipi: %s", svcType)
+		return nil, fmt.Errorf("invalid service type: %s", svcType)
 	}
 
 	// Check if the plugin is installed
 	installedPlugins, err := GetInstalledPluginsMap(runner)
 	if err != nil {
-		return nil, fmt.Errorf("plugin durumu kontrol edilemedi: %v", err)
+		return nil, fmt.Errorf("plugin status could not be checked: %v", err)
 	}
 
 	if !installedPlugins[svcType] {
@@ -727,7 +727,7 @@ func GetServiceNamesOnly(runner CommandRunner, svcType string) ([]string, error)
 	output, err := runner.RunCommand("dokku", cmd)
 	if err != nil {
 		log.Printf("Error getting services for type %s: %v", svcType, err)
-		return nil, fmt.Errorf("servis listesi alınamadı: %v", err)
+		return nil, fmt.Errorf("service list could not be retrieved: %v", err)
 	}
 
 	// Parse the output to extract service names

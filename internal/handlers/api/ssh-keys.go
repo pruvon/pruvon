@@ -33,14 +33,14 @@ func handleSshKeyAdd(c *fiber.Ctx) error {
 		})
 	}
 
-	// SSH anahtarı geçerlilik kontrolü
+	// SSH key validity check
 	if !ssh.IsValidSSHKey(req.Key) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid SSH key. Please provide a valid SSH key.",
 		})
 	}
 
-	// SSH anahtar adının benzersiz olup olmadığını kontrol et
+	// Check if SSH key name is unique
 	exists, err := ssh.IsKeyNameExists(req.Name, ssh.AuthorizedKeysPath)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -133,7 +133,7 @@ func handleGetSshKeys(c *fiber.Ctx) error {
 	keys, err := dokku.GetSSHKeys(commandRunner)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("SSH anahtarları alınamadı: %v", err),
+			"error": fmt.Sprintf("SSH keys could not be retrieved: %v", err),
 		})
 	}
 

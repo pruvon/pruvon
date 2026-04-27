@@ -261,11 +261,11 @@ func FlashMiddleware() fiber.Handler {
 		flashMessage := sess.Get("flash_message")
 		flashType := sess.Get("flash_type")
 
-		// Eğer flash mesajı varsa
+		// If there is a flash message
 		if flashMessage != nil {
 			var safeMessage string
 			if msgStr, ok := flashMessage.(string); ok {
-				// HTML özel karakterlerini encode ederek güvenli hale getir
+				// Encode HTML special characters to make it safe
 				safeMessage = html.EscapeString(msgStr)
 			} else {
 				safeMessage = fmt.Sprintf("%v", flashMessage)
@@ -278,11 +278,11 @@ func FlashMiddleware() fiber.Handler {
 				safeType = "info"
 			}
 
-			// Flash mesajını ve tipini context locals'a ekle
+			// Add flash message and type to context locals
 			c.Locals("FlashMessage", safeMessage)
 			c.Locals("FlashType", safeType)
 
-			// Session'dan sil - sonraki request'te tekrar gösterilmemesi için
+			// Delete from session so it is not shown again on the next request
 			sess.Delete("flash_message")
 			sess.Delete("flash_type")
 			_ = sess.Save()

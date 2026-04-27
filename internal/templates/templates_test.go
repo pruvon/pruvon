@@ -16,17 +16,17 @@ func TestFormatDate(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "Normal tarih",
+			name:     "Normal date",
 			input:    time.Date(2023, 12, 25, 15, 30, 45, 0, time.UTC),
 			expected: "25.12.2023 15:30",
 		},
 		{
-			name:     "Yılın ilk günü",
+			name:     "First day of year",
 			input:    time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 			expected: "01.01.2024 00:00",
 		},
 		{
-			name:     "Gece yarısı",
+			name:     "Midnight",
 			input:    time.Date(2023, 6, 15, 23, 59, 0, 0, time.UTC),
 			expected: "15.06.2023 23:59",
 		},
@@ -49,32 +49,32 @@ func TestJsonFunc(t *testing.T) {
 		expected template.JS
 	}{
 		{
-			name:     "String değer",
+			name:     "String value",
 			input:    "test string",
 			expected: template.JS(`"test string"`),
 		},
 		{
-			name:     "Number değer",
+			name:     "Number value",
 			input:    42,
 			expected: template.JS("42"),
 		},
 		{
-			name:     "Boolean değer",
+			name:     "Boolean value",
 			input:    true,
 			expected: template.JS("true"),
 		},
 		{
-			name:     "Object değer",
+			name:     "Object value",
 			input:    map[string]interface{}{"key": "value", "num": 123},
 			expected: template.JS(`{"key":"value","num":123}`),
 		},
 		{
-			name:     "Array değer",
+			name:     "Array value",
 			input:    []string{"item1", "item2", "item3"},
 			expected: template.JS(`["item1","item2","item3"]`),
 		},
 		{
-			name:     "Nil değer",
+			name:     "Nil value",
 			input:    nil,
 			expected: template.JS("null"),
 		},
@@ -124,21 +124,21 @@ func TestHasAppAccess(t *testing.T) {
 		expected    bool
 	}{
 		{
-			name:        "Admin kullanıcı her uygulamaya erişebilir",
+			name:        "Admin user can access any app",
 			username:    "admin_user",
 			specificApp: "any_app",
 			authType:    "admin",
 			expected:    true,
 		},
 		{
-			name:        "Admin kullanıcı boş uygulama adına erişebilir",
+			name:        "Admin user can access empty app name",
 			username:    "admin_user",
 			specificApp: "",
 			authType:    "admin",
 			expected:    true,
 		},
 		{
-			name:        "Normal kullanıcı belirli uygulama",
+			name:        "Regular user with specific app",
 			username:    "normal_user",
 			specificApp: "my_app",
 			authType:    "user",
@@ -159,28 +159,28 @@ func TestHasAppAccess(t *testing.T) {
 			expected:    false,
 		},
 		{
-			name:        "Route-derived erişim apps navigation gösterir",
+			name:        "Route-derived access shows apps navigation",
 			username:    "route_user",
 			specificApp: "",
 			authType:    "user",
 			expected:    true,
 		},
 		{
-			name:        "Route-derived erişim belirli uygulama gösterir",
+			name:        "Route-derived access shows specific app",
 			username:    "route_user",
 			specificApp: "bar",
 			authType:    "user",
 			expected:    true,
 		},
 		{
-			name:        "Create route apps navigation göstermez",
+			name:        "Create route does not show apps navigation",
 			username:    "create_user",
 			specificApp: "",
 			authType:    "user",
 			expected:    false,
 		},
 		{
-			name:        "Nested custom route apps navigation göstermez",
+			name:        "Nested custom route does not show apps navigation",
 			username:    "nested_route_user",
 			specificApp: "",
 			authType:    "user",
@@ -233,63 +233,63 @@ func TestHasRouteAccess(t *testing.T) {
 		expected bool
 	}{
 		{
-			name:     "Admin kullanıcı her route'a erişebilir",
+			name:     "Admin user can access any route",
 			username: "admin_user",
 			route:    "/admin/settings",
 			authType: "admin",
 			expected: true,
 		},
 		{
-			name:     "Apps wildcard route apps navigation gösterir",
+			name:     "Apps wildcard route shows apps navigation",
 			username: "user",
 			route:    "/apps",
 			authType: "user",
 			expected: true,
 		},
 		{
-			name:     "Normal kullanıcı wildcard route'a erişebilir",
+			name:     "Regular user can access wildcard route",
 			username: "user",
 			route:    "/apps/test",
 			authType: "user",
 			expected: true,
 		},
 		{
-			name:     "Wildcard route docker erişimini de verir",
+			name:     "Wildcard route also grants docker access",
 			username: "wildcard_user",
 			route:    "/docker",
 			authType: "user",
 			expected: true,
 		},
 		{
-			name:     "Route-derived erişim apps navigation gösterir",
+			name:     "Route-derived access shows apps navigation",
 			username: "route_user",
 			route:    "/apps",
 			authType: "user",
 			expected: true,
 		},
 		{
-			name:     "Route-derived erişim app detail route gösterir",
+			name:     "Route-derived access shows app detail route",
 			username: "route_user",
 			route:    "/apps/bar",
 			authType: "user",
 			expected: true,
 		},
 		{
-			name:     "Create route apps navigation göstermez",
+			name:     "Create route does not show apps navigation",
 			username: "create_user",
 			route:    "/apps",
 			authType: "user",
 			expected: false,
 		},
 		{
-			name:     "Create route exact path gösterir",
+			name:     "Create route shows exact path",
 			username: "create_user",
 			route:    "/apps/create",
 			authType: "user",
 			expected: true,
 		},
 		{
-			name:     "Nil kullanıcı",
+			name:     "Nil user",
 			username: nil,
 			route:    "/apps",
 			authType: "user",

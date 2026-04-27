@@ -16,26 +16,26 @@ type SSHKey struct {
 	Comment string
 }
 
-// IsValidSSHKey SSH anahtarının geçerli olup olmadığını kontrol eder
+// IsValidSSHKey checks whether an SSH key is valid
 func IsValidSSHKey(key string) bool {
-	// SSH anahtarının boş olup olmadığını kontrol et
+	// Check if SSH key is empty
 	if key == "" {
 		return false
 	}
 
-	// SSH anahtarları genellikle birkaç parçadan oluşur
+	// SSH keys typically consist of several parts
 	parts := strings.Fields(key)
 	if len(parts) < 2 {
 		return false
 	}
 
-	// İlk alan anahtar tipi olmalı (ssh-rsa, ssh-ed25519, vb.)
+	// The first field should be the key type (ssh-rsa, ssh-ed25519, etc.)
 	if !strings.HasPrefix(parts[0], "ssh-") && !strings.HasPrefix(parts[0], "ecdsa-") {
 		return false
 	}
 
-	// İkinci alan anahtar verisi olmalı (base64 ile kodlanmış)
-	// SSH anahtarlarındaki veri genellikle Base64 kodludur ve belli bir uzunluğa sahiptir
+	// The second field should be the key data (base64 encoded)
+	// SSH key data is typically Base64 encoded and has a certain length
 	if len(parts[1]) < 20 {
 		return false
 	}
@@ -43,7 +43,7 @@ func IsValidSSHKey(key string) bool {
 	return true
 }
 
-// IsKeyNameExists anahtar adının halihazırda var olup olmadığını kontrol eder
+// IsKeyNameExists checks whether the key name already exists
 func IsKeyNameExists(name string, filepath string) (bool, error) {
 	keys, err := ReadAuthorizedKeys(filepath)
 	if err != nil {

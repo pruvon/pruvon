@@ -106,13 +106,13 @@ func WriteVHostFile(content string) error {
 
 // GetServerDomain returns the server domain
 func GetServerDomain(runner CommandRunner) (string, error) {
-	// Önce çevre değişkeninden kontrol et
+	// First check from environment variable
 	domain := os.Getenv("DOKKU_DOMAIN")
 	if domain != "" {
 		return domain, nil
 	}
 
-	// Çevre değişkeni yoksa dokku global domain'i al
+	// If no environment variable, get the dokku global domain
 	output, err := runner.RunCommand("dokku", "domains:report", "--global")
 	if err != nil {
 		return "", fmt.Errorf("global domain information could not be retrieved: %v", err)
@@ -130,7 +130,7 @@ func GetServerDomain(runner CommandRunner) (string, error) {
 		}
 	}
 
-	// Hiçbir şey bulunamazsa IP adresini döndür
+	// If nothing is found, return the IP address
 	resp, err := http.Get("https://api.ipify.org")
 	if err == nil {
 		defer resp.Body.Close()
