@@ -7,6 +7,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-27
+
+### Changed
+- fix(ci): block unverified releases and stabilize user tests
+
+
 ## [0.2.0] - 2026-04-27
 
 ### Added
