@@ -84,7 +84,7 @@
 - In `internal/handlers/ws/ws.go`, `/ws/services/import/:taskId` must stay above `/ws/services/:type/:name/console`.
 - Static assets are intentionally served after auth middleware; treat `/static/*` as authenticated unless the task explicitly changes that behavior.
 - Session lookups use both `username` and legacy `user`; preserve both unless a migration is explicitly requested.
-- GitHub-authenticated users are revalidated against config on request and should lose access immediately if removed from config.
+- Configured users are revalidated against config on request and should lose access immediately if removed or disabled.
 
 ## Templates And Frontend
 
@@ -117,6 +117,7 @@
   - `go test ./...`
 - When validating against CI behavior, also consider `go test -race ./...`.
 - **Mandatory: always run `make lint` (or `golangci-lint run --timeout=5m`) after writing or editing code, before considering the task complete.** Do not rely on `go vet` alone catching all issues; golangci-lint includes the `unused` checker and other analyzers that `go vet` does not. A CI failure due to an unused function, variable, or import that was not caught locally indicates the lint step was skipped.
+- **Release gating is strict:** before any tag or GitHub release, the release commit must pass `go vet ./...`, `go test -v -race -coverprofile=coverage.out ./...`, and `make lint`. Do not publish a release until the pushed commit has a successful `CI` workflow run.
 - Some backup, static, and streaming behavior depends on environment or embedded assets. Keep tests deterministic and avoid introducing host-specific assumptions.
 
 ## High-Risk Areas

@@ -64,7 +64,7 @@ ensure_tag_absent() {
 }
 
 update_version_files() {
-    DIRTY_FILES=("${REPO_ROOT}/cmd/app/main.go" "${REPO_ROOT}/cmd/app/main_test.go")
+    DIRTY_FILES=("${REPO_ROOT}/CHANGELOG.md" "${REPO_ROOT}/cmd/app/main.go" "${REPO_ROOT}/cmd/app/main_test.go")
     perl -0pi -e "s/var PruvonVersion = \"[^\"]+\"/var PruvonVersion = \"${VERSION}\"/" "${REPO_ROOT}/cmd/app/main.go"
     perl -0pi -e "s/expectedVersion := \"[^\"]+\"/expectedVersion := \"${VERSION}\"/" "${REPO_ROOT}/cmd/app/main_test.go"
 }
@@ -129,6 +129,16 @@ verify_gh_auth() {
     gh auth status >/dev/null
 }
 
+run_release_verification() {
+    printf '%s\n' 'Running release verification (go vet, go test -race, golangci-lint)...'
+    make -C "${REPO_ROOT}" vet
+    (
+        cd "${REPO_ROOT}"
+        go test -v -race -coverprofile=coverage.out ./...
+    )
+    make -C "${REPO_ROOT}" lint
+}
+
 update_changelog() {
     bash "${REPO_ROOT}/scripts/changelog/generate.sh" "${VERSION}" "${PREVIOUS_TAG}"
 }
@@ -146,8 +156,35 @@ create_tag() {
     git -C "${REPO_ROOT}" tag -a "${TAG}" -m "${TAG}"
 }
 
-push_refs() {
+push_release_commit() {
     git -C "${REPO_ROOT}" push
+}
+
+wait_for_ci_success() {
+    local commit_sha="$1"
+    local run_id=""
+    local attempts=0
+    local max_attempts=60
+
+    printf 'Waiting for CI workflow for %s\n' "${commit_sha}"
+    while [[ -z "${run_id}" ]]; do
+        run_id="$(gh run list --workflow ci.yml --commit "${commit_sha}" --json databaseId --jq '.[0].databaseId // empty')"
+        if [[ -n "${run_id}" ]]; then
+            break
+        fi
+
+        attempts=$((attempts + 1))
+        if (( attempts >= max_attempts )); then
+            die "timed out waiting for CI workflow for ${commit_sha}"
+        fi
+
+        sleep 5
+    done
+
+    gh run watch "${run_id}" --compact --exit-status
+}
+
+push_tag() {
     git -C "${REPO_ROOT}" push origin "${TAG}"
 }
 
@@ -179,11 +216,16 @@ main() {
     verify_gh_auth
     update_version_files
     update_changelog
+    run_release_verification
     build_artifacts
     prepare_notes
     commit_release
+    local release_commit_sha
+    release_commit_sha="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+    push_release_commit
+    wait_for_ci_success "${release_commit_sha}"
     create_tag
-    push_refs
+    push_tag
     create_release
 
     printf 'Release published: %s\n' "${TAG}"

@@ -307,7 +307,8 @@ func usersAPIRequest(t *testing.T, app *fiber.App, method, path, body string) *h
 	if method != http.MethodGet && method != http.MethodDelete {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := app.Test(req)
+	// Fiber defaults app.Test to 1s, which is too tight under -race when bcrypt runs in the handler.
+	resp, err := app.Test(req, 10_000)
 	if err != nil {
 		t.Fatalf("request %s %s failed: %v", method, path, err)
 	}
