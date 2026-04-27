@@ -183,10 +183,33 @@ func handleUpdateUser(c *fiber.Ctx) error {
 		}
 	}
 
-	params, _ := json.Marshal(fiber.Map{
-		"old_username": targetUsername,
-		"new_username": updatedUser.Username,
-	})
+	changes := fiber.Map{}
+	if user.Username != updatedUser.Username {
+		changes["old_username"] = user.Username
+		changes["new_username"] = updatedUser.Username
+	}
+	if user.Role != updatedUser.Role {
+		changes["old_role"] = user.Role
+		changes["new_role"] = updatedUser.Role
+	}
+	oldGitHub := ""
+	if user.GitHub != nil {
+		oldGitHub = user.GitHub.Username
+	}
+	newGitHub := ""
+	if updatedUser.GitHub != nil {
+		newGitHub = updatedUser.GitHub.Username
+	}
+	if oldGitHub != newGitHub {
+		changes["old_github_username"] = oldGitHub
+		changes["new_github_username"] = newGitHub
+	}
+	if user.Disabled != updatedUser.Disabled {
+		changes["old_disabled"] = user.Disabled
+		changes["new_disabled"] = updatedUser.Disabled
+	}
+
+	params, _ := json.Marshal(changes)
 	_ = servicelogs.LogActivity(models.ActivityLog{
 		Time:       time.Now(),
 		RequestID:  uuid.New().String(),
@@ -388,17 +411,6 @@ func handleGetUserOptions(c *fiber.Ctx) error {
 		internallog.LogWarning(fmt.Sprintf("Error getting available service plugins: %v", err))
 		installedServicePlugins = serviceTypes
 	}
-
-	pluginsJSON, _ := json.Marshal(installedServicePlugins)
-	_ = servicelogs.LogActivity(models.ActivityLog{
-		Time:       time.Now(),
-		RequestID:  uuid.New().String(),
-		IP:         c.IP(),
-		User:       "system",
-		Action:     "detected_service_plugins",
-		Parameters: json.RawMessage(fmt.Sprintf(`{"plugins":%s}`, string(pluginsJSON))),
-		StatusCode: 200,
-	})
 
 	return c.JSON(fiber.Map{
 		"apps":                    apps,

@@ -547,8 +547,12 @@ prepare_directories() {
     install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${APP_RUNTIME_DIR}"
     install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${BACKUP_DIR}"
     install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${LOG_DIR}"
-    install -o "${APP_USER}" -g "${APP_GROUP}" -m 0640 /dev/null "${LOG_DIR}/activity.log"
-    install -o "${APP_USER}" -g "${APP_GROUP}" -m 0640 /dev/null "${LOG_DIR}/backup.log"
+    if [[ ! -f "${LOG_DIR}/activity.log" ]]; then
+        install -o "${APP_USER}" -g "${APP_GROUP}" -m 0640 /dev/null "${LOG_DIR}/activity.log"
+    fi
+    if [[ ! -f "${LOG_DIR}/backup.log" ]]; then
+        install -o "${APP_USER}" -g "${APP_GROUP}" -m 0640 /dev/null "${LOG_DIR}/backup.log"
+    fi
 }
 
 create_config_if_missing() {
