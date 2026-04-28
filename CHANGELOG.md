@@ -7,6 +7,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-04-28
+
+### Changed
+- feat(auth): add scoped user create permissions and fast service listing
+- fix(backup): add log dir creation, fix date parsing, set missing defaults
+- refactor(logs): improve activity log granularity and reduce noise
+- translate Turkish comments and messages to English
+
+
 ## [0.2.1] - 2026-04-27
 
 ### Changed
