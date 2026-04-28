@@ -40,6 +40,10 @@ func (g *ScopedUserAuthChecker) CheckAccess(c *fiber.Ctx, user User, path string
 		return true
 	}
 
+	if g.hasCreateAccess(scopedUser, path) {
+		return true
+	}
+
 	if g.hasAppAccess(scopedUser, path) {
 		return true
 	}
@@ -161,6 +165,17 @@ func (g *ScopedUserAuthChecker) hasServiceAccess(user *config.User, path string)
 		return false
 	}
 
+	// Allow access to service plugin metadata endpoints for any user with service access.
+	// These endpoints only return installed/available plugin names, not service data.
+	if path == "/api/services/installed" || path == "/api/services/available" {
+		for _, svcList := range user.Services {
+			if len(svcList) > 0 {
+				return true
+			}
+		}
+		return false
+	}
+
 	if path == "/services" {
 		for _, svcList := range user.Services {
 			if len(svcList) > 0 {
@@ -192,6 +207,41 @@ func (g *ScopedUserAuthChecker) hasServiceAccess(user *config.User, path string)
 
 		for _, svc := range svcPermissions {
 			if svc == serviceName || svc == "*" {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (g *ScopedUserAuthChecker) hasCreateAccess(user *config.User, path string) bool {
+	// Explicit permission flags
+	if user.CanCreateApps && (path == "/apps/create" || strings.HasPrefix(path, "/ws/apps/create")) {
+		return true
+	}
+	if user.CanCreateServices && (path == "/services/create" || strings.HasPrefix(path, "/api/services/create") || strings.HasPrefix(path, "/ws/services/create")) {
+		return true
+	}
+
+	// Legacy route-based permissions (kept in sync with template helpers)
+	for _, r := range user.Routes {
+		if r == "*" || r == "/*" {
+			return true
+		}
+	}
+
+	if path == "/apps/create" || strings.HasPrefix(path, "/ws/apps/create") {
+		for _, r := range user.Routes {
+			if r == "/apps/create" || r == "/apps/*" {
+				return true
+			}
+		}
+	}
+
+	if path == "/services/create" || strings.HasPrefix(path, "/api/services/create") || strings.HasPrefix(path, "/ws/services/create") {
+		for _, r := range user.Routes {
+			if r == "/services/create" || r == "/services/*" {
 				return true
 			}
 		}

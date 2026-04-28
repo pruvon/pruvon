@@ -39,14 +39,16 @@ type Config struct {
 
 // User is the canonical persisted and runtime user model.
 type User struct {
-	Username string              `yaml:"username" json:"username"`
-	Password string              `yaml:"password,omitempty" json:"-"`
-	Role     string              `yaml:"role" json:"role"`
-	Routes   []string            `yaml:"routes,omitempty" json:"routes,omitempty"`
-	Apps     []string            `yaml:"apps,omitempty" json:"apps,omitempty"`
-	Services map[string][]string `yaml:"services,omitempty" json:"services,omitempty"`
-	GitHub   *UserGitHub         `yaml:"github,omitempty" json:"github,omitempty"`
-	Disabled bool                `yaml:"disabled,omitempty" json:"disabled"`
+	Username          string              `yaml:"username" json:"username"`
+	Password          string              `yaml:"password,omitempty" json:"-"`
+	Role              string              `yaml:"role" json:"role"`
+	Routes            []string            `yaml:"routes,omitempty" json:"routes,omitempty"`
+	Apps              []string            `yaml:"apps,omitempty" json:"apps,omitempty"`
+	Services          map[string][]string `yaml:"services,omitempty" json:"services,omitempty"`
+	GitHub            *UserGitHub         `yaml:"github,omitempty" json:"github,omitempty"`
+	Disabled          bool                `yaml:"disabled,omitempty" json:"disabled"`
+	CanCreateApps     bool                `yaml:"can_create_apps,omitempty" json:"can_create_apps,omitempty"`
+	CanCreateServices bool                `yaml:"can_create_services,omitempty" json:"can_create_services,omitempty"`
 }
 
 // UserGitHub stores optional GitHub metadata for SSH key sync.

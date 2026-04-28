@@ -13,12 +13,15 @@ var PublicRoutes = []string{
 // AuthenticatedUserRoutes defines routes accessible to any authenticated user
 var AuthenticatedUserRoutes = []string{
 	"/",
+	"/logout",
 	"/api/metrics",
+	"/api/metrics/*",
 	"/api/server/info",
 	"/api/docker/stats",
 	"/api/apps/list",
 	"/api/audit/overview",
 	"/api/audit/events/*",
+	"/static/*",
 }
 
 // IsPublicRoute checks if a path is a public route

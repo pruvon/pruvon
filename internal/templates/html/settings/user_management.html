@@ -4,6 +4,7 @@ const userManagementComponent = () => ({
         users: [],
         availableApps: [],
         availableServices: {},
+        optionsLoading: false,
         selectedServiceType: '',
         showCreatePassword: false,
         showUpdatePassword: false,
@@ -24,6 +25,9 @@ const userManagementComponent = () => ({
         newRoute: '',
         newApp: '',
         newService: {},
+        showAppsDropdown: false,
+        showServiceTypeDropdown: false,
+        showServiceDropdown: false,
         userForm: {
             username: '',
             role: 'user',
@@ -63,6 +67,7 @@ const userManagementComponent = () => ({
                         id: `${type}:${service}`,
                         type,
                         service,
+                        label: `${service} - ${type}`,
                     });
                 });
             });
@@ -81,6 +86,39 @@ const userManagementComponent = () => ({
             if (this.showUserModal) {
                 this.closeUserModal();
             }
+        },
+
+        toggleAppsDropdown() {
+            this.showAppsDropdown = !this.showAppsDropdown;
+            this.showServiceTypeDropdown = false;
+            this.showServiceDropdown = false;
+        },
+
+        toggleServiceTypeDropdown() {
+            this.showServiceTypeDropdown = !this.showServiceTypeDropdown;
+            this.showAppsDropdown = false;
+            this.showServiceDropdown = false;
+        },
+
+        toggleServiceDropdown() {
+            this.showServiceDropdown = !this.showServiceDropdown;
+            this.showAppsDropdown = false;
+            this.showServiceTypeDropdown = false;
+        },
+
+        selectApp(app) {
+            this.newApp = app;
+            this.showAppsDropdown = false;
+        },
+
+        selectServiceType(type) {
+            this.selectedServiceType = type;
+            this.showServiceTypeDropdown = false;
+        },
+
+        selectService(service) {
+            this.newService[this.selectedServiceType] = service;
+            this.showServiceDropdown = false;
         },
 
         randomIndex(max) {
@@ -166,6 +204,8 @@ const userManagementComponent = () => ({
                     github: user.github || { username: '' },
                     disabled: !!user.disabled,
                     has_password: !!user.has_password,
+                    can_create_apps: !!user.can_create_apps,
+                    can_create_services: !!user.can_create_services,
                 })) : [];
             } catch (error) {
                 console.error('Error fetching users:', error);
@@ -174,6 +214,7 @@ const userManagementComponent = () => ({
         },
 
         async fetchOptions() {
+            this.optionsLoading = true;
             try {
                 const response = await fetch('/api/settings/user-options');
                 if (!response.ok) throw new Error('Failed to fetch user options');
@@ -183,6 +224,8 @@ const userManagementComponent = () => ({
             } catch (error) {
                 console.error('Error fetching user options:', error);
                 this.showErrorMessage(error.message || 'Failed to load user options.');
+            } finally {
+                this.optionsLoading = false;
             }
         },
 
@@ -200,12 +243,18 @@ const userManagementComponent = () => ({
                 github: { username: '' },
                 disabled: false,
                 has_password: false,
+                can_create_apps: false,
+                can_create_services: false,
             };
             this.newRoute = '';
             this.newApp = '';
             this.newService = {};
             this.selectedServiceType = '';
+            this.showAppsDropdown = false;
+            this.showServiceTypeDropdown = false;
+            this.showServiceDropdown = false;
             this.showUserModal = true;
+            this.ensureOptionsLoaded();
         },
 
         editUser(user) {
@@ -222,22 +271,40 @@ const userManagementComponent = () => ({
                 github: { username: user.github?.username || '' },
                 disabled: !!user.disabled,
                 has_password: !!user.has_password,
+                can_create_apps: !!user.can_create_apps,
+                can_create_services: !!user.can_create_services,
             };
             this.newRoute = '';
             this.newApp = '';
             this.newService = {};
             this.selectedServiceType = '';
+            this.showAppsDropdown = false;
+            this.showServiceTypeDropdown = false;
+            this.showServiceDropdown = false;
             this.showUserModal = true;
+            this.ensureOptionsLoaded();
+        },
+
+        ensureOptionsLoaded() {
+            if (this.availableApps.length === 0 && Object.keys(this.availableServices).length === 0) {
+                this.fetchOptions();
+            }
         },
 
         closeUserModal() {
             if (this.isSavingUser) return;
             this.showUserModal = false;
+            this.showAppsDropdown = false;
+            this.showServiceTypeDropdown = false;
+            this.showServiceDropdown = false;
             this.editingUser = null;
         },
 
         resetUserModal() {
             this.showUserModal = false;
+            this.showAppsDropdown = false;
+            this.showServiceTypeDropdown = false;
+            this.showServiceDropdown = false;
             this.editingUser = null;
             this.showCreatePassword = false;
             this.userFormError = '';
@@ -293,14 +360,16 @@ const userManagementComponent = () => ({
         },
 
         addService(type) {
-            if (!type || !this.newService[type]) return;
-            if (!this.userForm.services[type]) {
-                this.userForm.services[type] = [];
+            const trimmedType = (type || '').trim();
+            const trimmedService = (this.newService[trimmedType] || '').trim();
+            if (!trimmedType || !trimmedService) return;
+            if (!this.userForm.services[trimmedType]) {
+                this.userForm.services[trimmedType] = [];
             }
-            if (!this.userForm.services[type].includes(this.newService[type])) {
-                this.userForm.services[type].push(this.newService[type]);
+            if (!this.userForm.services[trimmedType].includes(trimmedService)) {
+                this.userForm.services[trimmedType].push(trimmedService);
             }
-            this.newService[type] = '';
+            this.newService[trimmedType] = '';
         },
 
         removeService(type, service) {
@@ -350,6 +419,8 @@ const userManagementComponent = () => ({
                     services: this.userForm.services,
                     github: this.userForm.github,
                     disabled: this.userForm.disabled,
+                    can_create_apps: this.userForm.can_create_apps,
+                    can_create_services: this.userForm.can_create_services,
                 };
 
                 const response = await fetch(this.editingUser ? `/api/settings/users/${this.editingUser.username}` : '/api/settings/users', {
@@ -525,9 +596,11 @@ if (window.Alpine) {
         </div>
     </div>
 
-    <div x-show="showUserModal" class="fixed inset-0 z-50 overflow-y-auto bg-[#1A2B3C]/30 backdrop-blur-sm" x-cloak>
-        <div class="flex min-h-full items-center justify-center p-4">
-            <div class="relative w-full max-w-4xl rounded-lg border border-border bg-card p-4 shadow-modal">
+    <div x-show="showUserModal" x-cloak class="fixed inset-0 z-50">
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm" @click.self="closeUserModal"></div>
+        <div class="fixed inset-0 overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div class="relative w-full max-w-4xl rounded-lg border border-border bg-card p-4 shadow-modal">
                 <div class="space-y-4">
                     <div class="flex items-center justify-between border-b border-border-subtle pb-2">
                         <h3 class="text-sm font-semibold text-text-primary" x-text="editingUser ? 'Edit User' : 'Add User'"></h3>
@@ -575,6 +648,16 @@ if (window.Alpine) {
                             <input type="checkbox" x-model="userForm.disabled" :disabled="isEditingLastEnabledAdmin()" class="rounded border-border text-brand-primary focus:ring-brand-primary disabled:cursor-not-allowed disabled:opacity-50">
                             <span>Disabled</span>
                         </label>
+                        <div class="md:col-span-2 flex flex-wrap gap-4">
+                            <label class="inline-flex items-center gap-2 text-sm text-text-primary">
+                                <input type="checkbox" x-model="userForm.can_create_apps" class="rounded border-border text-brand-primary focus:ring-brand-primary">
+                                <span>Can Create Apps</span>
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-sm text-text-primary">
+                                <input type="checkbox" x-model="userForm.can_create_services" class="rounded border-border text-brand-primary focus:ring-brand-primary">
+                                <span>Can Create Services</span>
+                            </label>
+                        </div>
                         <p x-show="isEditingLastEnabledAdmin()" x-cloak class="text-xs text-text-tertiary md:col-span-2">The last enabled admin cannot be disabled.</p>
                     </div>
 
@@ -582,10 +665,16 @@ if (window.Alpine) {
                         <div class="space-y-3">
                             <label class="text-xs font-medium text-text-secondary">Routes</label>
                             <div class="flex flex-wrap gap-2">
+                                <template x-if="userForm.routes.length === 0">
+                                    <span class="text-xs text-text-tertiary italic">No routes assigned.</span>
+                                </template>
                                 <template x-for="route in userForm.routes" :key="route">
-                                    <span class="inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-text-primary">
+                                    <span class="inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-text-primary transition-colors duration-100 hover:border-status-danger/30 hover:bg-status-danger-bg">
+                                        <svg class="h-3 w-3 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
                                         <span x-text="route"></span>
-                                        <button type="button" @click="removeRoute(route)" class="text-text-tertiary transition-colors duration-100 hover:text-status-danger">x</button>
+                                        <button type="button" @click="removeRoute(route)" class="text-text-tertiary transition-colors duration-100 hover:text-status-danger" title="Remove route">
+                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                        </button>
                                     </span>
                                 </template>
                             </div>
@@ -598,20 +687,41 @@ if (window.Alpine) {
                         <div class="space-y-3">
                             <label class="text-xs font-medium text-text-secondary">Apps</label>
                             <div class="flex flex-wrap gap-2">
+                                <template x-if="userForm.apps.length === 0">
+                                    <span class="text-xs text-text-tertiary italic">No apps assigned.</span>
+                                </template>
                                 <template x-for="app in userForm.apps" :key="app">
-                                    <span class="inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-text-primary">
+                                    <span class="inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-text-primary transition-colors duration-100 hover:border-status-danger/30 hover:bg-status-danger-bg">
+                                        <svg class="h-3 w-3 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
                                         <span x-text="app"></span>
-                                        <button type="button" @click="removeApp(app)" class="text-text-tertiary transition-colors duration-100 hover:text-status-danger">x</button>
+                                        <button type="button" @click="removeApp(app)" class="text-text-tertiary transition-colors duration-100 hover:text-status-danger" title="Remove app">
+                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                        </button>
                                     </span>
                                 </template>
                             </div>
                             <div class="flex">
-                                <select x-model="newApp" class="h-8 flex-1 rounded-l border border-border bg-card px-3 text-sm text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
-                                    <option value="">Select an app</option>
-                                    <template x-for="app in availableApps" :key="app">
-                                        <option :value="app" x-text="app"></option>
-                                    </template>
-                                </select>
+                                <div class="relative flex-1">
+                                    <button type="button" @click="toggleAppsDropdown" class="inline-flex items-center justify-between h-8 px-3 w-full rounded-l border border-border bg-card text-sm text-text-primary hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-brand-primary transition-colors duration-150">
+                                        <span x-text="newApp || 'Select an app'" :class="!newApp ? 'text-text-tertiary' : 'text-text-primary'"></span>
+                                        <svg x-show="!optionsLoading" class="h-3.5 w-3.5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7"/></svg>
+                                        <svg x-show="optionsLoading" class="h-3.5 w-3.5 animate-spin text-text-tertiary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </button>
+                                    <div x-show="showAppsDropdown" @click.outside="showAppsDropdown = false" x-cloak class="absolute z-50 mt-1 w-full rounded-md border border-border bg-card shadow-dropdown overflow-hidden max-h-48 overflow-y-auto">
+                                        <template x-if="optionsLoading">
+                                            <div class="px-3 py-2 text-xs text-text-tertiary">Loading...</div>
+                                        </template>
+                                        <template x-if="!optionsLoading && availableApps.length === 0">
+                                            <div class="px-3 py-2 text-xs text-text-tertiary">No apps available</div>
+                                        </template>
+                                        <template x-for="app in availableApps" :key="app">
+                                            <div @click="selectApp(app)" class="px-3 py-2 text-sm text-text-primary hover:bg-surface cursor-pointer transition-colors duration-100" :class="app === newApp ? 'bg-brand-subtle text-brand-primary font-medium' : ''" x-text="app"></div>
+                                        </template>
+                                    </div>
+                                </div>
                                 <button @click="addApp" type="button" class="inline-flex h-8 items-center rounded-r border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">Add</button>
                             </div>
                         </div>
@@ -619,33 +729,66 @@ if (window.Alpine) {
                         <div class="space-y-3">
                             <label class="text-xs font-medium text-text-secondary">Services</label>
                             <div class="flex flex-wrap gap-2">
+                                <template x-if="selectedServiceEntries().length === 0">
+                                    <span class="text-xs text-text-tertiary italic">No services assigned.</span>
+                                </template>
                                 <template x-for="entry in selectedServiceEntries()" :key="entry.id">
-                                    <span class="inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-text-primary">
-                                        <span class="font-medium" x-text="entry.type"></span>
-                                        <span class="text-text-tertiary">/</span>
-                                        <span x-text="entry.service"></span>
-                                        <button type="button" @click="removeService(entry.type, entry.service)" class="text-text-tertiary transition-colors duration-100 hover:text-status-danger">x</button>
+                                    <span class="inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-text-primary transition-colors duration-100 hover:border-status-danger/30 hover:bg-status-danger-bg">
+                                        <span x-text="entry.label"></span>
+                                        <button type="button" @click="removeService(entry.type, entry.service)" class="text-text-tertiary transition-colors duration-100 hover:text-status-danger" title="Remove service">
+                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                        </button>
                                     </span>
                                 </template>
                             </div>
                             <div class="flex gap-2">
-                                <select x-model="selectedServiceType" class="h-8 flex-1 rounded border border-border bg-card px-3 text-sm text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary">
-                                    <option value="">Select service type</option>
-                                    <template x-for="type in Object.keys(availableServices)" :key="type">
-                                        <option :value="type" x-text="type"></option>
-                                    </template>
-                                </select>
+                                <div class="relative flex-1">
+                                    <button type="button" @click="toggleServiceTypeDropdown" class="inline-flex items-center justify-between h-8 px-3 w-full rounded border border-border bg-card text-sm text-text-primary hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-brand-primary transition-colors duration-150">
+                                        <span x-text="selectedServiceType || 'Select installed service type'" :class="!selectedServiceType ? 'text-text-tertiary' : 'text-text-primary'"></span>
+                                        <svg x-show="!optionsLoading" class="h-3.5 w-3.5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7"/></svg>
+                                        <svg x-show="optionsLoading" class="h-3.5 w-3.5 animate-spin text-text-tertiary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </button>
+                                    <div x-show="showServiceTypeDropdown" @click.outside="showServiceTypeDropdown = false" x-cloak class="absolute z-50 mt-1 w-full rounded-md border border-border bg-card shadow-dropdown overflow-hidden max-h-48 overflow-y-auto">
+                                        <template x-if="optionsLoading">
+                                            <div class="px-3 py-2 text-xs text-text-tertiary">Loading...</div>
+                                        </template>
+                                        <template x-if="!optionsLoading && Object.keys(availableServices).length === 0">
+                                            <div class="px-3 py-2 text-xs text-text-tertiary">No service types available</div>
+                                        </template>
+                                        <template x-for="type in Object.keys(availableServices).sort()" :key="type">
+                                            <div @click="selectServiceType(type)" class="px-3 py-2 text-sm text-text-primary hover:bg-surface cursor-pointer transition-colors duration-100" :class="type === selectedServiceType ? 'bg-brand-subtle text-brand-primary font-medium' : ''" x-text="type"></div>
+                                        </template>
+                                    </div>
+                                </div>
                             </div>
                             <div x-show="selectedServiceType" class="flex gap-2">
-                                <select :disabled="!selectedServiceType" x-model="newService[selectedServiceType]" class="h-8 flex-1 rounded border border-border bg-card px-3 text-sm text-text-primary focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary disabled:cursor-not-allowed disabled:opacity-50">
-                                    <option value="">Select a service</option>
-                                    <template x-for="service in availableServices[selectedServiceType] || []" :key="service">
-                                        <option :value="service" x-text="service"></option>
-                                    </template>
-                                </select>
+                                <div class="relative flex-1">
+                                    <button type="button" @click="toggleServiceDropdown" :disabled="!selectedServiceType" class="inline-flex items-center justify-between h-8 px-3 w-full rounded border border-border bg-card text-sm text-text-primary hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-brand-primary disabled:cursor-not-allowed disabled:opacity-50 transition-colors duration-150">
+                                        <span x-text="(newService[selectedServiceType] && newService[selectedServiceType].length > 0) ? newService[selectedServiceType] : 'Select a service'" :class="!newService[selectedServiceType] ? 'text-text-tertiary' : 'text-text-primary'"></span>
+                                        <svg x-show="!optionsLoading" class="h-3.5 w-3.5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7"/></svg>
+                                        <svg x-show="optionsLoading" class="h-3.5 w-3.5 animate-spin text-text-tertiary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </button>
+                                    <div x-show="showServiceDropdown" @click.outside="showServiceDropdown = false" x-cloak class="absolute z-50 mt-1 w-full rounded-md border border-border bg-card shadow-dropdown overflow-hidden max-h-48 overflow-y-auto">
+                                        <template x-if="optionsLoading">
+                                            <div class="px-3 py-2 text-xs text-text-tertiary">Loading...</div>
+                                        </template>
+                                        <template x-if="!optionsLoading && (!selectedServiceType || !availableServices[selectedServiceType] || availableServices[selectedServiceType].length === 0)">
+                                            <div class="px-3 py-2 text-xs text-text-tertiary">No services available</div>
+                                        </template>
+                                        <template x-for="service in (selectedServiceType && availableServices[selectedServiceType] ? availableServices[selectedServiceType] : [])" :key="service">
+                                            <div @click="selectService(service)" class="px-3 py-2 text-sm text-text-primary hover:bg-surface cursor-pointer transition-colors duration-100" :class="service === newService[selectedServiceType] ? 'bg-brand-subtle text-brand-primary font-medium' : ''" x-text="service"></div>
+                                        </template>
+                                    </div>
+                                </div>
                                 <button @click="addService(selectedServiceType)" type="button" class="inline-flex h-8 items-center rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">Add</button>
                             </div>
-                            <p class="text-xs text-text-tertiary">Assign services by type. Selections follow the same scoped-access model as routes and apps.</p>
+                            <p class="text-xs text-text-tertiary">Assign installed service instances. Only services with running plugins appear in the list.</p>
                         </div>
                     </div>
 
@@ -662,10 +805,13 @@ if (window.Alpine) {
                 </div>
             </div>
         </div>
+        </div>
     </div>
 
-    <div x-show="showPasswordModal" class="fixed inset-0 z-50 overflow-y-auto bg-[#1A2B3C]/30 backdrop-blur-sm" x-cloak>
-        <div class="flex min-h-full items-center justify-center p-4">
+    <div x-show="showPasswordModal" x-cloak class="fixed inset-0 z-50">
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm" @click.self="closePasswordModal"></div>
+        <div class="fixed inset-0 overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4">
             <div class="relative w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-modal">
                 <div class="space-y-4">
                     <div class="flex items-center justify-between border-b border-border-subtle pb-2">
@@ -706,10 +852,13 @@ if (window.Alpine) {
                 </div>
             </div>
         </div>
+        </div>
     </div>
 
-    <div x-show="showDeleteModal" class="fixed inset-0 z-50 overflow-y-auto bg-[#1A2B3C]/30 backdrop-blur-sm" x-cloak>
-        <div class="flex min-h-full items-center justify-center p-4">
+    <div x-show="showDeleteModal" x-cloak class="fixed inset-0 z-50">
+        <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm" @click.self="closeDeleteModal"></div>
+        <div class="fixed inset-0 overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4">
             <div class="relative w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-modal">
                 <div class="space-y-4">
                     <div class="flex items-center justify-between border-b border-border-subtle pb-2">
@@ -735,6 +884,7 @@ if (window.Alpine) {
                     </div>
                 </div>
             </div>
+        </div>
         </div>
     </div>
 </div>

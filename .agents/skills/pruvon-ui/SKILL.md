@@ -326,72 +326,102 @@ Technical / mono input for env vars, tokens, and URLs:
 
 Dropdown background must be `bg-card`, never default white or system gray.
 
+**Never use `<template x-for>` inside `<select>` elements.** Browser form-filling extensions (LastPass, etc.) can break parsing, causing options to not render. Use a custom dropdown with a button trigger and `x-for` in a `div` container instead.
+
 ```html
-<button class="inline-flex items-center justify-between h-8 px-3 w-full
-  bg-card border border-border rounded
-  text-sm text-text-primary
-  hover:border-border-strong
-  focus:outline-none focus:ring-1 focus:ring-brand-primary
-  transition-colors duration-150">
-  <span>Option</span>
-  <ChevronDownIcon size={13} class="text-text-tertiary" />
-</button>
+<div class="relative">
+  <!-- Trigger button -->
+  <button type="button" @click="dropdownOpen = !dropdownOpen"
+    class="inline-flex items-center justify-between h-8 px-3 w-full
+      bg-card border border-border rounded
+      text-sm text-text-primary
+      hover:border-border-strong
+      focus:outline-none focus:ring-1 focus:ring-brand-primary
+      transition-colors duration-150">
+    <span x-text="selectedValue || 'Select an option'"
+          :class="!selectedValue ? 'text-text-tertiary' : 'text-text-primary'"></span>
+    <ChevronDownIcon size={13} class="text-text-tertiary" />
+  </button>
 
-<div class="absolute z-50 mt-1 w-full
-  bg-card border border-border rounded-md shadow-dropdown
-  overflow-hidden max-h-64 overflow-y-auto">
+  <!-- Dropdown menu -->
+  <div x-show="dropdownOpen" @click.outside="dropdownOpen = false" x-cloak
+       class="absolute z-50 mt-1 w-full
+         bg-card border border-border rounded-md shadow-dropdown
+         overflow-hidden max-h-48 overflow-y-auto">
 
-  <div class="px-3 py-2 text-sm text-text-primary
-    hover:bg-surface cursor-pointer transition-colors duration-100">
-    Option
+    <template x-if="options.length === 0">
+      <div class="px-3 py-2 text-xs text-text-tertiary">No options available</div>
+    </template>
+
+    <template x-for="option in options" :key="option">
+      <div @click="selectOption(option)"
+           class="px-3 py-2 text-sm text-text-primary
+             hover:bg-surface cursor-pointer transition-colors duration-100"
+           :class="option === selectedValue ? 'bg-brand-subtle text-brand-primary font-medium' : ''"
+           x-text="option"></div>
+    </template>
+
   </div>
-
-  <div class="px-3 py-2 text-sm text-brand-primary font-medium
-    bg-brand-subtle cursor-pointer">
-    Selected Option
-  </div>
-
-  <div class="px-3 py-2 text-sm text-text-tertiary cursor-not-allowed">
-    Disabled
-  </div>
-
 </div>
 ```
+
+Rules:
+- Use `@click.outside` to close the dropdown when clicking outside.
+- Use `x-cloak` on the dropdown menu to prevent flash of unstyled content.
+- Selected item must use `bg-brand-subtle text-brand-primary font-medium`.
+- Empty state must use `text-xs text-text-tertiary`.
+- Max height `max-h-48` with `overflow-y-auto` for scrollable lists.
 
 ### 7.4 Modal
 
 Backdrop must be `bg-[#1A2B3C]/30 backdrop-blur-sm`.
 
+**Never combine `backdrop-filter` with `overflow-y-auto` on the same element.** Browsers fail to render backdrop blur correctly when the element is scrollable, resulting in unblurred white areas at the top or edges. Always separate the backdrop layer from the scrollable content container.
+
+Modals must use `x-show` (not `x-if`) combined with `x-cloak` so that Alpine.js initializes all nested directives (especially `x-for` in dropdowns) at page load. This ensures reactive data bindings are wired before any async fetch completes.
+
 ```html
-<div class="fixed inset-0 z-40 bg-[#1A2B3C]/30 backdrop-blur-sm" />
+<div x-show="showModal" x-cloak class="fixed inset-0 z-50">
+  <!-- Backdrop layer: fixed, no overflow, handles blur -->
+  <div class="fixed inset-0 bg-[#1A2B3C]/30 backdrop-blur-sm"
+       @click.self="closeModal"></div>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-  <div class="w-full max-w-md bg-card rounded-lg shadow-modal border border-border">
+  <!-- Scrollable content layer: separate from backdrop -->
+  <div class="fixed inset-0 overflow-y-auto">
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="w-full max-w-md bg-card rounded-lg shadow-modal border border-border">
 
-    <div class="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
-      <h2 class="text-sm font-semibold text-text-primary">Modal Title</h2>
-      <button class="w-7 h-7 inline-flex items-center justify-center
-        rounded text-text-tertiary hover:text-text-primary hover:bg-surface
-        transition-colors duration-100">
-        <XIcon size={14} />
-      </button>
+        <div class="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
+          <h2 class="text-sm font-semibold text-text-primary">Modal Title</h2>
+          <button @click="closeModal" class="w-7 h-7 inline-flex items-center justify-center
+            rounded text-text-tertiary hover:text-text-primary hover:bg-surface
+            transition-colors duration-100">
+            <XIcon size={14} />
+          </button>
+        </div>
+
+        <div class="px-5 py-4 text-sm text-text-primary">
+          Modal body.
+        </div>
+
+        <div class="flex items-center justify-end gap-2 px-5 py-4
+          border-t border-border-subtle">
+          <button class="...secondary button...">Cancel</button>
+          <button class="...primary button...">Confirm</button>
+        </div>
+
+      </div>
     </div>
-
-    <div class="px-5 py-4 text-sm text-text-primary">
-      Modal body.
-    </div>
-
-    <div class="flex items-center justify-end gap-2 px-5 py-4
-      border-t border-border-subtle">
-      <button class="...secondary button...">Cancel</button>
-      <button class="...primary button...">Confirm</button>
-    </div>
-
   </div>
 </div>
 ```
 
-Allowed modal widths: `max-w-sm`, `max-w-md`, `max-w-lg`, `max-w-2xl`.
+Rules:
+- **Always use `x-show` + `x-cloak`, never `x-if`, for modal overlays.**
+- **Always separate the backdrop (`fixed inset-0` with `backdrop-blur-sm`) from the scrollable container (`fixed inset-0 overflow-y-auto`).**
+- **Never put `overflow-y-auto` and `backdrop-blur-sm` on the same element.**
+- Use `@click.self` on the backdrop to close when clicking outside the modal card.
+- Allowed widths: `max-w-sm`, `max-w-md`, `max-w-lg`, `max-w-2xl`.
 
 ### 7.5 Badge / Status Label
 
@@ -683,6 +713,60 @@ Any action triggered by a user click that results in an async API call must show
   <span x-text="isProcessing ? 'Processing...' : 'Save'"></span>
 </button>
 ```
+
+## 10.2 Alpine.js Gotchas
+
+The following patterns are known to cause issues in Alpine.js. Never use them.
+
+**Rule 1: Never make `@click` handlers `async`.**
+
+Alpine's event handling system does not properly handle promises returned from event handlers. An `async` `@click` handler will silently fail (the handler runs but the reactive context is lost and DOM mutations may not be applied). All `@click`, `@change`, `@submit`, and other event handler methods **must** be synchronous.
+
+If a handler needs to perform async work (e.g., `fetch`), keep the handler synchronous and use the fire-and-forget pattern — call the async method without `await`. The parent handler finishes immediately, and the async method writes to reactive state when it completes.
+
+```javascript
+// CORRECT: synchronous handler
+saveUser() {
+    this.isSavingUser = true;
+    this.doAsyncSave();  // fire-and-forget, no await
+},
+
+async doAsyncSave() {
+    try {
+        const response = await fetch('/api/...', { method: 'PUT', ... });
+        // ... reactive state updates still work
+    } finally {
+        this.isSavingUser = false;
+    }
+}
+
+// WRONG: async handler — will silently fail
+async saveUser() {
+    this.isSavingUser = true;
+    const response = await fetch('/api/...', { method: 'PUT', ... });
+    this.isSavingUser = false;  // This may never execute
+}
+```
+
+**Rule 2: Avoid `<template x-for>` inside `<select>` elements.**
+
+Browser form-filling extensions (e.g., LastPass) and some browser rendering engines do not reliably parse `<template>` tags when they appear inside `<select>`. This causes the generated `<option>` elements to not render until the browser performs a forced reflow (e.g., opening DevTools).
+
+Instead, use `x-html` with a template literal to populate `<option>` elements. `x-html` replaces the select's `innerHTML`, which forces a full DOM re-parse and ensures options are always rendered:
+
+```html
+<select x-model="selectedValue" x-html="`<option value=''>Select...</option>${items.map(item => `<option value='${item}'>${item}</option>`).join('')}`"></select>
+```
+
+For selects with conditional data (e.g., service names depend on selected type), use a ternary expression:
+
+```html
+<select x-model="selectedService"
+  x-html="`<option value=''>Select...</option>${(condition ? list : []).map(item => `<option value='${item}'>${item}</option>`).join('')}`">
+</select>
+```
+
+Add an HTML comment above the `<select>` explaining the workaround so future maintainers understand why `x-for` is not used.
 
 ## 11. Screen-Specific Decisions
 

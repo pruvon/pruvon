@@ -48,6 +48,22 @@ func TestScopedUserAuthChecker_CheckAccess(t *testing.T) {
 				Role:     config.RoleUser,
 				Routes:   []string{"/apps/foo/logs"},
 			},
+			{
+				Username:          "boolcreateuser",
+				Role:              config.RoleUser,
+				CanCreateApps:     true,
+				CanCreateServices: true,
+			},
+			{
+				Username: "legacyrouteapp",
+				Role:     config.RoleUser,
+				Routes:   []string{"/apps/create"},
+			},
+			{
+				Username: "legacyroutesvc",
+				Role:     config.RoleUser,
+				Routes:   []string{"/services/create"},
+			},
 		},
 	}
 
@@ -91,6 +107,15 @@ func TestScopedUserAuthChecker_CheckAccess(t *testing.T) {
 		{"Nested custom route does not grant parent app detail", User{Username: "nestedrouteuser", Role: config.RoleUser}, "/apps/foo", false},
 		{"Nested custom route exact path still allowed", User{Username: "nestedrouteuser", Role: config.RoleUser}, "/apps/foo/logs", true},
 		{"Non-existent user", User{Username: "nonexistent", Role: config.RoleUser}, "/apps", false},
+		{"Bool flag allows app creation", User{Username: "boolcreateuser", Role: config.RoleUser}, "/apps/create", true},
+		{"Bool flag allows WS app creation", User{Username: "boolcreateuser", Role: config.RoleUser}, "/ws/apps/create", true},
+		{"Bool flag allows service creation", User{Username: "boolcreateuser", Role: config.RoleUser}, "/services/create", true},
+		{"Bool flag allows API service creation", User{Username: "boolcreateuser", Role: config.RoleUser}, "/api/services/create", true},
+		{"Bool flag denies unrelated path", User{Username: "boolcreateuser", Role: config.RoleUser}, "/apps", false},
+		{"Legacy route allows app creation", User{Username: "legacyrouteapp", Role: config.RoleUser}, "/apps/create", true},
+		{"Legacy route allows WS app creation", User{Username: "legacyrouteapp", Role: config.RoleUser}, "/ws/apps/create", true},
+		{"Legacy route allows service creation", User{Username: "legacyroutesvc", Role: config.RoleUser}, "/services/create", true},
+		{"Legacy route allows API service creation", User{Username: "legacyroutesvc", Role: config.RoleUser}, "/api/services/create", true},
 	}
 
 	for _, tt := range tests {

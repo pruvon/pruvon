@@ -179,6 +179,8 @@ func getFuncMap() template.FuncMap {
 		"hasRouteAccess":         hasRouteAccess,
 		"hasAppAccess":           hasAppAccess,
 		"hasServiceAccess":       hasServiceAccess,
+		"canCreateApps":          canCreateApps,
+		"canCreateServices":      canCreateServices,
 		"getUserAllowedApps":     getUserAllowedApps,
 		"getUserAllowedServices": getUserAllowedServices,
 		"formatDate":             formatDate,
@@ -333,6 +335,46 @@ func hasServiceAccess(username interface{}, specificType string, specificName st
 		return false
 	}
 
+	return false
+}
+
+// canCreateApps checks if a scoped user has permission to create apps.
+func canCreateApps(username interface{}, authType interface{}) bool {
+	if authType == "admin" {
+		return true
+	}
+	user := lookupScopedUser(username)
+	if user == nil {
+		return false
+	}
+	if user.CanCreateApps {
+		return true
+	}
+	for _, r := range user.Routes {
+		if r == "*" || r == "/*" || r == "/apps/create" || r == "/apps/*" {
+			return true
+		}
+	}
+	return false
+}
+
+// canCreateServices checks if a scoped user has permission to create services.
+func canCreateServices(username interface{}, authType interface{}) bool {
+	if authType == "admin" {
+		return true
+	}
+	user := lookupScopedUser(username)
+	if user == nil {
+		return false
+	}
+	if user.CanCreateServices {
+		return true
+	}
+	for _, r := range user.Routes {
+		if r == "*" || r == "/*" || r == "/services/create" || r == "/services/*" {
+			return true
+		}
+	}
 	return false
 }
 

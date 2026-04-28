@@ -43,7 +43,9 @@ type userPayload struct {
 	GitHub   struct {
 		Username string `json:"username"`
 	} `json:"github"`
-	Disabled bool `json:"disabled"`
+	Disabled          bool `json:"disabled"`
+	CanCreateApps     bool `json:"can_create_apps"`
+	CanCreateServices bool `json:"can_create_services"`
 }
 
 func handleGetUsers(c *fiber.Ctx) error {
@@ -72,14 +74,16 @@ func handleGetUsers(c *fiber.Ctx) error {
 			githubUsername = user.GitHub.Username
 		}
 		responseUsers = append(responseUsers, fiber.Map{
-			"username":     user.Username,
-			"role":         user.Role,
-			"routes":       sliceOrEmpty(user.Routes),
-			"apps":         sliceOrEmpty(user.Apps),
-			"services":     servicesOrEmpty(user.Services),
-			"github":       fiber.Map{"username": githubUsername},
-			"disabled":     user.Disabled,
-			"has_password": user.Password != "",
+			"username":            user.Username,
+			"role":                user.Role,
+			"routes":              sliceOrEmpty(user.Routes),
+			"apps":                sliceOrEmpty(user.Apps),
+			"services":            servicesOrEmpty(user.Services),
+			"github":              fiber.Map{"username": githubUsername},
+			"disabled":            user.Disabled,
+			"has_password":        user.Password != "",
+			"can_create_apps":     user.CanCreateApps,
+			"can_create_services": user.CanCreateServices,
 		})
 	}
 
@@ -207,6 +211,14 @@ func handleUpdateUser(c *fiber.Ctx) error {
 	if user.Disabled != updatedUser.Disabled {
 		changes["old_disabled"] = user.Disabled
 		changes["new_disabled"] = updatedUser.Disabled
+	}
+	if user.CanCreateApps != updatedUser.CanCreateApps {
+		changes["old_can_create_apps"] = user.CanCreateApps
+		changes["new_can_create_apps"] = updatedUser.CanCreateApps
+	}
+	if user.CanCreateServices != updatedUser.CanCreateServices {
+		changes["old_can_create_services"] = user.CanCreateServices
+		changes["new_can_create_services"] = updatedUser.CanCreateServices
 	}
 
 	params, _ := json.Marshal(changes)
@@ -363,53 +375,50 @@ func handleGetUserOptions(c *fiber.Ctx) error {
 	}
 	sort.Strings(apps)
 
+	// Use fast filesystem-based methods to get installed services and their instances
 	services := make(map[string][]string)
 	configServices := make(map[string]map[string]bool)
-	serviceTypes := dokku.GetServicePluginList()
-	for _, svcType := range serviceTypes {
-		services[svcType] = []string{}
-		configServices[svcType] = make(map[string]bool)
-	}
 
-	svcSets := make(map[string]map[string]bool)
-	for _, svcType := range serviceTypes {
-		svcSets[svcType] = make(map[string]bool)
-		svcList, _ := dokku.GetServiceNamesOnly(dokku.DefaultCommandRunner, svcType)
-		for _, svc := range svcList {
-			svcSets[svcType][svc] = true
+	// Get installed service plugins from filesystem (fast)
+	installedServicePlugins, err := dokku.GetInstalledServicePluginsByFilesystem()
+	if err != nil {
+		internallog.LogWarning(fmt.Sprintf("Error getting installed service plugins from filesystem: %v", err))
+		// Fallback to dokku plugin:list
+		installedServicePlugins, err = dokku.GetAvailableServicePluginList(commandRunner)
+		if err != nil {
+			internallog.LogWarning(fmt.Sprintf("Error getting available service plugins: %v", err))
+			installedServicePlugins = []string{}
 		}
 	}
 
+	// For each installed plugin, get service instances from filesystem (fast)
+	for _, svcType := range installedServicePlugins {
+		svcNames, err := dokku.GetServiceNamesByFilesystem(svcType)
+		if err != nil {
+			internallog.LogWarning(fmt.Sprintf("Error getting service names for %s from filesystem: %v", svcType, err))
+			// Fallback to dokku command
+			svcNames, _ = dokku.GetServiceNamesOnly(dokku.DefaultCommandRunner, svcType)
+		}
+		services[svcType] = svcNames
+		configServices[svcType] = make(map[string]bool)
+	}
+
+	// Also include services referenced in user config (may have been deleted)
 	for _, user := range cfg.Users {
 		for svcType, svcs := range user.Services {
 			for _, svc := range svcs {
 				if svc != "*" {
-					if _, exists := svcSets[svcType]; !exists {
-						svcSets[svcType] = make(map[string]bool)
+					if _, exists := services[svcType]; !exists {
+						services[svcType] = []string{}
 					}
 					if _, exists := configServices[svcType]; !exists {
 						configServices[svcType] = make(map[string]bool)
 					}
-					svcSets[svcType][svc] = true
+					// Add to configServices tracking but don't duplicate in services list
 					configServices[svcType][svc] = true
 				}
 			}
 		}
-	}
-
-	for svcType, svcSet := range svcSets {
-		svcList := make([]string, 0, len(svcSet))
-		for svc := range svcSet {
-			svcList = append(svcList, svc)
-		}
-		sort.Strings(svcList)
-		services[svcType] = svcList
-	}
-
-	installedServicePlugins, err := dokku.GetAvailableServicePluginList(commandRunner)
-	if err != nil {
-		internallog.LogWarning(fmt.Sprintf("Error getting available service plugins: %v", err))
-		installedServicePlugins = serviceTypes
 	}
 
 	return c.JSON(fiber.Map{
@@ -436,12 +445,14 @@ func buildUserFromPayload(req userPayload, requirePassword bool) (*config.User, 
 	}
 
 	user := &config.User{
-		Username: username,
-		Role:     role,
-		Routes:   dedupeStrings(req.Routes),
-		Apps:     dedupeStrings(req.Apps),
-		Services: normalizeServiceSelections(req.Services),
-		Disabled: req.Disabled,
+		Username:          username,
+		Role:              role,
+		Routes:            dedupeStrings(req.Routes),
+		Apps:              dedupeStrings(req.Apps),
+		Services:          normalizeServiceSelections(req.Services),
+		Disabled:          req.Disabled,
+		CanCreateApps:     req.CanCreateApps,
+		CanCreateServices: req.CanCreateServices,
 	}
 	githubUsername := strings.TrimSpace(req.GitHub.Username)
 	if githubUsername != "" {

@@ -230,7 +230,9 @@
         this.fetchResourceMetrics();
         this.fetchCountMetrics();
         this.fetchServerInfo();
-        this.fetchAuditOverview();
+        if ($el.dataset.authType === 'admin') {
+            this.fetchAuditOverview();
+        }
 
         this.intervalId = setInterval(() => {
             this.fetchResourceMetrics();
@@ -238,7 +240,7 @@
             this.fetchServerInfo();
         }, 10000);
     }
-}" x-init="$nextTick(() => init())" @destroy.window="destroy()">
+}" x-init="$nextTick(() => init())" data-auth-type="{{.AuthType}}" @destroy.window="destroy()">
     <div x-show="showFlash"
          x-cloak
          x-transition:enter="transition ease-out duration-300"
@@ -284,6 +286,7 @@
             </div>
         </div>
         <div class="flex items-center gap-2">
+            {{if or (eq .AuthType "admin") (canCreateServices .Username .AuthType)}}
             <a href="/services/create" class="inline-flex h-8 items-center gap-1.5 rounded bg-transparent px-3 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-surface">
                 <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
@@ -291,12 +294,15 @@
                 </svg>
                 New Service
             </a>
+            {{end}}
+            {{if or (eq .AuthType "admin") (canCreateApps .Username .AuthType)}}
             <a href="/apps/create" class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
                 <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                 </svg>
                 New App
             </a>
+            {{end}}
         </div>
     </div>
 
@@ -322,7 +328,7 @@
                         <p class="mt-1.5 text-xl font-semibold text-text-primary" x-text="countMetrics?.app_count || 0"></p>
                     </template>
                 </div>
-                <a href="/apps" class="text-xs text-text-tertiary transition-colors duration-150 hover:text-brand-primary">View all</a>
+                {{if or (eq .AuthType "admin") (hasAppAccess .Username "" .AuthType)}}<a href="/apps" class="text-xs text-text-tertiary transition-colors duration-150 hover:text-brand-primary">View all</a>{{end}}
             </div>
         </div>
 
@@ -337,7 +343,7 @@
                         <p class="mt-1.5 text-xl font-semibold text-text-primary" x-text="countMetrics?.service_count || 0"></p>
                     </template>
                 </div>
-                <a href="/services" class="text-xs text-text-tertiary transition-colors duration-150 hover:text-brand-primary">View all</a>
+                {{if or (eq .AuthType "admin") (hasServiceAccess .Username "" "" .AuthType)}}<a href="/services" class="text-xs text-text-tertiary transition-colors duration-150 hover:text-brand-primary">View all</a>{{end}}
             </div>
         </div>
 
@@ -352,7 +358,7 @@
                         <p class="mt-1.5 text-xl font-semibold text-text-primary" x-text="countMetrics?.container_count || 0"></p>
                     </template>
                 </div>
-                <a href="/docker" class="text-xs text-text-tertiary transition-colors duration-150 hover:text-brand-primary">View all</a>
+                {{if or (eq .AuthType "admin") (hasRouteAccess .Username "/docker" .AuthType)}}<a href="/docker" class="text-xs text-text-tertiary transition-colors duration-150 hover:text-brand-primary">View all</a>{{end}}
             </div>
         </div>
     </div>
@@ -456,6 +462,7 @@
         </div>
     </div>
 
+    {{if eq .AuthType "admin"}}
     <div class="rounded-md border border-border bg-card">
         <div class="border-b border-border-subtle px-4 py-3">
             <h2 class="text-sm font-medium text-text-primary">Audit Activity</h2>
@@ -556,8 +563,10 @@
             </div>
         </template>
     </div>
+    {{end}}
     </div>
 
+    {{if eq .AuthType "admin"}}
     <div x-show="showAuditEventModal"
          x-cloak
          @keydown.escape.window="showAuditEventModal = false"
@@ -621,5 +630,6 @@
             </div>
         </div>
     </div>
+    {{end}}
 </div>
 {{end}}

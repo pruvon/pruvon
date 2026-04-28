@@ -212,12 +212,14 @@
             </div>
         </div>
 
+        {{if or (eq .AuthType "admin") (canCreateApps .Username .AuthType)}}
         <a href="/apps/create" class="inline-flex h-8 items-center gap-1.5 rounded border border-brand-primary bg-brand-primary px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-hover">
             <svg class="h-[14px] w-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
             <span>New App</span>
         </a>
+        {{end}}
     </div>
 
     <div class="overflow-hidden rounded-md border border-border bg-card">

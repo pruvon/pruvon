@@ -103,6 +103,10 @@
 - Only load xterm or ApexCharts when the page data uses `LoadXTerm` or `LoadApexCharts`.
 - For any UI, layout, Tailwind, or visual styling change, read `.agents/skills/pruvon-ui/SKILL.md` first and follow it as the source of truth.
 - When adding user-triggered async actions (save, delete, confirm) in templates, always follow the loading state pattern defined in the UI skill: show a processing spinner, change the button label to "Processing...", disable all modal buttons, and reset the flag in a `finally` block.
+- **Never make Alpine event handlers `async`.** `@click` handlers with the `async` keyword silently fail — the handler runs but reactive DOM mutations may not apply. Keep handlers synchronous and use fire-and-forget for async work. See `.agents/skills/pruvon-ui/SKILL.md` § 10.2 for details.
+- **Avoid `<template x-for>` inside `<select>` elements.** Browser form-filling extensions (LastPass, etc.) can break parsing, causing options to not render. Use a custom dropdown with a `<button>` trigger and `x-for` in a `<div>` container instead. See `.agents/skills/pruvon-ui/SKILL.md` § 7.3 for the pattern.
+- **Use `x-show` + `x-cloak` for modal overlays, never `x-if`.** This ensures Alpine.js initializes all nested directives (especially `x-for` in dropdowns) at page load, before any async fetch completes. See `.agents/skills/pruvon-ui/SKILL.md` § 7.4.
+- **Never combine `backdrop-blur-*` with `overflow-y-auto` on the same element.** Browsers fail to render backdrop blur correctly on scrollable containers, leaving unblurred white areas. Always use a separate fixed backdrop div for blur and a separate fixed div for scrollable content. See `.agents/skills/pruvon-ui/SKILL.md` § 7.4.
 
 ## Testing Expectations
 

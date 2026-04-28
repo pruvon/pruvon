@@ -190,21 +190,50 @@ func renderForbiddenPage(c *fiber.Ctx, message string, details map[string]interf
 	// Get user info for the template
 	sess, _ := store.Get(c)
 
+	// Get username from session - try both possible keys
+	username := sess.Get("username")
+	if username == nil {
+		username = sess.Get("user")
+	}
+
+	// Get version/update info from locals (set by version middleware)
+	version := c.Locals("version")
+	if version == nil {
+		version = ""
+	}
+	updateAvailable := c.Locals("updateAvailable")
+	if updateAvailable == nil {
+		updateAvailable = false
+	}
+	updateCheckError := c.Locals("updateCheckError")
+	if updateCheckError == nil {
+		updateCheckError = false
+	}
+	latestVersion := c.Locals("latestVersion")
+	if latestVersion == nil {
+		latestVersion = ""
+	}
+
 	// Setup template data
 	data := fiber.Map{
-		"Title":          "Access Denied",
-		"Message":        message,
-		"Details":        details,
-		"StatusCode":     403,
-		"BackURL":        "/",
-		"BackText":       "Back to Dashboard",
-		"HideNavigation": false,
-		"User":           sess.Get("user"),
-		"AuthType":       getRoleFromSession(sess),
+		"Title":            "Access Denied",
+		"Message":          message,
+		"Details":          details,
+		"StatusCode":       403,
+		"BackURL":          "/",
+		"BackText":         "Back to Dashboard",
+		"HideNavigation":   false,
+		"User":             username,
+		"Username":         username,
+		"AuthType":         getRoleFromSession(sess),
+		"version":          version,
+		"updateAvailable":  updateAvailable,
+		"updateCheckError": updateCheckError,
+		"latestVersion":    latestVersion,
 	}
 
 	var out bytes.Buffer
-	if err := tmpl.Execute(&out, data); err != nil {
+	if err := tmpl.ExecuteTemplate(&out, "base.html", data); err != nil {
 		return c.Status(403).SendString("403 Forbidden: " + message)
 	}
 

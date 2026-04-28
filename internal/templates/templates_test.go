@@ -338,3 +338,97 @@ func TestInitialize(t *testing.T) {
 	// Test that components slice is populated (assuming embedded templates exist)
 	assert.NotEmpty(t, components, "components slice should not be empty after Initialize")
 }
+
+func TestCanCreateApps(t *testing.T) {
+	originalConfig := config.GetConfig()
+	config.UpdateConfig(&config.Config{Users: []config.User{
+		{
+			Username:      "flag_user",
+			Role:          config.RoleUser,
+			CanCreateApps: true,
+		},
+		{
+			Username: "legacy_route_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/apps/create"},
+		},
+		{
+			Username: "wildcard_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"*"},
+		},
+		{
+			Username: "no_perms",
+			Role:     config.RoleUser,
+		},
+	}})
+	defer config.UpdateConfig(originalConfig)
+
+	tests := []struct {
+		name     string
+		username interface{}
+		authType interface{}
+		expected bool
+	}{
+		{"Admin always true", "admin", "admin", true},
+		{"Bool flag true", "flag_user", "user", true},
+		{"Legacy route true", "legacy_route_user", "user", true},
+		{"Wildcard route true", "wildcard_user", "user", true},
+		{"No perms false", "no_perms", "user", false},
+		{"Nil username false", nil, "user", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := canCreateApps(tt.username, tt.authType)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCanCreateServices(t *testing.T) {
+	originalConfig := config.GetConfig()
+	config.UpdateConfig(&config.Config{Users: []config.User{
+		{
+			Username:          "flag_user",
+			Role:              config.RoleUser,
+			CanCreateServices: true,
+		},
+		{
+			Username: "legacy_route_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/services/create"},
+		},
+		{
+			Username: "wildcard_user",
+			Role:     config.RoleUser,
+			Routes:   []string{"/*"},
+		},
+		{
+			Username: "no_perms",
+			Role:     config.RoleUser,
+		},
+	}})
+	defer config.UpdateConfig(originalConfig)
+
+	tests := []struct {
+		name     string
+		username interface{}
+		authType interface{}
+		expected bool
+	}{
+		{"Admin always true", "admin", "admin", true},
+		{"Bool flag true", "flag_user", "user", true},
+		{"Legacy route true", "legacy_route_user", "user", true},
+		{"Wildcard route true", "wildcard_user", "user", true},
+		{"No perms false", "no_perms", "user", false},
+		{"Nil username false", nil, "user", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := canCreateServices(tt.username, tt.authType)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
